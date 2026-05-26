@@ -26,7 +26,7 @@ copyright: Copyright © 2026 Jérémy Bolzonella
 # repo public — anyone can download.
 publish:
   - provider: github
-    owner: jeremy-bolzonella
+    owner: youhou71
     repo: WinNotch
     releaseType: release
 
