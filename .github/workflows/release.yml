@@ -1,0 +1,61 @@
+# Build + publication automatique d'une release GitHub à chaque push de
+# tag `v*` (ex. `v0.5.0`, `v1.0.0-rc.1`).
+#
+# Trigger :
+#   git tag v0.5.0
+#   git push origin v0.5.0
+#
+# Le workflow build l'installeur NSIS sur Windows et publie via
+# electron-updater. Pour les clients déjà installés, le check
+# auto-update les notifie au prochain tick (cf. updaterService.ts).
+#
+# Authentification : le `GITHUB_TOKEN` fourni par Actions est utilisé
+# automatiquement par electron-builder (qui le lit en plus de `GH_TOKEN`).
+# `permissions.contents: write` est obligatoire pour créer la release et
+# uploader les assets.
+#
+# Runner : `windows-latest` car :
+#   - target NSIS (NSIS uniquement sur Windows)
+#   - `@coooookies/windows-smtc-monitor` (.node pour Windows x64)
+#   - `node-global-key-listener` (.exe Windows embarqué)
+# Pas de matrix Linux/macOS — l'app est Windows-only.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # `npm ci` (et pas `npm install`) : reproductible bit-pour-bit
+      # depuis le lockfile, échoue si package-lock.json est désynchronisé.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # `--publish always` : crée la release GitHub si elle n'existe pas,
+      # uploade WinNotch-Setup-x.y.z.exe + latest.yml + .blockmap.
+      # electron-builder lit owner/repo depuis electron-builder.yml.
+      - name: Build and publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist:win -- --publish always
