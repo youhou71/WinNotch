@@ -78,6 +78,9 @@ const api: NotchApi = {
         ipcRenderer.off(IpcChannel.ShellFullscreenChange, handler);
       };
     },
+    quit: () => {
+      ipcRenderer.send(IpcChannel.ShellQuit);
+    },
   },
   clipboard: {
     getState: () => ipcRenderer.invoke(IpcChannel.ClipboardGetState),

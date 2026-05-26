@@ -118,7 +118,7 @@ Le comportement s'adapte au contexte :
 Drilldown accessible via l'icône engrenage de la search bar :
 
 - **Apparence** : densité du dashboard (dense / normal / aéré) et **disposition** (ordre + largeur des tuiles via drag-and-drop sur une grille de 12 colonnes).
-- **Système** : démarrage automatique avec Windows.
+- **Système** : démarrage automatique avec Windows, bouton « Quitter WinNotch » pour fermer l'application.
 - **Notifications** : toggle Ne pas Déranger.
 - **À propos** : version installée, état des mises à jour, bouton "Vérifier".
 - **Modules** : activer/désactiver chaque module, configuration détaillée par module (en drilldown).

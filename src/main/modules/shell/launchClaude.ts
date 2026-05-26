@@ -18,7 +18,7 @@
  */
 import { spawn } from 'child_process';
 import { existsSync, statSync } from 'fs';
-import { ipcMain, shell } from 'electron';
+import { app, ipcMain, shell } from 'electron';
 import { IpcChannel } from '../../../shared/types';
 
 /**
@@ -196,5 +196,12 @@ export function registerShellIpc(): void {
   });
   ipcMain.handle(IpcChannel.ShellOpenPath, async (_e, path: string) => {
     return openPath(path ?? '');
+  });
+  // One-way send : le renderer n'attend pas de retour, l'app est en train
+  // de mourir. `app.quit()` enchaîne `before-quit` (cleanup des timers et
+  // hooks externes) puis ferme les fenêtres → `window-all-closed` →
+  // `app.exit()`.
+  ipcMain.on(IpcChannel.ShellQuit, () => {
+    app.quit();
   });
 }

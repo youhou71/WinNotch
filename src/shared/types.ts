@@ -985,6 +985,8 @@ export const IpcChannel = {
   ShellFullscreenChange: 'shell:fullscreenChange',
   /** Renderer → main : informe du nouveau mode (collapsed/expanded) — sert à enregistrer Esc en global shortcut seulement quand expanded. */
   ShellModeChanged: 'shell:modeChanged',
+  /** Renderer → main : quitte WinNotch proprement (déclenche before-quit + window-all-closed). */
+  ShellQuit: 'shell:quit',
 
   /** Renderer → main (invoke) : liste les workspaces VS Code récents. */
   SearchListVsCode: 'search:listVsCode',
@@ -1155,6 +1157,12 @@ export interface NotchApi {
      * principal. true = quelque chose est fullscreen, false = retour normal.
      */
     onFullscreenChange: (cb: (fullscreen: boolean) => void) => () => void;
+    /**
+     * Demande au main process de quitter l'application. Déclenche le flux
+     * `before-quit` + `window-all-closed` normal — pas de retour côté
+     * renderer car l'app est en train de mourir.
+     */
+    quit: () => void;
   };
   search: {
     /** Renvoie les workspaces VS Code récents (lu depuis state.vscdb). */

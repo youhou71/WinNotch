@@ -65,6 +65,13 @@ export function SettingsHome({ onSelectModule, onOpenLayout }: Props) {
           value={settings.autoStart}
           onChange={(next) => void setAutoStart(next)}
         />
+        <SettingsRow
+          icon="fa-solid fa-right-from-bracket"
+          iconColor="#f87171"
+          label="Quitter WinNotch"
+          description="Ferme l'application. Aucun processus ne reste actif en arrière-plan."
+          onClick={() => window.notch.shell.quit()}
+        />
       </SettingsSection>
 
       <SettingsSection title="Notifications">
