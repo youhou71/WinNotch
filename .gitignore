@@ -1,0 +1,17 @@
+node_modules
+out
+dist
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Documentation locale (non versionnée). Sert à garder des notes
+# personnelles (procédures de release, secrets de dev, TODOs…) sans
+# polluer le dépôt.
+*.md.local
+
+# Backlog d'idées de modules non décidées — vit en local, à promouvoir
+# dans le code/README.md quand une idée est priorisée.
+project_ideas.md

@@ -1,0 +1,498 @@
+/*
+ * settings.css — page Settings drilldown (atomes + layout).
+ *
+ * Inspiré du style Windows 11 (rows sombres tintées, switch animé). Les
+ * patterns sont déclinés du prototype `notch-settings.jsx` qui définit la
+ * grammaire visuelle (rows interactives, icône tintée, switch iOS,
+ * sliders, radio pills).
+ */
+
+/* ───────────── SettingsView container ─────────────
+ * Pas de `flex: 1; min-height: 0` ici : on laisse la vue prendre sa
+ * hauteur intrinsèque pour que `.dashboard.scrollHeight` reflète le
+ * vrai contenu. Sinon le notch ne peut pas s'adapter à la hauteur des
+ * Settings (cf. `Notch.tsx` qui mesure le contenu via scrollHeight).
+ * Le scroll est unifié sur `.dashboard` (overflow-y: auto).
+ */
+.settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+  animation: notch-fade-in 280ms ease both;
+}
+
+/* ───────────── Header (back + titre + close) ───────────── */
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.settings-header-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--txt-mute);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.settings-header-btn:hover {
+  background: var(--surface-2);
+  color: var(--txt);
+}
+
+.settings-header-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--txt);
+}
+
+.settings-header-sub {
+  font-size: 10.5px;
+  color: var(--txt-mute);
+  font-weight: 400;
+  margin-left: 8px;
+}
+
+/* ───────────── Section (groupe de rows) ───────────── */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-section-title {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--txt-faint);
+  padding: 0 4px;
+}
+
+.settings-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--d-card-radius);
+  overflow: hidden;
+}
+
+/* ───────────── Row générique ───────────── */
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0);
+  transition: background 140ms ease;
+}
+
+/* Séparateur subtil entre deux rows consécutives. */
+.settings-row + .settings-row {
+  border-top: 1px solid var(--border-soft);
+}
+
+.settings-row.is-interactive {
+  cursor: pointer;
+}
+
+.settings-row.is-interactive:hover {
+  background: var(--surface-2);
+}
+
+.settings-row-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-size: 13px;
+  flex-shrink: 0;
+  /* background + color injectés inline via la prop iconColor. */
+  background: var(--surface-1);
+  color: var(--txt-dim);
+}
+
+.settings-row-body {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.settings-row-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--txt);
+}
+
+.settings-row-desc {
+  font-size: 10.5px;
+  color: var(--txt-mute);
+  margin-top: 1px;
+}
+
+.settings-row-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Chevron de drilldown (à passer dans le slot right via <i>). */
+.settings-chevron {
+  font-size: 10px;
+  color: var(--txt-faint);
+}
+
+/* ───────────── Toggle (switch iOS-like) ───────────── */
+.settings-toggle {
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 100px;
+  background: var(--surface-3);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 200ms ease;
+}
+
+.settings-toggle.is-on {
+  background: var(--accent-green);
+}
+
+.settings-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.settings-toggle.is-on .settings-toggle-knob {
+  transform: translateX(16px);
+}
+
+/* ───────────── Slider ───────────── */
+.settings-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  cursor: pointer;
+  outline: 0;
+}
+
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  border: 0;
+}
+
+.settings-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  border: 0;
+}
+
+.settings-slider-val {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--txt-dim);
+  min-width: 34px;
+  text-align: right;
+}
+
+/* ───────────── Radio pills ───────────── */
+.settings-radio-pills {
+  display: inline-flex;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.settings-radio-pill {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--txt-mute);
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.settings-radio-pill:hover:not(.is-active) {
+  color: var(--txt-dim);
+}
+
+.settings-radio-pill.is-active {
+  background: var(--surface-2);
+  color: var(--txt);
+  box-shadow: inset 0 0 0 1px var(--border-1);
+}
+
+/* ───────────── Empty / placeholder dans une section ───────────── */
+.settings-empty {
+  padding: 18px 14px;
+  font-size: 11.5px;
+  color: var(--txt-mute);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.settings-empty code {
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--txt);
+}
+
+/* ───────────── Bouton lien (déconnexion, ajout compte) ───────────── */
+.settings-link-btn {
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    opacity 160ms ease;
+}
+
+.settings-link-btn:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.18);
+  border-color: rgba(96, 165, 250, 0.3);
+}
+
+.settings-link-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ───────────── Inputs credentials (panneau Meetings) ───────────── */
+.settings-credentials {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-field-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--txt-dim);
+  letter-spacing: 0.02em;
+}
+
+.settings-field-label em {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--txt-faint);
+}
+
+.settings-field-input {
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--txt);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  outline: none;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.settings-field-input::placeholder {
+  color: var(--txt-faint);
+}
+
+.settings-field-input:focus {
+  background: var(--surface-2);
+  border-color: rgba(96, 165, 250, 0.5);
+}
+
+/* Variante textarea — désactive le redimensionnement utilisateur (qui
+   casserait le layout du dashboard) et fixe une hauteur minimale lisible. */
+.settings-field-textarea {
+  resize: none;
+  min-height: 80px;
+  line-height: 1.4;
+}
+
+.settings-credentials-hint {
+  font-size: 10.5px;
+  color: var(--txt-mute);
+  line-height: 1.5;
+  padding: 8px 10px;
+  background: var(--surface-0);
+  border-left: 2px solid rgba(96, 165, 250, 0.4);
+  border-radius: 0 6px 6px 0;
+}
+
+.settings-credentials-hint code {
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--txt);
+}
+
+.settings-credentials-hint strong {
+  color: var(--txt);
+  font-weight: 600;
+}
+
+/* ───────────── Page Disposition du dashboard ───────────── */
+
+/* Variante texte du bouton header (ex. "Réinitialiser") — pas d'icône,
+ * largeur auto pour s'adapter au libellé. */
+.settings-header-btn-text {
+  width: auto;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+/* Paragraphe d'aide en intro de section (la page Layout en a un pour
+ * expliquer le système de wrap 12 cols). */
+.settings-section-help {
+  font-size: 11px;
+  color: var(--txt-dim);
+  line-height: 1.45;
+  padding: 0 2px 6px;
+}
+
+/* Liste verticale des tuiles configurables. Gap réduit car chaque row
+ * est déjà large (icône + label + slider). */
+.layout-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Une row tuile dans l'éditeur de layout. Mêmes tokens visuels qu'une
+ * settings-row mais structure différente (poignée à gauche, slider à
+ * droite, badge tabular tout au bout). */
+.layout-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: 8px;
+  touch-action: none;
+}
+
+/* Poignée drag — curseur grab/grabbing géré par @dnd-kit via listeners.
+ * On garde un hit-target large (24×28) pour faciliter la prise au pointeur. */
+.layout-row-handle {
+  width: 24px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--txt-faint);
+  cursor: grab;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.layout-row-handle:hover {
+  background: var(--surface-2);
+  color: var(--txt-dim);
+}
+
+.layout-row-handle:active {
+  cursor: grabbing;
+}
+
+/* Zone label : flex-1 pour pousser le slider à droite. */
+.layout-row-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Bloc slider + badge "N/12". Largeur figée pour aligner verticalement
+ * les badges entre les rows. */
+.layout-row-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.layout-row-control .settings-slider {
+  width: 140px;
+}
+
+.layout-row-cols {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--txt-dim);
+  min-width: 38px;
+  text-align: right;
+}

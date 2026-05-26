@@ -1,0 +1,380 @@
+/*
+ * tasks.css — module Tâches.
+ *
+ * Deux contextes visuels distincts :
+ *  1. `.task-counter-card`    : card compacte en haut du dashboard
+ *  2. `.tasks-view` + enfants : vue plein-dashboard rendue en mode `-`
+ *
+ * Tous les styles sont calqués sur les règles du prototype (Notch.html
+ * 523-577 pour la card, 1444-1633 pour la vue tâches).
+ */
+
+/* ───────────── Tasks counter card (dash-top) ───────────── */
+.task-counter-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--d-card-pad-y) var(--d-card-pad-x);
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.16);
+  border-radius: var(--d-card-radius);
+  color: var(--txt);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease,
+    padding 240ms var(--ease-out),
+    border-radius 240ms var(--ease-out);
+  min-width: 0;
+}
+
+.task-counter-card:hover {
+  background: rgba(52, 211, 153, 0.1);
+  border-color: rgba(52, 211, 153, 0.32);
+}
+
+.task-counter-card:active {
+  transform: scale(0.98);
+}
+
+.task-counter-card .tcc-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
+.task-counter-card .tcc-head i {
+  font-size: 11px;
+}
+
+.task-counter-card .tcc-label {
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+.task-counter-card .tcc-number {
+  font-size: 48px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--txt);
+  font-variant-numeric: tabular-nums;
+  /* Petite respiration verticale autour du gros chiffre : sans ça il colle
+   * au header au-dessus et au sub-label en dessous, ce qui rend la card
+   * dense même en mode densité "normal". */
+  margin-block: 6px;
+  animation: tcc-pop 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes tcc-pop {
+  0% {
+    transform: scale(0.75);
+    opacity: 0.4;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.task-counter-card .tcc-sub {
+  font-size: 10.5px;
+  color: var(--txt-dim);
+  line-height: 1.3;
+}
+
+.task-counter-card .tcc-total {
+  color: var(--txt-faint);
+}
+
+/* ───────────── Tasks view (panel mode `-` actif) ─────────────
+ * Pas de `flex: 1; min-height: 0` : la vue prend sa hauteur naturelle,
+ * le scroll est unifié sur `.dashboard`. Cf. `.settings-view` /
+ * `.gitlab-panel` — mesure via somme des scrollHeight des enfants du
+ * dashboard. Avec `flex: 1`, la vue gonflait à l'espace dispo et
+ * `.tasks-empty { flex: 1 }` se réajustait sur chaque tick de mesure,
+ * créant une boucle où le notch grandissait lentement.
+ */
+.tasks-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  animation: notch-fade-in 280ms ease both;
+}
+
+.tasks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.tasks-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.tasks-stats .ts-num {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent-green);
+  font-variant-numeric: tabular-nums;
+}
+
+.tasks-stats .ts-label {
+  font-size: 11px;
+  color: var(--txt-dim);
+  margin-right: 4px;
+}
+
+.tasks-stats .ts-sep {
+  color: var(--txt-faint);
+}
+
+.tasks-stats .ts-done {
+  color: var(--txt-mute);
+}
+
+.tasks-clear {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  color: var(--txt-mute);
+  font-family: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.tasks-clear:hover {
+  background: var(--surface-2);
+  color: var(--txt);
+}
+
+.tasks-clear i {
+  font-size: 10px;
+}
+
+/* Encadré pâle vert avec flèche : rappelle l'utilisateur du flux d'ajout. */
+.tasks-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  color: var(--txt-mute);
+  padding: 6px 10px;
+  background: rgba(52, 211, 153, 0.05);
+  border: 1px dashed rgba(52, 211, 153, 0.18);
+  border-radius: 8px;
+}
+
+.tasks-hint i {
+  color: var(--accent-green);
+  font-size: 10px;
+}
+
+.tasks-hint .tk {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  color: var(--txt);
+}
+
+/* Liste plate (actives → divider → done). Le gap 2 px entre rows reste
+   discret ; la séparation visuelle vient surtout du divider. */
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  border-radius: 7px;
+  transition: background 140ms ease;
+  position: relative;
+}
+
+.task-row:hover {
+  background: var(--surface-1);
+}
+
+.task-row + .task-row {
+  border-top: 1px solid var(--border-soft);
+}
+
+/* Flash vert qui s'estompe sur la tâche fraîchement ajoutée — le
+   compteur lastAddedId change à chaque addTask, ce qui retrigger
+   l'animation via le selector .is-new. */
+.task-row.is-new {
+  animation: task-new-flash 1400ms ease-out;
+}
+
+@keyframes task-new-flash {
+  0% {
+    background: rgba(52, 211, 153, 0.18);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+/* Checkbox cerclée : transparente avec bordure quand non cochée, pleine
+   verte avec ✓ blanc cassé quand done. */
+.task-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: transparent;
+  flex-shrink: 0;
+  transition: all 180ms ease;
+}
+
+.task-check:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.task-row.is-done .task-check {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: #04140d; /* presque-noir pour lisibilité maximale sur fond vert */
+}
+
+.task-check i {
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.task-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--txt);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.task-row.is-done .task-text {
+  color: var(--txt-mute);
+  text-decoration: line-through;
+  /* Couleur de la barre de barré désaturée pour ne pas concurrencer
+     le texte gris en dessous. */
+  text-decoration-color: rgba(244, 244, 245, 0.3);
+}
+
+/* Bouton ✕ révélé uniquement au hover de la ligne — UX moins bruyante
+   qu'un X toujours visible. */
+.task-remove {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--txt-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.task-row:hover .task-remove {
+  opacity: 1;
+}
+
+.task-remove:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+/* Séparateur entre actives et terminées — étiquette MAJ + count en pill. */
+.tasks-divider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px 4px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--txt-faint);
+  font-weight: 600;
+  border-top: 1px solid var(--border-soft);
+  margin-top: 6px;
+}
+
+.tasks-divider .td-count {
+  background: var(--surface-2);
+  color: var(--txt-mute);
+  padding: 1px 6px;
+  border-radius: 100px;
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* État vide — centré verticalement quand la liste est totalement vide. */
+.tasks-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--txt-mute);
+  font-size: 13px;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.tasks-empty i {
+  font-size: 28px;
+  opacity: 0.4;
+  margin-bottom: 8px;
+}
+
+.tasks-empty .te-sub {
+  font-size: 11px;
+  color: var(--txt-faint);
+  font-weight: 400;
+}
+
+.tasks-empty code {
+  background: rgba(52, 211, 153, 0.14);
+  color: var(--accent-green);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+}

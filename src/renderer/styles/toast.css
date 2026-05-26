@@ -1,0 +1,104 @@
+/*
+ * toast.css — notification pill éphémère sous le notch.
+ *
+ * Reproduit le pattern `.notch-toast` du prototype (Notch.html 2442-2497).
+ * Position fixée `top: 42px` (juste sous le notch collapsed), centré
+ * horizontalement, z-index 9998 pour passer derrière le notch quand il
+ * est étendu (le notch est à z-index 9999).
+ *
+ * Animation : `toast-in` 460 ms spring, puis visibilité jusqu'à 4.8 s,
+ * puis `toast-out` 280 ms ease-in. Hover met `animation-play-state` en
+ * pause pour les deux animations (l'utilisateur peut lire tranquillement).
+ */
+.notch-toast {
+  position: fixed;
+  top: 42px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--notch-bg);
+  color: var(--txt);
+  padding: 6px 14px;
+  border-radius: 100px;
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.45),
+    0 2px 5px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px var(--border-1);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 9998;
+  cursor: pointer;
+  transform-origin: top center;
+  white-space: nowrap;
+  max-width: 380px;
+  animation:
+    toast-in 460ms var(--spring) both,
+    toast-out 280ms ease-in 4800ms both;
+}
+
+.notch-toast:hover {
+  animation-play-state: paused, paused;
+}
+
+/*
+ * Variante affichée quand le notch est étendu : on monte le toast au-
+ * dessus du shell (z-index supérieur au notch) pour qu'il reste visible
+ * en surcouche, et on décale légèrement vers le bas pour éviter de
+ * masquer la search bar.
+ */
+.notch-toast.is-expanded {
+  top: 12px;
+  z-index: 10001;
+}
+
+@keyframes toast-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-14px) scale(0.85);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px) scale(0.96);
+  }
+}
+
+.nt-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--txt);
+  flex-shrink: 0;
+}
+
+.nt-sep {
+  color: var(--txt-faint);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.nt-msg {
+  color: var(--txt-dim);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.notch-toast > i:first-child {
+  font-size: 11px;
+  flex-shrink: 0;
+}

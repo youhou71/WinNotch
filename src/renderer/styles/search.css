@@ -1,0 +1,375 @@
+/*
+ * search.css — barre de recherche sticky du dashboard étendu.
+ *
+ * Reproduit le pattern `.search-bar` du prototype (Notch.html ~1665-1700)
+ * avec chip de mode à gauche, input central, bouton gear à droite.
+ *
+ * Le sticky top + le fade-out gradient sont gérés dans notch.css via
+ * `.dashboard > .search-bar` (déjà en place) ; ce fichier ne définit
+ * que l'apparence interne de la barre.
+ */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Padding vertical 9 px (≈ 44 px de haut total avec le contenu) :
+     plus respirant que les 40 px fixes du prototype mais sans surcharger
+     verticalement le dashboard. */
+  padding: 9px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: 12px;
+  position: relative;
+  transition:
+    background 200ms ease,
+    border-color 200ms ease;
+}
+
+.search-bar:focus-within {
+  background: var(--surface-2);
+  border-color: var(--border-2);
+}
+
+/* Icône loupe à l'extrémité gauche du champ. Couleur intermédiaire
+   (txt-mute = 35 %) pour qu'elle soit présente sans dominer la chip
+   de mode quand celle-ci est rendue à côté. */
+.search-icon {
+  color: var(--txt-mute);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 8px 3px 7px;
+  border-radius: 100px;
+  flex-shrink: 0;
+  /* background + color injectés inline depuis MODE_META */
+  animation: search-chip-in 220ms var(--ease-out);
+}
+
+.search-chip i {
+  font-size: 9px;
+}
+
+@keyframes search-chip-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--txt);
+  font-family: inherit;
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+/* Override le focus-visible global de reset.css : la search-input
+   n'a pas besoin d'outline bleu car la search-bar (parent) joue déjà
+   le rôle de feedback visuel (cadre + chip de mode + icône loupe).
+   Le ring en plus créait un double encadrement redondant. */
+.search-input:focus-visible {
+  outline: none;
+}
+
+.search-input::placeholder {
+  /* Opacité intermédiaire entre --txt-faint (20 %) et --txt-mute (35 %).
+     Valeur custom plutôt qu'un token car ce placeholder est notre seul
+     cas d'usage de cette teinte précise. */
+  color: rgba(244, 244, 245, 0.28);
+}
+
+/* Bouton clear (X) : circulaire, rendu uniquement si l'input a du texte.
+   Le composant ne le monte pas du tout quand vide, pas besoin de
+   gérer un état hidden en CSS. */
+.search-clear {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--txt-mute);
+  font-size: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.search-clear:hover {
+  background: var(--surface-2);
+  color: var(--txt);
+}
+
+.search-gear,
+.search-clipboard {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--txt-mute);
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.search-gear:hover,
+.search-clipboard:hover {
+  background: var(--surface-2);
+  color: var(--txt);
+}
+
+/* État actif quand la SettingsView est ouverte — donne un repère visuel
+   "vous êtes dans les réglages" sans changer la position du bouton. */
+.search-gear.is-active {
+  background: rgba(96, 165, 250, 0.14);
+  color: var(--accent);
+}
+
+.search-gear.is-active:hover {
+  background: rgba(96, 165, 250, 0.22);
+}
+
+/* État actif quand le panel Clipboard est ouvert (couleur violette pour
+   distinguer visuellement du gear bleu). */
+.search-clipboard.is-active {
+  background: rgba(167, 139, 250, 0.14);
+  color: var(--accent-violet, #a78bfa);
+}
+
+.search-clipboard.is-active:hover {
+  background: rgba(167, 139, 250, 0.22);
+}
+
+/* ───────────── Panel de résultats (modes / et vs) ───────────── */
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* Pas de scroll interne : on laisse le dashboard parent gérer le
+     scroll global. Sinon on aurait deux barres imbriquées. */
+  animation: notch-fade-in 220ms var(--ease-out) both;
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.search-row > i {
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.search-row .sr-body {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.search-row .sr-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-row .sr-path {
+  font-size: 10.5px;
+  color: var(--txt-mute);
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-row .sr-when {
+  font-size: 10px;
+  color: var(--txt-faint);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* État sélectionné — sert à la fois pour la nav clavier et le hover.
+   Le hover applique la même classe via JS (onMouseEnter → setSelIdx). */
+.search-row.sel {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border-1);
+}
+
+.search-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--txt-mute);
+  font-size: 12px;
+  padding: 28px 20px;
+  background: var(--surface-0);
+  border: 1px dashed var(--border-1);
+  border-radius: var(--d-card-radius);
+}
+
+.search-empty i {
+  font-size: 24px;
+  opacity: 0.5;
+}
+
+/* ───────────── Vue d'aide (mode `?`) ─────────────
+ * Liste les préfixes, détections, raccourcis disponibles. Filtrée selon
+ * les modules actifs (cf. SearchHelp.tsx).
+ */
+.search-help {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: notch-fade-in 220ms var(--ease-out) both;
+}
+
+.search-help-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--d-card-radius);
+}
+
+.search-help-intro-icon {
+  font-size: 22px;
+  color: var(--accent, #60a5fa);
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.search-help-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--txt);
+  margin-bottom: 2px;
+}
+
+.search-help-sub {
+  font-size: 11.5px;
+  color: var(--txt-dim);
+  line-height: 1.45;
+}
+
+.search-help-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.search-help-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--txt-mute);
+  padding: 0 2px;
+}
+
+.search-help-section-hint {
+  font-size: 11px;
+  color: var(--txt-mute);
+  padding: 0 2px 4px;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.search-help-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-help-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  transition: background 140ms ease;
+}
+
+.search-help-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.search-help-kbd {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 64px;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--txt);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.search-help-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.search-help-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--txt);
+}
+
+.search-help-desc {
+  font-size: 11px;
+  color: var(--txt-dim);
+  line-height: 1.4;
+}

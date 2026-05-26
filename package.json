@@ -1,0 +1,52 @@
+{
+  "name": "winnotch",
+  "version": "0.4.0",
+  "description": "Notch — widget système flottant pour Windows 11 (équivalent Dynamic Island)",
+  "main": "./out/main/index.js",
+  "author": "Jeremy Bolzonella",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "build:bundle": "electron-vite build",
+    "pack": "npm run build:bundle && electron-builder --dir",
+    "dist": "npm run build:bundle && electron-builder",
+    "dist:win": "npm run build:bundle && electron-builder --win",
+    "rebuild-natives": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "@coooookies/windows-smtc-monitor": "^1.0.12",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "better-sqlite3": "^12.10.0",
+    "chokidar": "^5.0.0",
+    "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.3",
+    "loudness": "^0.4.2",
+    "node-global-key-listener": "^0.3.0",
+    "simple-git": "^3.36.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^32.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.3"
+  }
+}

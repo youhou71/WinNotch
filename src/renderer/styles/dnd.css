@@ -1,0 +1,106 @@
+/*
+ * dnd.css — apparence du mode "Ne pas déranger".
+ *
+ * Reproduit les patterns du prototype (Notch.html ~380-450) :
+ *  - .chip-dnd : pastille lune violette dans la cr-right du notch rétracté
+ *  - .dnd-banner : bandeau violet dans le dashboard étendu avec bouton
+ *    "Désactiver" et raccourci Ctrl+Shift+D inline
+ */
+
+/* Chip DND (collapsed row, prend la place de toutes les chips droite). */
+.chip-dnd {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 18px;
+  border-radius: 6px;
+  background: rgba(167, 139, 250, 0.14);
+  color: #c4b5fd;
+  /* La règle générale .cr-right .chip met opacity: 0.7 ; on la neutralise
+     car le chip DND doit rester pleinement visible. */
+  opacity: 1 !important;
+  transition:
+    background 200ms ease,
+    color 200ms ease;
+  cursor: pointer;
+}
+
+.chip-dnd i {
+  font-size: 11px;
+}
+
+.chip-dnd:hover {
+  background: rgba(167, 139, 250, 0.22);
+  color: #ddd6fe;
+}
+
+/* Banner affiché en haut du dashboard quand DND est actif. */
+.dnd-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(167, 139, 250, 0.08);
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  border-radius: 10px;
+  flex-shrink: 0;
+  animation: notch-fade-in 280ms ease both;
+}
+
+.dnd-banner > i:first-child {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(167, 139, 250, 0.18);
+  color: #c4b5fd;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.dnd-banner-body {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.dnd-banner-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #ddd6fe;
+}
+
+.dnd-banner-sub {
+  font-size: 10.5px;
+  color: rgba(221, 214, 254, 0.65);
+  margin-top: 2px;
+}
+
+.dnd-kbd {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--txt);
+  font-size: 9.5px;
+  margin: 0 2px;
+}
+
+.dnd-banner-btn {
+  background: rgba(167, 139, 250, 0.18);
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  color: #ddd6fe;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 160ms ease;
+}
+
+.dnd-banner-btn:hover {
+  background: rgba(167, 139, 250, 0.28);
+}

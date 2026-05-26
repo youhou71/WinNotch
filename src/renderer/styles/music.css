@@ -1,0 +1,369 @@
+/*
+ * music.css — module Music (chip collapsed + card compact expanded).
+ *
+ * Reproduit fidèlement les règles du prototype :
+ *  - Notch.html lignes 239-296 pour `.chip-music` + `.music-tile`
+ *  - Notch.html lignes 1786-1881 pour `.card-music.is-compact`
+ *
+ * Le scrubber utilise un dégradé rose/violet calibré sur les accent tokens
+ * pour rester cohérent avec le module (badge Claude, accents Music).
+ */
+
+/* ───────────── Chip Music (collapsed row, .cr-left) ───────────── */
+.chip-music {
+  gap: 4px;
+}
+
+.music-tile {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  /* Gradient de repli quand l'image n'a pas pu charger (SMTC sans thumbnail). */
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.35), transparent 55%),
+    linear-gradient(135deg, #f472b6 0%, #a78bfa 50%, #60a5fa 100%);
+}
+
+.music-tile .music-tile-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Cover désaturé pour ne pas dominer le notch (style "calme"). */
+  filter: saturate(0.72) brightness(0.88);
+}
+
+.music-tile .music-tile-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.52);
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(1px);
+}
+
+.music-tile .music-tile-overlay i {
+  font-size: 10px;
+}
+
+/* ── Variante collapsed : la pochette occupe toute la hauteur du notch ──
+ *
+ * En mode rétracté on bascule la tile en carré flush-left :
+ *  - hauteur = 100 % du notch (34 px), largeur déduite via aspect-ratio
+ *  - pas de border-radius (le shell clippe son coin bas-gauche)
+ *  - pas de box-shadow (intérieur du notch, l'ombre n'aurait pas de sens)
+ *  - cover à pleine saturation/luminosité (on veut lire l'artwork)
+ *  - voile remplacé par un vignettage radial doux pour conserver le
+ *    contraste des barres au centre sans assombrir tout l'artwork
+ *  - barres et icône pause un cran plus grandes pour rester lisibles
+ *    quand la cover prend toute la hauteur du notch
+ *
+ * Tout est scoppé sous `.collapsed-row` : aucun impact sur la card music
+ * du dashboard étendu. */
+.collapsed-row .chip-music .music-tile {
+  /* Hauteur en dur sur la hauteur du notch (34 px) car la chaîne flex
+   * `.collapsed-row` → `.cr-left` → `.chip-music` ne propage pas le
+   * stretch (align-items: center à chaque niveau). aspect-ratio 1/1 dérive
+   * la largeur automatiquement, ce qui rend la règle robuste si la hauteur
+   * du notch évolue (il suffit d'updater une valeur ici). */
+  width: auto;
+  height: 34px;
+  aspect-ratio: 1 / 1;
+  border-radius: 0;
+  box-shadow: none;
+  /* On retire le gradient de repli (rose/violet/bleu) : la tile devient
+   * transparente, l'unique signal visuel sera la pastille centrale. */
+  background: transparent;
+}
+
+.collapsed-row .chip-music .music-tile-art {
+  /* Test : on masque complètement la cover en mode rétracté — on garde
+   * uniquement le gradient de repli (fond rose/violet/bleu de la tile) +
+   * l'overlay vignetté + les barres animées / l'icône pause. Plus calme
+   * visuellement, l'attention reste sur l'animation. */
+  display: none;
+}
+
+.collapsed-row .chip-music .music-tile-overlay {
+  /* L'overlay n'occupe plus toute la tile : c'est une pastille circulaire
+   * sur fond noir (var --notch-bg). La tile autour est transparente, donc
+   * visuellement on ne voit qu'un cercle noir flush gauche du notch qui
+   * contient les barres animées (ou l'icône pause).
+   *
+   * Le `+2px` sur `left` centre la pastille entre le bord gauche du notch
+   * (x = 0, padding-left: 0 sur collapsed-row) et le début du meta
+   * (x = 34 + gap 4 = 38). Centre voulu : 19 px = centre de la tile (17 px)
+   * + 2 px. Sans ce décalage, la pastille paraît collée trop à gauche par
+   * rapport au texte titre/artiste. */
+  inset: auto;
+  top: 50%;
+  left: calc(50% + 2px);
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--notch-bg);
+  backdrop-filter: none;
+}
+
+.collapsed-row .chip-music .music-tile-overlay i {
+  font-size: 11px;
+}
+
+.collapsed-row .chip-music .overlay-bars {
+  height: 10px;
+}
+
+.music-tile .overlay-bars {
+  display: flex;
+  align-items: center;
+  gap: 1.5px;
+  height: 10px;
+}
+
+.music-tile .overlay-bars span {
+  display: block;
+  width: 1.5px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 1px;
+  /* Animation décalée : chaque barre rebondit avec un léger délai pour
+     simuler un equalizer audio. */
+  animation: bar-bounce 700ms ease-in-out infinite;
+}
+
+.music-tile .overlay-bars span:nth-child(1) {
+  height: 4px;
+  animation-delay: 0ms;
+}
+.music-tile .overlay-bars span:nth-child(2) {
+  height: 10px;
+  animation-delay: 120ms;
+}
+.music-tile .overlay-bars span:nth-child(3) {
+  height: 6px;
+  animation-delay: 240ms;
+}
+
+@keyframes bar-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* Stack vertical title + artist. line-height serré pour tenir dans la
+ * hauteur 34 px du notch tout en restant centré sur la pastille à gauche. */
+.music-chip-meta {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.music-chip-title {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(244, 244, 245, 0.78);
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.01em;
+}
+
+.music-chip-artist {
+  font-size: 9.5px;
+  font-weight: 400;
+  color: rgba(244, 244, 245, 0.55);
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.01em;
+}
+
+/* ───────────── Card Music compact (expanded dashboard) ───────────── */
+.card-music {
+  gap: 10px;
+}
+
+.card-music.is-compact {
+  flex-direction: row;
+  /* Padding asymétrique : compact à gauche pour la pochette qui occupe
+     toute la hauteur, généreux à droite pour les contrôles. */
+  padding: 10px var(--d-card-pad-x) 10px 10px;
+  gap: var(--d-card-gap);
+  overflow: hidden;
+  align-items: stretch;
+}
+
+.card-music.is-compact .mc-compact-cover {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  /* Même gradient de repli que la chip — cohérence visuelle. */
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.35), transparent 55%),
+    linear-gradient(135deg, #f472b6 0%, #a78bfa 50%, #60a5fa 100%);
+}
+
+.card-music.is-compact .mc-compact-cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.card-music.is-compact .mc-compact-body {
+  min-height: 96px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+}
+
+.card-music.is-compact .mc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-music.is-compact .mc-meta {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.card-music.is-compact .mc-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-music.is-compact .mc-artist {
+  font-size: 11.5px;
+  color: var(--txt-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-music.is-compact .mc-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.card-music.is-compact .mc-controls .ctl {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: var(--txt);
+  font-size: 11px;
+  border-radius: 50%;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: background 180ms ease;
+}
+
+.card-music.is-compact .mc-controls .ctl:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Le bouton play prend la couleur primaire (white sur noir) pour devenir
+   l'élément central de la card — convention iOS/macOS. */
+.card-music.is-compact .mc-controls .ctl.play {
+  width: 32px;
+  height: 32px;
+  background: white;
+  color: black;
+  font-size: 12px;
+}
+
+.card-music.is-compact .mc-controls .ctl.play:hover {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.card-music.is-compact .mc-scrub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-music.is-compact .mc-scrub-bar {
+  flex: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.card-music.is-compact .mc-scrub-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-pink), var(--accent-violet));
+  border-radius: 3px;
+  /* Pas de transition CSS : la largeur est pilotée frame par frame par
+     `MusicCard.tsx` via requestAnimationFrame. Une transition ici créerait
+     un lag visible (chaque frame relancerait une animation de 220 ms qui
+     ne se termine jamais). */
+}
+
+.card-music.is-compact .mc-elapsed,
+.card-music.is-compact .mc-duration {
+  font-size: 9.5px;
+  color: var(--txt-mute);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.card-music.is-compact .mc-duration {
+  opacity: 0.65;
+}
+
+/* Le `.card` de base (utilisé par la card music) reprend les variables de
+   densité. Si la classe `.card` n'est pas déjà définie ailleurs, on la
+   pose ici pour servir de fondation à toutes les futures cards. */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--d-card-radius);
+  padding: var(--d-card-pad-y) var(--d-card-pad-x);
+  display: flex;
+  flex-direction: column;
+  gap: var(--d-card-gap);
+  min-width: 0;
+  flex-shrink: 0;
+  transition:
+    padding 240ms var(--ease-out),
+    gap 240ms var(--ease-out),
+    border-radius 240ms var(--ease-out);
+}

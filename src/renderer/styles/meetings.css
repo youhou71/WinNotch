@@ -1,0 +1,395 @@
+/*
+ * meetings.css — chip + card du module Meetings.
+ *
+ * Reproduit les patterns du prototype (Notch.html ~300-345 pour la chip,
+ * ~580-720 pour la card). Couleurs d'urgence :
+ *  - normal     : gris (txt-dim)
+ *  - soon       : jaune (accent-warm)
+ *  - imminent   : rouge pulsant
+ *  - ongoing    : vert (accent-green)
+ */
+
+/* ───────────── Chip Meetings (collapsed row) ───────────── */
+.chip-meeting {
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 100px;
+  background: var(--surface-1);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background 200ms ease,
+    color 200ms ease;
+}
+
+.chip-meeting i {
+  font-size: 9px;
+  color: var(--txt-dim);
+}
+
+.chip-meeting .meeting-label {
+  color: var(--txt-dim);
+  font-weight: 500;
+}
+
+.chip-meeting.is-soon {
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.chip-meeting.is-soon i,
+.chip-meeting.is-soon .meeting-label {
+  color: rgba(251, 191, 36, 0.85);
+}
+
+.chip-meeting.is-imminent {
+  background: rgba(239, 68, 68, 0.18);
+  animation: meeting-pulse 1.6s ease-in-out infinite;
+}
+
+.chip-meeting.is-imminent i,
+.chip-meeting.is-imminent .meeting-label {
+  color: #fca5a5;
+}
+
+.chip-meeting.is-ongoing {
+  background: rgba(52, 211, 153, 0.12);
+}
+
+.chip-meeting.is-ongoing i,
+.chip-meeting.is-ongoing .meeting-label {
+  color: rgba(52, 211, 153, 0.9);
+}
+
+/* Chip imminent : pulse via box-shadow pour ne pas modifier la largeur. */
+@keyframes meeting-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12);
+  }
+}
+
+/* La chip-meeting porte son propre fond — on neutralise le dim global
+   appliqué à `.cr-right .chip { opacity: 0.7 }`. */
+.cr-right .chip-meeting {
+  opacity: 1;
+}
+
+/* ───────────── Card Meetings (expanded dashboard) ───────────── */
+.card-meetings {
+  gap: 10px;
+}
+
+/* Header de card avec titre + count à droite (ou bouton toggle si rest > 0). */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--txt);
+}
+
+.card-header-left i {
+  font-size: 12px;
+  color: var(--txt-dim);
+}
+
+.card-header-right,
+.card-header-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  color: var(--txt-mute);
+  font-family: inherit;
+  font-size: 10.5px;
+  cursor: default;
+}
+
+/* Bouton icône générique dans les headers de card (refresh, etc.). */
+.card-icon-btn {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--txt-mute);
+  font-size: 10px;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.card-icon-btn:hover {
+  background: var(--surface-2);
+  color: var(--txt);
+}
+
+.card-header-toggle {
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 6px;
+  transition: background 140ms ease;
+}
+
+.card-header-toggle:hover {
+  background: var(--surface-2);
+  color: var(--txt);
+}
+
+.card-count {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--txt-mute);
+}
+
+.meeting-list-chev {
+  font-size: 9px;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.card-header-toggle.is-open .meeting-list-chev {
+  transform: rotate(180deg);
+}
+
+/* Headline next meeting */
+.meeting-next {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  transition:
+    background 200ms ease,
+    border-color 200ms ease;
+}
+
+.meeting-next.is-imminent {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.meeting-next.is-ongoing {
+  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(52, 211, 153, 0.25);
+}
+
+.meeting-next-time {
+  flex-shrink: 0;
+  line-height: 1.1;
+  min-width: 56px;
+}
+
+.mn-hour {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--txt);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.mn-until {
+  font-size: 10px;
+  color: var(--txt-mute);
+  margin-top: 3px;
+}
+
+.meeting-next.is-imminent .mn-until {
+  color: #fca5a5;
+}
+
+.meeting-next.is-ongoing .mn-until {
+  color: rgba(52, 211, 153, 0.85);
+}
+
+.meeting-next-body {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.mn-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mn-meta {
+  font-size: 10.5px;
+  color: var(--txt-mute);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.mn-loc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.mn-loc i {
+  font-size: 9px;
+}
+
+.mn-dot {
+  color: var(--txt-faint);
+}
+
+.mn-dur {
+  color: var(--txt-mute);
+}
+
+/* Avatars empilés (initiales). */
+.meeting-next-people {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.mn-avatar {
+  width: 24px;
+  height: 24px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #60a5fa, #a78bfa);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.9);
+  border: 1.5px solid var(--notch-bg);
+}
+
+.mn-avatar:first-child {
+  margin-left: 0;
+}
+
+/* Liste des suivants */
+.meeting-list-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: notch-fade-in 220ms ease both;
+}
+
+.meeting-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 140ms ease;
+}
+
+.meeting-row:hover {
+  background: var(--surface-2);
+}
+
+.meeting-row-time {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--txt-dim);
+  min-width: 44px;
+}
+
+.meeting-row-body {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.meeting-row-title {
+  font-size: 11.5px;
+  color: var(--txt);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meeting-row-loc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--txt-mute);
+  margin-top: 1px;
+}
+
+.meeting-row-loc i {
+  font-size: 8px;
+}
+
+.meeting-row-until {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--txt-faint);
+  white-space: nowrap;
+}
+
+/* Card empty (réutilisé par d'autres cards plus tard). */
+.card-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px;
+  background: var(--surface-0);
+  border: 1px dashed var(--border-1);
+  border-radius: 10px;
+  color: var(--txt-dim);
+}
+
+.card-empty > i {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: var(--accent);
+  background: rgba(96, 165, 250, 0.1);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.card-empty .ce-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.3;
+}
+
+.card-empty .ce-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--txt);
+}
+
+.card-empty .ce-desc {
+  font-size: 10.5px;
+  color: var(--txt-mute);
+}

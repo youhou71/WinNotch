@@ -1,0 +1,830 @@
+/*
+ * clipboard.css — module Clipboard (chip collapsed + card expanded).
+ *
+ * Conventions identiques aux autres modules :
+ *  - chip côté `.cr-right` (notch rétracté), à droite de Music
+ *  - card côté ExpandedDashboard, peut être affichée seule en pleine largeur
+ *  - tokens couleur via variables CSS du tokens.css
+ */
+
+/* ───────────── Chip Clipboard ───────────── */
+.chip-clipboard {
+  gap: 6px;
+  position: relative;
+}
+
+.cb-chip-preview {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.cb-chip-thumb,
+.cb-chip-favicon {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  display: block;
+}
+
+.cb-chip-favicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.cb-chip-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.cb-chip-icon {
+  font-size: 11px;
+  color: rgba(244, 244, 245, 0.78);
+}
+
+.cb-chip-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent-violet, #a78bfa);
+  color: #0b0d12;
+  font-size: 9.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* ───────────── Page Clipboard (plein dashboard) ─────────────
+ * Pattern visuel calqué sur .tasks-view : vraie page (pas card), avec
+ * header, hint bar, recherche, puis liste. Ouverte via le bouton 📋
+ * de la search bar ou via Ctrl+Shift+V.
+ */
+/* Pas de `flex: 1; min-height: 0` : la vue prend sa hauteur naturelle,
+ * le scroll est unifié sur `.dashboard`. Cf. mêmes raisons que
+ * `.settings-view` / `.gitlab-panel` (mesure via dashboard.scrollHeight).
+ */
+.clipboard-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  animation: notch-fade-in 280ms ease both;
+}
+
+.clipboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.clipboard-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.clipboard-stats .cs-num {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent-violet, #a78bfa);
+  font-variant-numeric: tabular-nums;
+}
+
+.clipboard-stats .cs-label {
+  font-size: 11px;
+  color: var(--txt-dim);
+  margin-right: 4px;
+}
+
+.clipboard-stats .cs-sep {
+  color: var(--txt-faint);
+}
+
+.clipboard-stats .cs-pinned {
+  color: var(--txt-mute);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.clipboard-stats .cs-pinned i {
+  font-size: 9px;
+  color: var(--accent-violet, #a78bfa);
+}
+
+.clipboard-clear-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  color: var(--txt-mute);
+  font-family: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.clipboard-clear-btn:hover {
+  background: var(--surface-2);
+  color: var(--txt);
+}
+
+.clipboard-clear-btn i {
+  font-size: 10px;
+}
+
+/* Hint bar violette : rappel du raccourci global. Pattern identique à
+   `.tasks-hint` mais teinte violette pour rester aligné sur l'identité
+   du module Clipboard. */
+.clipboard-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  color: var(--txt-mute);
+  padding: 6px 10px;
+  background: rgba(167, 139, 250, 0.05);
+  border: 1px dashed rgba(167, 139, 250, 0.18);
+  border-radius: 8px;
+}
+
+.clipboard-hint i {
+  color: var(--accent-violet, #a78bfa);
+  font-size: 10px;
+}
+
+.clipboard-hint .ck {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  color: var(--txt);
+}
+
+.clipboard-search {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--txt, #f4f4f5);
+  padding: 8px 12px;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 160ms ease, background 160ms ease;
+  font-family: inherit;
+}
+
+.clipboard-search:focus {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.clipboard-search::placeholder {
+  color: var(--txt-mute, rgba(244, 244, 245, 0.45));
+}
+
+.clipboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.clipboard-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--txt-mute);
+  font-size: 13px;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.clipboard-empty i {
+  font-size: 28px;
+  opacity: 0.4;
+  margin-bottom: 8px;
+}
+
+.clipboard-empty .ce-sub {
+  font-size: 11px;
+  color: var(--txt-faint);
+  font-weight: 400;
+}
+
+/* ───────────── Sections & rows ───────────── */
+.cb-section + .cb-section {
+  margin-top: 6px;
+}
+
+.cb-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--txt-mute, rgba(244, 244, 245, 0.45));
+  margin: 6px 2px 4px;
+}
+
+.cb-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.cb-row + .cb-row {
+  margin-top: 4px;
+}
+
+.cb-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.cb-row.is-pinned {
+  border-color: rgba(167, 139, 250, 0.25);
+  background: rgba(167, 139, 250, 0.05);
+}
+
+.cb-row-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cb-row-type {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-violet, #a78bfa);
+}
+
+.cb-row-time {
+  font-size: 10px;
+  color: var(--txt-mute, rgba(244, 244, 245, 0.45));
+  flex: 1;
+  min-width: 0;
+}
+
+.cb-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.6;
+  transition: opacity 160ms ease;
+}
+
+.cb-row:hover .cb-row-actions {
+  opacity: 1;
+}
+
+.cb-row-btn {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--txt-dim, rgba(244, 244, 245, 0.7));
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.cb-row-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--txt, #f4f4f5);
+}
+
+.cb-row-btn.is-active {
+  color: var(--accent-violet, #a78bfa);
+}
+
+.cb-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cb-row-preview-text {
+  font-size: 12px;
+  color: var(--txt, #f4f4f5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+
+.cb-row-sensitive {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cb-row-mask {
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--txt-dim, rgba(244, 244, 245, 0.7));
+  letter-spacing: 0.05em;
+}
+
+.cb-row-reveal {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--txt, #f4f4f5);
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.cb-row-reveal:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ───────────── Previews par type ───────────── */
+.cb-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--txt-dim, rgba(244, 244, 245, 0.7));
+  min-width: 0;
+}
+
+.cb-preview-image .cb-image-thumb {
+  display: block;
+  max-width: 240px;
+  max-height: 160px;
+  width: auto;
+  height: auto;
+  /* aspect-ratio est passé en inline depuis le composant à partir des
+     dimensions natives stockées dans meta — combiné aux max-* ci-dessus
+     pour clamper sans déformer. */
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* Placeholder pendant le chargement async du data URL via IPC.
+   Hérite des max-* et de l'aspect-ratio inline pour éviter le saut
+   visuel quand l'image arrive. */
+.cb-image-thumb-loading {
+  display: block;
+  max-width: 240px;
+  max-height: 160px;
+  width: 100%;
+  animation: cb-image-shimmer 1200ms ease-in-out infinite;
+}
+
+@keyframes cb-image-shimmer {
+  0%, 100% {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  50% {
+    background: rgba(255, 255, 255, 0.09);
+  }
+}
+
+.cb-image-dim {
+  font-variant-numeric: tabular-nums;
+}
+
+.cb-preview-color .cb-color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  flex-shrink: 0;
+}
+
+.cb-color-hex {
+  font-family: monospace;
+  font-size: 11.5px;
+  color: var(--txt, #f4f4f5);
+}
+
+.cb-color-rgb {
+  font-variant-numeric: tabular-nums;
+}
+
+.cb-preview-url .cb-url-favicon,
+.cb-preview-url .cb-url-favicon-fallback {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.cb-preview-url .cb-url-favicon-fallback {
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+}
+
+.cb-url-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  flex: 1;
+}
+
+.cb-url-title {
+  font-size: 11.5px;
+  color: var(--txt, #f4f4f5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cb-url-host {
+  font-size: 10.5px;
+  color: var(--txt-mute, rgba(244, 244, 245, 0.45));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cb-preview-json,
+.cb-preview-jwt {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.cb-json-toggle,
+.cb-jwt-toggle {
+  background: transparent;
+  border: 0;
+  color: var(--txt-dim, rgba(244, 244, 245, 0.7));
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+}
+
+.cb-json-toggle:hover,
+.cb-jwt-toggle:hover {
+  color: var(--txt, #f4f4f5);
+}
+
+.cb-json-pre,
+.cb-jwt-pre {
+  width: 100%;
+  max-height: 260px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: monospace;
+  font-size: 10.5px;
+  color: var(--txt, #f4f4f5);
+  white-space: pre;
+  margin: 0;
+}
+
+/* Scrollbars alignées sur le style global du dashboard (cf. notch.css). */
+.cb-json-pre::-webkit-scrollbar,
+.cb-jwt-pre::-webkit-scrollbar,
+.cb-det-pre::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.cb-json-pre::-webkit-scrollbar-track,
+.cb-jwt-pre::-webkit-scrollbar-track,
+.cb-det-pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cb-json-pre::-webkit-scrollbar-thumb,
+.cb-jwt-pre::-webkit-scrollbar-thumb,
+.cb-det-pre::-webkit-scrollbar-thumb {
+  background: var(--surface-2);
+  border-radius: 3px;
+}
+.cb-json-pre::-webkit-scrollbar-thumb:hover,
+.cb-jwt-pre::-webkit-scrollbar-thumb:hover,
+.cb-det-pre::-webkit-scrollbar-thumb:hover {
+  background: var(--surface-3);
+}
+
+.cb-jwt-exp {
+  font-size: 10px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.cb-jwt-exp.is-valid {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+}
+
+.cb-jwt-exp.is-expired {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.cb-preview-path .cb-path-icon {
+  color: var(--txt-dim, rgba(244, 244, 245, 0.7));
+}
+
+.cb-path-full {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--txt, #f4f4f5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* ───────────── Bouton "Voir plus" (pagination Récent) ───────────── */
+.cb-more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--txt-dim, rgba(244, 244, 245, 0.7));
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.cb-more-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--txt, #f4f4f5);
+}
+
+.cb-more-btn-rest {
+  font-size: 10.5px;
+  color: var(--txt-mute, rgba(244, 244, 245, 0.45));
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───────────── Coloration syntaxique JSON ─────────────
+ * Tokens émis par <JsonHighlight/>. Palette alignée sur les accents
+ * tokens existants (bleu/vert/orange/violet/gris) pour rester cohérente
+ * avec le reste de l'UI.
+ */
+.cb-json-tk-key {
+  color: #60a5fa;
+}
+
+.cb-json-tk-string {
+  color: #34d399;
+}
+
+.cb-json-tk-number {
+  color: #f59e0b;
+}
+
+.cb-json-tk-bool {
+  color: #a78bfa;
+}
+
+.cb-json-tk-null {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* ───────────── Empty state ───────────── */
+.cb-empty {
+  font-size: 11.5px;
+  color: var(--txt-mute, rgba(244, 244, 245, 0.45));
+  padding: 14px 6px;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ───────────── Vue détection (search bar) ───────────── */
+.cb-det-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px var(--d-card-pad-x);
+  background: var(--surface-1, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-1, rgba(255, 255, 255, 0.06));
+  border-radius: var(--d-card-radius, 14px);
+}
+
+.cb-det-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cb-det-icon {
+  font-size: 18px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+}
+
+.cb-det-icon[data-color] {
+  color: attr(data-color);
+}
+
+.cb-det-icon[data-color='#60a5fa'] {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+}
+
+.cb-det-icon[data-color='#f59e0b'] {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.cb-det-icon[data-color='#a78bfa'] {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.1);
+}
+
+.cb-det-icon[data-color='#34d399'] {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.cb-det-color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  flex-shrink: 0;
+}
+
+.cb-det-head-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.cb-det-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--txt, #f4f4f5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cb-det-sub {
+  font-size: 11px;
+  color: var(--txt-mute, rgba(244, 244, 245, 0.45));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cb-det-sub-mono {
+  font-family: monospace;
+  font-size: 10.5px;
+}
+
+.cb-det-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cb-det-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--txt, #f4f4f5);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.cb-det-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.cb-det-btn.is-primary {
+  background: var(--accent-violet, #a78bfa);
+  color: #0b0d12;
+  border-color: transparent;
+}
+
+.cb-det-btn.is-primary:hover {
+  background: #b39bff;
+}
+
+.cb-det-pre {
+  width: 100%;
+  max-height: 320px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--txt, #f4f4f5);
+  white-space: pre;
+  margin: 0;
+}
+
+.cb-det-jwt-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cb-det-jwt-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cb-det-jwt-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--txt-mute, rgba(244, 244, 245, 0.45));
+}
+
+.cb-det-color-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cb-det-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+}
+
+.cb-det-copy-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--txt-mute, rgba(244, 244, 245, 0.45));
+  width: 38px;
+  flex-shrink: 0;
+}
+
+.cb-det-copy-value {
+  font-family: monospace;
+  font-size: 11.5px;
+  color: var(--txt, #f4f4f5);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

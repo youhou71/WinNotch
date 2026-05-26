@@ -1,0 +1,138 @@
+# Configuration electron-builder pour WinNotch
+#
+# Doc : https://www.electron.build/configuration/configuration
+#
+# Lancement :
+#   - `npm run pack`     → build sans installeur (out/win-unpacked)
+#   - `npm run dist:win` → build + installeur NSIS (out/WinNotch-Setup-x.y.z.exe)
+#
+# Pré-requis : exécuter `npm run build` au préalable n'est PAS nécessaire,
+# electron-builder appelle automatiquement le script `build` du package.json.
+
+appId: com.cfast.winnotch
+productName: WinNotch
+copyright: Copyright © 2026 Jérémy Bolzonella
+
+# === Publication GitHub Releases ===
+# electron-updater lit le `latest.yml` publié à côté du setup NSIS sur
+# la page Releases. Si owner/repo ne correspond pas, à corriger ici.
+#
+# Pour publier : `npm run dist:win -- --publish always` avec un
+# GH_TOKEN dans l'env qui a le scope `repo` (ou `public_repo` si repo
+# public). Le token n'est PAS embarqué dans l'app ; il est utilisé
+# uniquement à la publication par electron-builder.
+#
+# Côté client (auto-update) : aucun token requis pour les releases d'un
+# repo public — anyone can download.
+publish:
+  - provider: github
+    owner: jeremy-bolzonella
+    repo: WinNotch
+    releaseType: release
+
+# Dossier des artefacts compilés par electron-vite avant packaging
+directories:
+  buildResources: build         # icon.ico, installer.nsh, etc.
+  output: dist                  # sortie : installer + win-unpacked
+
+# Fichiers inclus dans le package final.
+# - out/      : bundles main / preload / renderer compilés par electron-vite
+# - package.json (electron-builder en a besoin pour lire `main` et la version)
+# - .env.local NE doit PAS être inclus : les vars MAIN_VITE_* sont déjà
+#   inlinées statiquement dans out/main/index.js par Vite au build.
+files:
+  - out/**/*
+  - package.json
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,README,readme}"
+  - "!**/node_modules/*.d.ts"
+  - "!**/node_modules/.bin"
+  - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}"
+  - "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}"
+  - "!**/{appveyor.yml,.travis.yml,circle.yml}"
+  - "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+  - "!.env*"
+  - "!.editorconfig"
+  - "!*.code-workspace"
+
+# Ressources copiées telles quelles (non packées dans l'asar).
+# SoundVolumeView est un .exe externe — il DOIT rester sur le disque pour
+# pouvoir être spawné. Idem .chm/readme à côté pour la conformité de
+# redistribution NirSoft.
+extraResources:
+  - from: resources/SoundVolumeView.exe
+    to: SoundVolumeView.exe
+  - from: resources/SoundVolumeView.chm
+    to: SoundVolumeView.chm
+  - from: resources/readme.txt
+    to: SoundVolumeView-readme.txt
+  # Icône lue au runtime par BrowserWindow ({ icon: ... }) pour s'afficher
+  # dans Alt+Tab, le gestionnaire des tâches et Aero Peek.
+  - from: build/icon.ico
+    to: icon.ico
+
+# Activer l'asar (archive concaténée → démarrage plus rapide, anti-tampering
+# léger) mais EXCLURE les modules natifs : leurs .node ne sont pas chargés
+# correctement depuis l'intérieur d'un asar par le linker dynamique Windows.
+# IMPORTANT : on désactive le rebuild automatique des natifs au packaging.
+#
+# Pourquoi :
+#  - @coooookies/windows-smtc-monitor : napi-rs prebuilt (N-API stable),
+#    le rebuild casse le binaire .node optionnel.
+#  - better-sqlite3 : prebuild Electron déjà fourni via prebuild-install.
+#  - loudness : pas natif (wrappe PowerShell).
+#  - node-global-key-listener : .exe externe (pas natif Node).
+#
+# Aucun n'a besoin de rebuild contre l'ABI Electron. Si un futur module
+# natif l'exige, lancer manuellement `npm run rebuild-natives` avant
+# `npm run dist:win`.
+npmRebuild: false
+
+asar: true
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+  - "**/node_modules/loudness/**"
+  - "**/node_modules/node-global-key-listener/**"
+  - "**/node_modules/@coooookies/windows-smtc-monitor/**"
+
+# === Configuration Windows ===
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  # IMPORTANT : on garde `signAndEditExecutable` au défaut (`true`).
+  # Cette option contrôle À LA FOIS la signature ET le patch des métadonnées
+  # (icône intégrée dans le PE, version info, productName, fileDescription).
+  # La mettre à `false` désactive aussi rcedit → l'exe garde l'icône Electron
+  # par défaut. Sans CSC_LINK configuré, electron-builder n'essaiera pas de
+  # signer (warning seulement, pas d'erreur) tant que `forceCodeSigning` reste
+  # à `false` (sa valeur par défaut).
+  forceCodeSigning: false
+  # Description visible dans le clic-droit > Propriétés > Détails de l'exe.
+  fileAssociations: []
+  # Version friendly du nom de fichier de l'installeur (sinon "WinNotch Setup 0.1.0.exe")
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+# === Configuration installeur NSIS ===
+nsis:
+  # one-click: false = wizard "next/next/finish" classique avec choix du
+  # répertoire d'installation. Recommandé pour un widget système que
+  # l'utilisateur veut pouvoir installer dans un emplacement choisi
+  # (et désinstaller proprement via Programmes & fonctionnalités).
+  oneClick: false
+  perMachine: false              # install per-user (pas besoin d'UAC)
+  allowToChangeInstallationDirectory: true
+  allowElevation: false          # pas d'élévation forcée
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: WinNotch
+  menuCategory: false            # pas de sous-menu dédié dans Démarrer
+  deleteAppDataOnUninstall: false  # garde les settings utilisateur en cas de réinstall
+  # Affiche un écran d'accueil + termes ; sinon installeur très minimaliste.
+  warningsAsErrors: false
+  # Permet à l'utilisateur d'installer pour plusieurs comptes si besoin.
+  installerLanguages:
+    - fr_FR
+    - en_US
+  language: "1036"               # français par défaut (LCID 1036)

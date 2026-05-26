@@ -1,0 +1,289 @@
+/*
+ * notch.css — shell visuel du Notch (collapsed + expanded).
+ *
+ * Hiérarchie DOM :
+ *  .notch-host (position fixed, pointer-events:none, centré)
+ *    └ .notch (pointer-events:auto, fond opaque, animé)
+ *        └ .notch-inner (wrapper layout)
+ *            └ .collapsed-row OU .expanded-shell
+ *
+ * .notch-host est en `pointer-events:none` pour que les clics passent par
+ * défaut à travers la fenêtre Electron transparente. Seul `.notch` (avec
+ * pointer-events:auto) capte les clics — c'est ce qui permet au notch
+ * d'être interactif tandis que la fenêtre 800×720 qui l'entoure est
+ * complètement passe-plats côté CSS (complément du setIgnoreMouseEvents
+ * géré par le main).
+ *
+ * Les transitions width/height/border-radius utilisent la courbe spring
+ * `linear()` définie dans tokens.css. Chromium 113+ requis (Electron 25+).
+ */
+.notch-host {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.notch {
+  pointer-events: auto;
+  background: var(--notch-bg);
+  color: var(--txt);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.6),
+    0 2px 6px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px var(--border-soft);
+  transition:
+    width 700ms var(--spring),
+    height 700ms var(--spring),
+    border-radius 700ms var(--spring),
+    box-shadow 400ms ease;
+  will-change: width, height, border-radius;
+}
+
+.notch[data-mode='expanded'] {
+  cursor: default;
+}
+
+/* En mode rétracté, on retire les drop shadows externes : le notch est
+ * collé contre le bord supérieur de l'écran et l'ombre projetée sur le
+ * wallpaper alourdit visuellement la chip. On garde l'inset 1 px pour
+ * conserver le liseré qui donne du volume contre les fonds clairs. */
+.notch[data-mode='collapsed'] {
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+}
+
+.notch.is-pressing {
+  transform: scale(0.98);
+}
+
+.notch.is-peeking {
+  opacity: 0.15;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    width 700ms var(--spring),
+    height 700ms var(--spring),
+    border-radius 700ms var(--spring);
+}
+
+/* Masquage automatique quand une app est en plein écran sur l'écran
+   principal. On utilise opacity + pointer-events:none plutôt que
+   display:none pour préserver l'animation et permettre une réapparition
+   fluide quand le fullscreen se termine ou que l'utilisateur ouvre via
+   Ctrl+Shift+Space (qui passe en mode expanded, override la classe). */
+.notch.is-fullscreen-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 240ms ease;
+}
+
+.notch-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.collapsed-row {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  animation: notch-fade-in 280ms ease 100ms both;
+}
+
+/* Quand la pochette Music est présente, elle est flush gauche (carrée,
+ * pleine hauteur du notch). Le padding gauche disparaît donc — le coin
+ * bas-gauche arrondi du shell continue de clipper la cover correctement
+ * grâce à l'overflow:hidden de `.notch`. */
+.collapsed-row[data-has-cover='true'] {
+  padding-left: 0;
+}
+
+.cr-left,
+.cr-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Classe de base partagée par toutes les chips de la collapsed row
+   (Music, Meetings, Messages, Tasks, GitLab, Claude, DND…).
+   Sans cette règle, le contenu interne (cover + titre, icône + badge) se
+   stacke verticalement et déborde la hauteur 34 px du notch. */
+.chip {
+  display: flex;
+  align-items: center;
+  color: var(--txt);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.cr-right .chip {
+  opacity: 0.7;
+  transition: opacity 200ms ease;
+}
+
+.cr-right .chip:hover {
+  opacity: 1;
+}
+
+@keyframes notch-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.expanded-shell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.dashboard {
+  flex: 1;
+  min-height: 0;
+  padding: var(--d-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--d-gap);
+  animation: notch-fade-in 350ms ease 200ms both;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  transition:
+    padding 240ms var(--ease-out),
+    gap 240ms var(--ease-out);
+}
+
+.dashboard::-webkit-scrollbar {
+  width: 6px;
+}
+.dashboard::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dashboard::-webkit-scrollbar-thumb {
+  background: var(--surface-2);
+  border-radius: 3px;
+}
+.dashboard::-webkit-scrollbar-thumb:hover {
+  background: var(--surface-3);
+}
+
+/* Search bar sticky en haut du dashboard. Le fond stratifié garantit la
+   lisibilité même quand du contenu sombre scrolle juste en dessous (le
+   notch-bg étant déjà sombre, on ajoute une couche `--surface-1`
+   pour distinguer la barre du fond). */
+.dashboard > .search-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background:
+    linear-gradient(var(--surface-1), var(--surface-1)),
+    var(--notch-bg);
+  border-color: var(--border-2);
+}
+
+/* Fade subtil sous la search bar pour adoucir la transition vers le
+   contenu scrollable. Décalé de 4 px pour ne pas masquer la bottom border
+   de la barre. */
+.dashboard > .search-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  height: 10px;
+  background: linear-gradient(to bottom, var(--notch-bg), transparent);
+  pointer-events: none;
+}
+
+/* Grille du dashboard : 12 colonnes, layout configurable par l'utilisateur
+ * (Settings → Disposition). L'ordre des tuiles + leur largeur en colonnes
+ * (1..12) sont stockés dans `settings.dashboardLayout`. Les tuiles
+ * s'enchaînent ; quand la somme des `cols` d'une rangée dépasse 12, le
+ * grid wrap automatiquement à la rangée suivante.
+ *
+ * `align-items: start` empêche les tuiles d'une même rangée de s'étirer
+ * à la hauteur de la plus grande — la GitLabCard peut être longue (~20 MR)
+ * alors que la GitLocalCard reste compacte sur la même ligne. */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--d-gap);
+  align-items: start;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+/* Une tuile occupe `--cols` colonnes (défaut 12 pour les tuiles qui
+ * oublieraient de poser la variable). `min-width: 0` est nécessaire pour
+ * laisser le contenu des cards s'ellipser proprement au lieu de pousser
+ * la grille au-delà du dashboard. */
+.dash-tile {
+  grid-column: span var(--cols, 12);
+  min-width: 0;
+}
+
+/* Les enfants directs des tuiles doivent eux aussi accepter de rétrécir
+ * (sinon `flex: 1` interne déborde). */
+.dash-tile > * {
+  min-width: 0;
+}
+
+.dash-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+  color: var(--txt-dim);
+}
+
+.dash-placeholder .dp-emoji {
+  font-size: 32px;
+  opacity: 0.8;
+}
+
+.dash-placeholder .dp-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--txt);
+}
+
+.dash-placeholder .dp-sub {
+  font-size: 11.5px;
+  line-height: 1.5;
+  max-width: 380px;
+}
+
+.dash-placeholder .dp-kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-2);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  border: 1px solid var(--border-1);
+  border-bottom-width: 2px;
+  color: var(--txt);
+  margin: 0 2px;
+}

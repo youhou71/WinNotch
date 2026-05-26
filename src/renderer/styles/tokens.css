@@ -1,0 +1,92 @@
+/*
+ * tokens.css — design tokens du Notch.
+ *
+ * Reproduit fidèlement le bloc :root du prototype (Notch.html lignes 11-53).
+ * Tout changement de palette ou d'espacement doit passer par ce fichier
+ * pour rester cohérent à travers tous les composants.
+ *
+ * Trois densités sont supportées (selon l'attribut data-density sur .notch) :
+ *  - dense   : compact (10/6/9)
+ *  - normal  : défaut implicite (14/10/12)
+ *  - airy    : aéré, utilisé par défaut dans App.tsx (20/16/18)
+ */
+:root {
+  --notch-bg: #000;
+  --accent: #60a5fa;
+  --accent-warm: #fbbf24;
+  --accent-green: #34d399;
+  --accent-pink: #f472b6;
+  --accent-violet: #a78bfa;
+  --gitlab-orange: #fc6d26;
+  --txt: #f4f4f5;
+  --txt-dim: rgba(244, 244, 245, 0.6);
+  --txt-mute: rgba(244, 244, 245, 0.42);
+  --txt-faint: rgba(244, 244, 245, 0.28);
+
+  /* Échelle de surfaces sur fond noir.
+   * Le notch est en `#000` strict ; ces couches blanches transparentes
+   * créent la hiérarchie visuelle des cards, rows, hover et active.
+   * Valeurs choisies pour rester lisibles sans monter en luminosité
+   * agressive. */
+  --surface-0: rgba(255, 255, 255, 0.04);     /* base très subtile (séparateurs, hint blocks) */
+  --surface-1: rgba(255, 255, 255, 0.07);     /* cards, dropdowns, section bodies, inputs */
+  --surface-2: rgba(255, 255, 255, 0.12);     /* hover, rows actives, focus */
+  --surface-3: rgba(255, 255, 255, 0.18);     /* éléments sélectionnés forts */
+
+  /* Échelle de bordures.
+   * `border-soft` pour les séparateurs internes (rows consécutives),
+   * `border-1` est la bordure standard de toutes les surfaces,
+   * `border-2` marque le focus / hover des inputs et boutons. */
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --border-1: rgba(255, 255, 255, 0.14);
+  --border-2: rgba(255, 255, 255, 0.22);
+
+  --spring: linear(
+    0,
+    0.018,
+    0.073 2.93%,
+    0.314,
+    0.555,
+    0.755,
+    0.901,
+    0.989,
+    1.04 11.74%,
+    1.054,
+    1.054,
+    1.045,
+    1.027 16.41%,
+    1,
+    0.987 21.07%,
+    0.987 26.97%,
+    1 33.76%,
+    1.004 41.13%,
+    0.998 53.5%,
+    1
+  );
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --d-pad: 14px;
+  --d-gap: 10px;
+  --d-card-pad-y: 12px;
+  --d-card-pad-x: 14px;
+  --d-card-gap: 10px;
+  --d-card-radius: 14px;
+}
+
+.notch[data-density='dense'] {
+  --d-pad: 10px;
+  --d-gap: 6px;
+  --d-card-pad-y: 9px;
+  --d-card-pad-x: 12px;
+  --d-card-gap: 7px;
+  --d-card-radius: 11px;
+}
+
+.notch[data-density='airy'] {
+  --d-pad: 20px;
+  --d-gap: 16px;
+  --d-card-pad-y: 18px;
+  --d-card-pad-x: 22px;
+  --d-card-gap: 16px;
+  --d-card-radius: 18px;
+}

@@ -1,0 +1,324 @@
+/*
+ * claude.css — chip + card du module Claude Code.
+ *
+ * Reproduit les patterns du prototype : claude-spark (conic gradient
+ * animé), badge violet/rose, sessions tabs, status orb pulsant.
+ */
+
+/* ───────────── Chip + spark (collapsed row) ───────────── */
+.chip-claude .logo-stack {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+}
+
+/* `claude-spark` = anneau conic-gradient animé. Le `mask` radial
+   creuse le centre pour ne laisser qu'un cercle fin. Deux pseudo-elts
+   tournent à vitesses différentes pour un effet "scintillement". */
+.claude-spark {
+  width: 15px;
+  height: 15px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.claude-spark::before,
+.claude-spark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    var(--accent-violet) 25%,
+    transparent 50%,
+    var(--accent-pink) 75%,
+    transparent 100%
+  );
+  border-radius: 50%;
+  animation: claude-spin 1.6s linear infinite;
+  mask: radial-gradient(circle, transparent 35%, black 38%);
+  -webkit-mask: radial-gradient(circle, transparent 35%, black 38%);
+}
+
+.claude-spark::after {
+  animation-duration: 2.2s;
+  animation-direction: reverse;
+  opacity: 0.6;
+}
+
+@keyframes claude-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Badge count violet/rose. */
+.count-badge {
+  position: absolute;
+  top: -3px;
+  right: -6px;
+  color: white;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 100px;
+  min-width: 11px;
+  text-align: center;
+  border: 1.25px solid var(--notch-bg);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.claude-badge {
+  background: linear-gradient(135deg, var(--accent-violet), var(--accent-pink));
+}
+
+/*
+ * Badge "?" jaune quand au moins une session attend une réponse. Pulse
+ * doucement pour attirer l'œil sans être agressif.
+ */
+.claude-badge-wfi {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #1a1310;
+  font-weight: 700;
+  animation: claude-wfi-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes claude-wfi-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(251, 191, 36, 0);
+  }
+}
+
+/* La spark mini dans le header de card. */
+.card-header-left .claude-spark {
+  width: 14px;
+  height: 14px;
+}
+
+/* ───────────── Card sessions (liste verticale) ───────────── */
+.card-claude {
+  gap: 10px;
+}
+
+/* Sessions empilées verticalement — chaque ligne est une session
+   compacte avec orb coloré, nom mono, et tokens à droite. */
+.claude-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.claude-sess {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--txt-dim);
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.claude-sess:hover {
+  background: var(--surface-2);
+  color: var(--txt);
+}
+
+/* Session sélectionnée : fond violet pâle + bordure interne pour un
+   "is-active" sans déplacer le layout. */
+.claude-sess.sel {
+  background: rgba(167, 139, 250, 0.1);
+  color: var(--txt);
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.18);
+}
+
+/* Orb coloré par session via la variable CSS injectée inline
+   `--sess-color`. Le `working` ajoute une animation pulse qui projette
+   un halo dans la même teinte. `waiting` et `idle` overrident la
+   couleur (jaune et gris respectivement). */
+.sess-orb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sess-color, var(--accent-violet));
+  flex-shrink: 0;
+}
+
+.sess-orb.status-working {
+  animation: orb-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes orb-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--sess-color, var(--accent-violet));
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 4px transparent, 0 0 10px var(--sess-color, var(--accent-violet));
+    opacity: 0.85;
+  }
+}
+
+.sess-orb.status-waiting {
+  background: var(--accent-warm);
+  box-shadow: 0 0 4px var(--accent-warm);
+}
+
+.sess-orb.status-idle,
+.sess-orb.status-done {
+  background: var(--txt-faint);
+}
+
+.sess-name {
+  flex: 1;
+  font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sess-tok {
+  font-size: 9.5px;
+  color: var(--txt-faint);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/*
+ * Petit "?" jaune affiché à droite du nom de session lorsque Claude
+ * attend une réponse. Pulse doucement pour attirer l'œil. Reste visible
+ * tant que le tool_result n'est pas écrit dans le .jsonl.
+ */
+.sess-wfi {
+  font-size: 10px;
+  color: #fbbf24;
+  flex-shrink: 0;
+  animation: sess-wfi-blink 1.4s ease-in-out infinite;
+}
+
+@keyframes sess-wfi-blink {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* Variante du texte courant : surligne légèrement quand wfi */
+.claude-current-text.wfi {
+  color: #fbbf24;
+}
+
+/* Bloc détaillé : carte interne plus claire qui isole le focus
+   visuel sur la session sélectionnée. `margin-top: auto` le pousse
+   tout en bas si la card a un peu de hauteur supplémentaire. */
+.claude-detail {
+  background: var(--surface-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.claude-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--txt-faint);
+}
+
+.claude-detail-meta .branch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent-violet);
+}
+
+.claude-detail-meta .branch i {
+  font-size: 8px;
+}
+
+.claude-detail-meta .dot {
+  color: var(--txt-faint);
+}
+
+.claude-detail-meta .elapsed {
+  font-variant-numeric: tabular-nums;
+}
+
+.claude-current-text {
+  font-size: 11px;
+  color: var(--txt);
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  line-height: 1.35;
+  /* min-width: 0 permet à .claude-current-text de shrink à l'intérieur
+     de son parent flex .claude-detail (sinon il pousse au contenu). */
+  min-width: 0;
+}
+
+.claude-current-text > i {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--accent-violet);
+}
+
+/* Le span porte le texte (ex. "Read · C:\Projets\01_Perso\WinNotch\…")
+   et doit wrap sans déborder, y compris sur des longs chemins Windows
+   sans espaces. `overflow-wrap: anywhere` casse à n'importe quel
+   caractère si nécessaire (mieux que `break-word` qui n'agit qu'aux
+   limites de mots). `min-width: 0` est requis car par défaut un span
+   en flex item garde `min-width: auto = contenu intrinsèque`. */
+.claude-current-text > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  flex: 1;
+}
+
+/* Shimmer doux sur le texte courant quand la session est `working` —
+   gradient violet→rose qui traverse le texte. */
+.claude-current-text.shimmer span {
+  background: linear-gradient(
+    90deg,
+    rgba(244, 244, 245, 0.7),
+    var(--accent-pink),
+    rgba(244, 244, 245, 0.7)
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: claude-shimmer 2.4s linear infinite;
+}
+
+@keyframes claude-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

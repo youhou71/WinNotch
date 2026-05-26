@@ -1,0 +1,64 @@
+/*
+ * reset.css — règles de base de la fenêtre.
+ *
+ * Important : body et html doivent rester en background transparent et
+ * overflow:hidden. Sans transparence, Electron afficherait une boîte
+ * noire de 800×720 autour du notch. Sans hidden, on aurait des scrollbars
+ * sur la fenêtre alors que seul .dashboard doit scroller.
+ *
+ * user-select:none évite la sélection accidentelle de texte au drag du
+ * notch (le notch est un widget, pas un document).
+ */
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  background: transparent;
+  color: var(--txt);
+  user-select: none;
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Focus ring :
+ *  - `:focus` simple (souris) → masqué, garde l'esthétique du notch
+ *    quand on clique. Le hover et le tint suffisent comme feedback.
+ *  - `:focus-visible` (clavier, navigation Tab) → outline bleu visible.
+ *    L'utilisateur clavier a besoin de savoir où il est dans la grille
+ *    d'éléments interactifs (cards, boutons, MR rows, sessions Claude…).
+ *
+ * `outline-offset: -1px` plutôt qu'externe : la plupart des éléments
+ * dans le notch ont des coins arrondis collés à la limite du shell,
+ * un offset positif déborderait du clip `overflow:hidden`. */
+button:focus,
+input:focus,
+[role='button']:focus,
+a:focus {
+  outline: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+[role='button']:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-radius: 4px;
+}
