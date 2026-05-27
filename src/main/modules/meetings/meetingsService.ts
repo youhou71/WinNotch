@@ -38,6 +38,8 @@ import type { OAuthTokens } from './oauth';
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 /** Fenêtre de lookahead (heures) — couvre largement les prochains RDV. */
 const WINDOW_HOURS = 48;
+/** TTL de la photo de profil avant re-fetch (30 jours). */
+const SELF_PHOTO_TTL_MS = 30 * 24 * 3600 * 1000;
 /** Couleurs des badges par provider. */
 const PROVIDER_COLOR: Record<CalendarProviderId, string> = {
   outlook: '#0078d4',
@@ -194,6 +196,43 @@ async function ensureAccessToken(account: CalendarAccount): Promise<{
 }
 
 /**
+ * Récupère (et persiste) la photo de profil du compte connecté si
+ * absente ou TTL dépassé. N'échoue jamais : si l'API photo retourne
+ * 404/403 ou si le provider ne supporte pas, on marque juste le
+ * `selfPhotoFetchedAt` pour ne pas re-tenter à chaque tick.
+ */
+async function ensureSelfPhoto(
+  account: CalendarAccount,
+  accessToken: string,
+): Promise<CalendarAccount> {
+  const provider = PROVIDERS[account.provider];
+  if (!provider.fetchSelfPhoto) return account;
+
+  const now = Date.now();
+  const fetchedAt = account.selfPhotoFetchedAt ?? 0;
+  if (account.selfPhotoDataUrl && now - fetchedAt < SELF_PHOTO_TTL_MS) {
+    return account;
+  }
+
+  let photoDataUrl: string | null = null;
+  try {
+    photoDataUrl = await provider.fetchSelfPhoto(accessToken);
+  } catch (err) {
+    console.warn(`[meetings] fetchSelfPhoto KO pour ${account.email}:`, err);
+  }
+
+  const updated: CalendarAccount = {
+    ...account,
+    selfPhotoDataUrl: photoDataUrl ?? undefined,
+    selfPhotoFetchedAt: now,
+  };
+  setAccounts(
+    getAccounts().map((a) => (a.id === account.id ? updated : a)),
+  );
+  return updated;
+}
+
+/**
  * Agrège les meetings de tous les comptes connectés. Une erreur sur un
  * compte n'empêche pas les autres de remonter leurs résultats.
  */
@@ -205,9 +244,10 @@ async function aggregate(): Promise<Meeting[]> {
     accounts.map(async (acc) => {
       const ready = await ensureAccessToken(acc);
       if (!ready) return [];
-      const provider = PROVIDERS[acc.provider];
+      const withPhoto = await ensureSelfPhoto(ready.account, ready.accessToken);
+      const provider = PROVIDERS[withPhoto.provider];
       return provider.listUpcomingMeetings({
-        account: ready.account,
+        account: withPhoto,
         accessToken: ready.accessToken,
         windowHours: WINDOW_HOURS,
       });

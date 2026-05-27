@@ -41,4 +41,11 @@ export interface CalendarProvider {
     accessToken: string;
     windowHours: number;
   }): Promise<Meeting[]>;
+
+  /**
+   * Récupère la photo de profil du compte connecté, encodée en data URL
+   * (`data:image/jpeg;base64,…`). Retourne null si le provider n'a pas
+   * de photo pour ce compte (404), ou si la feature n'est pas supportée.
+   */
+  fetchSelfPhoto?(accessToken: string): Promise<string | null>;
 }
