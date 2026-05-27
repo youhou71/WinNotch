@@ -111,7 +111,7 @@ npm version "$new_version" --no-git-tag-version --allow-same-version >/dev/null
 
 echo "→ git commit"
 git add package.json package-lock.json
-git commit -m "chore(release): $tag"
+git commit -m "Release: $tag"
 
 echo "→ git push origin main"
 git push origin main
