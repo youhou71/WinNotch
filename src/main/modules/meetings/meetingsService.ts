@@ -20,9 +20,11 @@ import {
   DEFAULT_SETTINGS,
   IpcChannel,
   type CalendarAccount,
+  type CalendarInfo,
   type CalendarProviderId,
   type Meeting,
   type OAuthClientCredentials,
+  type OutlookCategory,
   type Settings,
 } from '../../../shared/types';
 import { getNotchWindow } from '../../window/notchWindow';
@@ -40,6 +42,15 @@ const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const WINDOW_HOURS = 48;
 /** TTL de la photo de profil avant re-fetch (30 jours). */
 const SELF_PHOTO_TTL_MS = 30 * 24 * 3600 * 1000;
+/**
+ * TTL du cache `account.calendars` — au-delà, l'agrégation re-fetch la
+ * liste des calendriers en arrière-plan. 6 h est un bon compromis :
+ * l'utilisateur peut ajouter un calendrier partagé côté provider et le
+ * voir apparaître dans Settings au prochain ouvrir, sans payer un round-trip
+ * réseau à chaque polling. Le bouton "Rafraîchir" dans Settings force
+ * un refetch immédiat indépendamment du TTL.
+ */
+const CALENDARS_TTL_MS = 6 * 3600 * 1000;
 /** Couleurs des badges par provider. */
 const PROVIDER_COLOR: Record<CalendarProviderId, string> = {
   outlook: '#0078d4',
@@ -196,6 +207,120 @@ async function ensureAccessToken(account: CalendarAccount): Promise<{
 }
 
 /**
+ * Récupère (et persiste) la liste des calendriers du compte. Stratégie :
+ *
+ *  - `force === true` : skip le cache → refetch inconditionnel. Utilisé
+ *    par l'IPC `meetings:listCalendars` (clic utilisateur sur Rafraîchir).
+ *  - sinon : honore le TTL. Si `calendars` est déjà rempli et que le TTL
+ *    n'est pas expiré, retourne l'account tel quel.
+ *
+ * Si c'est le premier fetch (selectedCalendarIds était `undefined`), on
+ * coche par défaut tous les calendriers connus — c'est la sémantique
+ * "inclusion" mais avec une initialisation pratique pour l'utilisateur
+ * qui ne veut pas avoir à tout cocher manuellement. À partir de ce
+ * moment, l'utilisateur peut décocher ce qu'il ne veut plus.
+ *
+ * En cas d'erreur réseau, on retourne le compte inchangé (et l'agrégation
+ * fera son fallback en interrogeant uniquement le calendrier `primary`).
+ */
+async function ensureCalendars(
+  account: CalendarAccount,
+  accessToken: string,
+  force = false,
+): Promise<CalendarAccount> {
+  const provider = PROVIDERS[account.provider];
+  const now = Date.now();
+  const fetchedAt = account.calendarsFetchedAt ?? 0;
+  const stillFresh =
+    account.calendars && now - fetchedAt < CALENDARS_TTL_MS;
+  if (!force && stillFresh) return account;
+
+  let calendars: CalendarInfo[];
+  try {
+    calendars = await provider.listCalendars(accessToken);
+  } catch (err) {
+    console.warn(
+      `[meetings] listCalendars KO pour ${account.email}:`,
+      err,
+    );
+    // Ne pas écraser un cache valide en cas d'échec — on garde l'ancien
+    // état et on réessaiera au prochain tick.
+    return account;
+  }
+
+  // Premier fetch : initialiser la liste blanche à "tous cochés". Si
+  // l'utilisateur a déjà une sélection explicite, on la conserve mais
+  // on filtre les IDs qui n'existent plus côté provider pour éviter
+  // qu'ils trainent indéfiniment.
+  let selectedCalendarIds: string[] | undefined;
+  if (account.selectedCalendarIds === undefined) {
+    selectedCalendarIds = calendars.map((c) => c.id);
+  } else {
+    const known = new Set(calendars.map((c) => c.id));
+    selectedCalendarIds = account.selectedCalendarIds.filter((id) =>
+      known.has(id),
+    );
+  }
+
+  const updated: CalendarAccount = {
+    ...account,
+    calendars,
+    calendarsFetchedAt: now,
+    selectedCalendarIds,
+  };
+  setAccounts(
+    getAccounts().map((a) => (a.id === account.id ? updated : a)),
+  );
+  return updated;
+}
+
+/**
+ * Récupère (et persiste) la liste des catégories Outlook du compte.
+ * Outlook only — pour Google, `provider.listCategories` est absente et
+ * on retourne l'account inchangé sans erreur.
+ *
+ * Stratégie identique à `ensureCalendars` : TTL partagé (`CALENDARS_TTL_MS`)
+ * pour éviter un round-trip réseau supplémentaire à chaque tick. En cas
+ * d'erreur réseau, on garde l'ancien cache pour ne pas casser le filtrage
+ * tant que la dernière liste connue est encore utilisable.
+ */
+async function ensureCategories(
+  account: CalendarAccount,
+  accessToken: string,
+  force = false,
+): Promise<CalendarAccount> {
+  const provider = PROVIDERS[account.provider];
+  if (!provider.listCategories) return account;
+
+  const now = Date.now();
+  const fetchedAt = account.categoriesFetchedAt ?? 0;
+  const stillFresh =
+    account.categories && now - fetchedAt < CALENDARS_TTL_MS;
+  if (!force && stillFresh) return account;
+
+  let categories: OutlookCategory[];
+  try {
+    categories = await provider.listCategories(accessToken);
+  } catch (err) {
+    console.warn(
+      `[meetings] listCategories KO pour ${account.email}:`,
+      err,
+    );
+    return account;
+  }
+
+  const updated: CalendarAccount = {
+    ...account,
+    categories,
+    categoriesFetchedAt: now,
+  };
+  setAccounts(
+    getAccounts().map((a) => (a.id === account.id ? updated : a)),
+  );
+  return updated;
+}
+
+/**
  * Récupère (et persiste) la photo de profil du compte connecté si
  * absente ou TTL dépassé. N'échoue jamais : si l'API photo retourne
  * 404/403 ou si le provider ne supporte pas, on marque juste le
@@ -233,8 +358,35 @@ async function ensureSelfPhoto(
 }
 
 /**
+ * Calcule la liste des IDs de calendriers à interroger pour un compte.
+ *
+ *  - Si `selectedCalendarIds` est défini : retourne cette liste filtrée
+ *    pour ne garder que les IDs encore connus (au cas où un calendrier
+ *    aurait été supprimé côté provider).
+ *  - Sinon (premier passage, avant le tout premier `ensureCalendars`
+ *    réussi) : retourne `['primary']` comme fallback. C'est un alias
+ *    valide pour Google ; côté Outlook le ID littéral "primary" n'est
+ *    pas reconnu, mais ce chemin n'est pris que dans la fenêtre étroite
+ *    avant le premier fetch — `ensureCalendars` initialise l'état
+ *    juste avant.
+ */
+function resolveCalendarIds(account: CalendarAccount): string[] {
+  if (account.selectedCalendarIds && account.calendars) {
+    const known = new Set(account.calendars.map((c) => c.id));
+    return account.selectedCalendarIds.filter((id) => known.has(id));
+  }
+  if (account.calendars && account.calendars.length > 0) {
+    const primary = account.calendars.find((c) => c.isPrimary);
+    return primary ? [primary.id] : [account.calendars[0].id];
+  }
+  return ['primary'];
+}
+
+/**
  * Agrège les meetings de tous les comptes connectés. Une erreur sur un
- * compte n'empêche pas les autres de remonter leurs résultats.
+ * compte n'empêche pas les autres de remonter leurs résultats. Idem
+ * pour une erreur sur un calendrier précis : on continue à fetch les
+ * autres.
  */
 async function aggregate(): Promise<Meeting[]> {
   const accounts = getAccounts();
@@ -245,19 +397,77 @@ async function aggregate(): Promise<Meeting[]> {
       const ready = await ensureAccessToken(acc);
       if (!ready) return [];
       const withPhoto = await ensureSelfPhoto(ready.account, ready.accessToken);
-      const provider = PROVIDERS[withPhoto.provider];
-      return provider.listUpcomingMeetings({
-        account: withPhoto,
-        accessToken: ready.accessToken,
-        windowHours: WINDOW_HOURS,
+      const withCalendars = await ensureCalendars(
+        withPhoto,
+        ready.accessToken,
+      );
+      const withCategories = await ensureCategories(
+        withCalendars,
+        ready.accessToken,
+      );
+      const provider = PROVIDERS[withCategories.provider];
+      const calendarIds = resolveCalendarIds(withCategories);
+      if (calendarIds.length === 0) return [];
+
+      // Sérialisation des appels par calendrier au sein d'un même compte.
+      // Microsoft Graph applique une limite "MailboxConcurrency" (~4 req
+      // simultanées par mailbox) qui renvoie HTTP 429 ApplicationThrottled
+      // au-delà — observé dès qu'un utilisateur a 5+ calendriers connectés.
+      // Les comptes restent en parallèle entre eux (Promise.allSettled
+      // englobant), seule la boucle interne au compte est séquentielle.
+      // Une erreur sur un calendrier ne casse pas les autres.
+      const out: Meeting[] = [];
+      for (const calendarId of calendarIds) {
+        try {
+          const part = await provider.listUpcomingMeetings({
+            account: withCategories,
+            accessToken: ready.accessToken,
+            windowHours: WINDOW_HOURS,
+            calendarId,
+          });
+          out.push(...part);
+        } catch (err) {
+          console.warn(
+            `[meetings] calendar partial failure on ${withCategories.email}:`,
+            err,
+          );
+        }
+      }
+
+      // Filtre par catégorie Outlook (liste noire). Sémantique :
+      //  - un event SANS catégorie est toujours conservé,
+      //  - un event AVEC catégorie est masqué si au moins l'une de ses
+      //    catégories est dans `excludedCategories` (compare en lower-case
+      //    pour tolérer une casse différente entre Outlook et l'UI).
+      // Pour Google, `categories` est undefined sur tous les events et
+      // `excludedCategories` reste vide en pratique, donc no-op.
+      const excluded = withCategories.excludedCategories ?? [];
+      if (excluded.length === 0) return out;
+      const excludedSet = new Set(excluded.map((s) => s.toLowerCase()));
+      return out.filter((m) => {
+        if (!m.categories || m.categories.length === 0) return true;
+        return !m.categories.some((c) => excludedSet.has(c.toLowerCase()));
       });
     }),
   );
 
+  // Dédup par id+start : un même événement peut apparaître dans
+  // plusieurs calendriers (ex. organisateur + invité partagé) — le couple
+  // (id, start) suffit car Graph/Google renvoient des IDs uniques par
+  // calendrier mais identiques entre vues. La première occurrence gagne.
   const meetings: Meeting[] = [];
+  const seen = new Set<string>();
   for (const r of results) {
-    if (r.status === 'fulfilled') meetings.push(...r.value);
-    else console.warn('[meetings] aggregate partial failure:', r.reason);
+    if (r.status !== 'fulfilled') {
+      console.warn('[meetings] aggregate partial failure:', r.reason);
+      continue;
+    }
+    for (const m of r.value) {
+      const key = `${m.id}|${m.start}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      meetings.push(m);
+    }
   }
   meetings.sort(
     (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
@@ -276,6 +486,105 @@ async function refresh(): Promise<Meeting[]> {
   return next;
 }
 
+/* ───────────── Gestion des calendriers ───────────── */
+
+/**
+ * Force un refetch des calendriers d'un compte et retourne la liste à
+ * jour. Utilisé par l'IPC `meetings:listCalendars` (clic Rafraîchir
+ * dans Settings, ou ouverture de la section).
+ */
+async function listCalendars(
+  accountId: string,
+): Promise<CalendarInfo[] | null> {
+  const acc = getAccounts().find((a) => a.id === accountId);
+  if (!acc) return null;
+  const ready = await ensureAccessToken(acc);
+  if (!ready) return null;
+  const updated = await ensureCalendars(ready.account, ready.accessToken, true);
+  return updated.calendars ?? null;
+}
+
+/**
+ * Force un refetch des catégories Outlook d'un compte et retourne la
+ * liste à jour. Retourne `null` pour un compte non-Outlook (Google n'a
+ * pas d'équivalent), ou en cas d'erreur réseau.
+ */
+async function listCategories(
+  accountId: string,
+): Promise<OutlookCategory[] | null> {
+  const acc = getAccounts().find((a) => a.id === accountId);
+  if (!acc) return null;
+  const provider = PROVIDERS[acc.provider];
+  if (!provider.listCategories) return null;
+  const ready = await ensureAccessToken(acc);
+  if (!ready) return null;
+  const updated = await ensureCategories(
+    ready.account,
+    ready.accessToken,
+    true,
+  );
+  return updated.categories ?? null;
+}
+
+/**
+ * Met à jour la liste noire des catégories Outlook d'un compte. `null`
+ * = reset (plus aucune exclusion). Refresh immédiat pour répercuter
+ * sans attendre le tick.
+ */
+async function setExcludedCategories(
+  accountId: string,
+  names: string[] | null,
+): Promise<{ ok: boolean }> {
+  const accounts = getAccounts();
+  const idx = accounts.findIndex((a) => a.id === accountId);
+  if (idx === -1) return { ok: false };
+  const cleaned =
+    names === null
+      ? undefined
+      : Array.from(new Set(names))
+          .filter((s) => typeof s === 'string' && s.trim().length > 0);
+  const updated: CalendarAccount = {
+    ...accounts[idx],
+    excludedCategories: cleaned,
+  };
+  const next = accounts.slice();
+  next[idx] = updated;
+  setAccounts(next);
+  void refresh();
+  return { ok: true };
+}
+
+/**
+ * Met à jour la liste blanche des calendriers d'un compte. Si `ids` est
+ * null, on remet le champ à `undefined` (fallback "tous les calendriers
+ * connus"). Déclenche un refresh immédiat pour que l'utilisateur voie
+ * la nouvelle liste de meetings sans attendre le prochain tick.
+ */
+async function setSelectedCalendars(
+  accountId: string,
+  ids: string[] | null,
+): Promise<{ ok: boolean }> {
+  const accounts = getAccounts();
+  const idx = accounts.findIndex((a) => a.id === accountId);
+  if (idx === -1) return { ok: false };
+  // Dédup et préserve l'ordre. Pas de filtrage par calendrier connu ici :
+  // le caller envoie ce qu'il veut, le filtrage final est fait dans
+  // `resolveCalendarIds` au moment de la requête.
+  const cleaned =
+    ids === null
+      ? undefined
+      : Array.from(new Set(ids)).filter((s) => typeof s === 'string' && s);
+  const updated: CalendarAccount = {
+    ...accounts[idx],
+    selectedCalendarIds: cleaned,
+  };
+  const next = accounts.slice();
+  next[idx] = updated;
+  setAccounts(next);
+  void refresh();
+  return { ok: true };
+}
+
 /* ───────────── Bootstrap IPC + polling ───────────── */
 
 export function registerMeetingsIpc(): void {
@@ -291,6 +600,22 @@ export function registerMeetingsIpc(): void {
     outlook: hasDefaultCredentials('outlook'),
     google: hasDefaultCredentials('google'),
   }));
+  ipcMain.handle(IpcChannel.MeetingsListCalendars, (_e, accountId: string) =>
+    listCalendars(accountId),
+  );
+  ipcMain.handle(
+    IpcChannel.MeetingsSetSelectedCalendars,
+    (_e, accountId: string, ids: string[] | null) =>
+      setSelectedCalendars(accountId, ids),
+  );
+  ipcMain.handle(IpcChannel.MeetingsListCategories, (_e, accountId: string) =>
+    listCategories(accountId),
+  );
+  ipcMain.handle(
+    IpcChannel.MeetingsSetExcludedCategories,
+    (_e, accountId: string, names: string[] | null) =>
+      setExcludedCategories(accountId, names),
+  );
 }
 
 export function startMeetingsPolling(): void {

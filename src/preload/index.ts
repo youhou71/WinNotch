@@ -14,7 +14,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   IpcChannel,
   type AudioState,
+  type CalendarInfo,
   type CalendarProviderId,
+  type OutlookCategory,
   type ClaudeSession,
   type ClipboardState,
   type DashTile,
@@ -238,6 +240,28 @@ const api: NotchApi = {
     list: () => ipcRenderer.invoke(IpcChannel.MeetingsList),
     refresh: () => ipcRenderer.invoke(IpcChannel.MeetingsRefresh),
     hasDefaults: () => ipcRenderer.invoke(IpcChannel.MeetingsHasDefaults),
+    listCalendars: (accountId: string) =>
+      ipcRenderer.invoke(
+        IpcChannel.MeetingsListCalendars,
+        accountId,
+      ) as Promise<CalendarInfo[] | null>,
+    setSelectedCalendars: (accountId: string, ids: string[] | null) =>
+      ipcRenderer.invoke(
+        IpcChannel.MeetingsSetSelectedCalendars,
+        accountId,
+        ids,
+      ) as Promise<{ ok: boolean }>,
+    listCategories: (accountId: string) =>
+      ipcRenderer.invoke(
+        IpcChannel.MeetingsListCategories,
+        accountId,
+      ) as Promise<OutlookCategory[] | null>,
+    setExcludedCategories: (accountId: string, names: string[] | null) =>
+      ipcRenderer.invoke(
+        IpcChannel.MeetingsSetExcludedCategories,
+        accountId,
+        names,
+      ) as Promise<{ ok: boolean }>,
     onChange: (cb: (meetings: Meeting[]) => void) => {
       const handler = (_: unknown, meetings: Meeting[]) => cb(meetings);
       ipcRenderer.on(IpcChannel.MeetingsChange, handler);

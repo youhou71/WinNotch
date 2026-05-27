@@ -496,3 +496,54 @@
   min-width: 38px;
   text-align: right;
 }
+
+/* ───────────── Meetings — Section calendriers dépliable ───────────── */
+
+/* Wrapper de la row "compte connecté" + son panneau de calendriers : on
+ * groupe les deux pour qu'ils partagent le même séparateur visuel et
+ * pour aligner le panneau avec la row au-dessus. */
+.meetings-account-block + .meetings-account-block {
+  border-top: 1px solid var(--border-1);
+}
+
+.meetings-account-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* Panneau dépliable listant les calendriers — légèrement renfoncé pour
+ * marquer l'imbrication, fond plus sombre que la row parente. */
+.meetings-calendars {
+  padding: 4px 8px 8px 38px;
+  background: var(--surface-0);
+  border-top: 1px solid var(--border-1);
+}
+
+/* Les rows à l'intérieur héritent de .settings-row → on neutralise
+ * leur fond pour ne pas accumuler les paliers de transparence. */
+.meetings-calendars .settings-row {
+  background: transparent;
+}
+
+.meetings-calendars-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 6px;
+}
+
+/* Petit titre interne au panneau dépliable — sépare la sous-section
+ * "Calendriers à inclure" de la sous-section "Catégories à masquer"
+ * (Outlook). Reprend les tokens visuels d'une section-title compactés. */
+.meetings-subsection-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--txt-dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 8px 0 4px;
+}
+
+.meetings-subsection-title:first-child {
+  padding-top: 4px;
+}

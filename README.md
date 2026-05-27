@@ -25,6 +25,10 @@ Chip avec pochette + titre tronqué dans le notch rétracté, card étendue avec
 ### Meetings
 Connexion **Outlook** (Microsoft Graph) et **Google Calendar** via OAuth. Chip avec le prochain rendez-vous, card avec la liste agrégée. Tokens chiffrés localement via DPAPI.
 
+Pour chaque compte, l'utilisateur peut choisir précisément les calendriers à inclure (calendrier personnel, calendriers partagés, anniversaires…). Section dépliable « Filtres » sous chaque compte dans Settings → Meetings : toutes les cases sont cochées par défaut au premier connect, décocher exclut le calendrier de la liste des meetings affichés. Les nouveaux calendriers ajoutés côté provider après le premier paramétrage n'apparaissent **pas** automatiquement — cliquer sur « Rafraîchir » pour les voir.
+
+Pour les comptes **Outlook**, le panneau permet aussi de masquer certaines **catégories de couleur** (liste noire). Pratique pour filtrer un tag « Perso » ajouté à des events dans le calendrier pro. Les events sans catégorie sont toujours affichés.
+
 ### Claude Code
 Détecte automatiquement les sessions Claude Code en cours sur la machine (sans configuration) via le file watcher sur `~/.claude/projects/`. Indicateurs visuels d'activité, toast à la fin d'une session, et badge "?" jaune quand Claude attend une réponse utilisateur.
 

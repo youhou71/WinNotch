@@ -17,6 +17,7 @@
  * Le clientSecret est obligatoire même pour un desktop client.
  */
 import type {
+  CalendarInfo,
   Meeting,
   MeetingAttendee,
   OAuthClientCredentials,
@@ -131,13 +132,49 @@ export const googleProvider: CalendarProvider = {
     );
   },
 
-  async listUpcomingMeetings({ account, accessToken, windowHours }) {
+  async listCalendars(accessToken: string): Promise<CalendarInfo[]> {
+    // `/users/me/calendarList` retourne tous les calendriers abonnés
+    // (perso + partagés). On filtre ceux dont `selected` est false et
+    // dont `hidden` est true côté Google pour ne pas embarquer les
+    // calendriers explicitement masqués dans l'UI Google Calendar —
+    // c'est rare mais ça évite du bruit pour l'utilisateur.
+    const res = await fetch(
+      'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Google calendarList failed (${res.status}): ${txt}`);
+    }
+    const json = (await res.json()) as {
+      items?: Array<{
+        id: string;
+        summary?: string;
+        summaryOverride?: string;
+        primary?: boolean;
+        hidden?: boolean;
+        backgroundColor?: string;
+      }>;
+    };
+    return (json.items ?? [])
+      .filter((c) => !c.hidden)
+      .map<CalendarInfo>((c) => ({
+        id: c.id,
+        // summaryOverride est le nom personnalisé par l'utilisateur dans
+        // Google Calendar — privilégier celui-là quand il existe.
+        name: c.summaryOverride ?? c.summary ?? c.id,
+        color: c.backgroundColor,
+        isPrimary: c.primary === true,
+      }));
+  },
+
+  async listUpcomingMeetings({ account, accessToken, windowHours, calendarId }) {
     const now = new Date();
     const end = new Date(now.getTime() + windowHours * 3600 * 1000);
     // singleEvents=true étale les récurrents en occurrences individuelles.
     // orderBy=startTime n'est valide que si singleEvents=true.
     const url =
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events` +
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events` +
       `?singleEvents=true` +
       `&orderBy=startTime` +
       `&timeMin=${encodeURIComponent(now.toISOString())}` +

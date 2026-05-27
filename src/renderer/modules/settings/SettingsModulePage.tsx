@@ -18,9 +18,12 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type {
+  CalendarAccount,
+  CalendarInfo,
   CalendarProviderId,
   ModuleId,
   OAuthClientCredentials,
+  OutlookCategory,
 } from '../../../shared/types';
 import { useSettingsContext } from './SettingsContext';
 import { useMeetingsContext } from '../meetings/MeetingsContext';
@@ -222,25 +225,10 @@ function MeetingsSettings() {
           </div>
         ) : (
           cfg.accounts.map((acc) => (
-            <SettingsRow
+            <AccountWithCalendars
               key={acc.id}
-              icon={
-                acc.provider === 'outlook'
-                  ? 'fa-brands fa-microsoft'
-                  : 'fa-brands fa-google'
-              }
-              iconColor={acc.color}
-              label={acc.email}
-              description={acc.provider === 'outlook' ? 'Outlook' : 'Google'}
-              right={
-                <button
-                  type="button"
-                  className="settings-link-btn"
-                  onClick={() => void disconnect(acc.id)}
-                >
-                  Déconnecter
-                </button>
-              }
+              account={acc}
+              onDisconnect={() => void disconnect(acc.id)}
             />
           ))
         )}
@@ -461,6 +449,280 @@ function ClientCredentialsSection({
         </div>
       </div>
     </SettingsSection>
+  );
+}
+
+/**
+ * Mapping approximatif des presets Outlook (`preset0`…`preset24`) vers
+ * un hex pour afficher une pastille de couleur cohérente. On ne cherche
+ * pas la fidélité pixel-perfect — juste une teinte plausible pour que
+ * l'utilisateur reconnaisse ses catégories.
+ */
+const OUTLOOK_PRESET_HEX: Record<string, string> = {
+  preset0: '#e74c3c', // rouge
+  preset1: '#e67e22', // orange
+  preset2: '#d4a373', // pêche
+  preset3: '#f1c40f', // jaune
+  preset4: '#2ecc71', // vert
+  preset5: '#16a085', // bleu sarcelle
+  preset6: '#7f8c8d', // olive
+  preset7: '#3498db', // bleu
+  preset8: '#9b59b6', // violet
+  preset9: '#c0392b', // marron
+  preset10: '#34495e', // acier
+  preset11: '#2c3e50', // acier foncé
+  preset12: '#95a5a6', // gris
+  preset13: '#7f8c8d', // gris foncé
+  preset14: '#1c1c1c', // noir
+  preset15: '#922b21',
+  preset16: '#b9770e',
+  preset17: '#a04000',
+  preset18: '#b7950b',
+  preset19: '#196f3d',
+  preset20: '#0e6655',
+  preset21: '#7d6608',
+  preset22: '#1a5276',
+  preset23: '#6c3483',
+  preset24: '#7b241c',
+};
+const DEFAULT_CATEGORY_HEX = '#94a3b8';
+
+/**
+ * Ligne de compte Meetings avec un panneau dépliable listant les
+ * calendriers du compte. L'utilisateur peut cocher / décocher chaque
+ * calendrier ; seuls les cochés sont agrégés dans les meetings affichés.
+ *
+ * Pour les comptes **Outlook**, une seconde sous-section permet aussi
+ * d'exclure certaines catégories de couleur Outlook (liste noire) — les
+ * events sans catégorie passent toujours.
+ *
+ * Lecture des données : on s'appuie d'abord sur le cache local
+ * (`account.calendars` / `account.categories`, peuplés par le main au
+ * prochain tick d'agrégation). Au premier déploiement, on appelle aussi
+ * `listCalendars` + `listCategories` pour avoir un fetch frais — utile
+ * quand l'utilisateur vient de connecter un compte et ouvre la section
+ * avant qu'un tick ne soit passé.
+ */
+function AccountWithCalendars({
+  account,
+  onDisconnect,
+}: {
+  account: CalendarAccount;
+  onDisconnect: () => void;
+}) {
+  const supportsCategories = account.provider === 'outlook';
+
+  const [expanded, setExpanded] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  // Copies locales pour ne pas blinker en attendant que le store soit
+  // re-broadcast après un setSelectedCalendars / setExcludedCategories.
+  const [localCalendars, setLocalCalendars] = useState<CalendarInfo[] | null>(
+    account.calendars ?? null,
+  );
+  const [localCategories, setLocalCategories] = useState<
+    OutlookCategory[] | null
+  >(account.categories ?? null);
+  useEffect(() => {
+    if (account.calendars) setLocalCalendars(account.calendars);
+  }, [account.calendars]);
+  useEffect(() => {
+    if (account.categories) setLocalCategories(account.categories);
+  }, [account.categories]);
+
+  // Au premier déploiement seulement (et si pas encore de cache), tirer
+  // un fetch frais. Sinon on attend le clic "Rafraîchir" de l'utilisateur.
+  const firstExpansion = useRef(true);
+  useEffect(() => {
+    if (!expanded) return;
+    if (!firstExpansion.current) return;
+    firstExpansion.current = false;
+    const needCalendars =
+      !account.calendars || account.calendars.length === 0;
+    const needCategories =
+      supportsCategories &&
+      (!account.categories || account.categories.length === 0);
+    if (!needCalendars && !needCategories) return;
+    setRefreshing(true);
+    const calsP = needCalendars
+      ? window.notch.meetings.listCalendars(account.id)
+      : Promise.resolve(null);
+    const catsP = needCategories
+      ? window.notch.meetings.listCategories(account.id)
+      : Promise.resolve(null);
+    Promise.all([calsP, catsP]).then(([cals, cats]) => {
+      if (cals) setLocalCalendars(cals);
+      if (cats) setLocalCategories(cats);
+      setRefreshing(false);
+    });
+  }, [
+    expanded,
+    account.id,
+    account.calendars,
+    account.categories,
+    supportsCategories,
+  ]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const [cals, cats] = await Promise.all([
+        window.notch.meetings.listCalendars(account.id),
+        supportsCategories
+          ? window.notch.meetings.listCategories(account.id)
+          : Promise.resolve(null),
+      ]);
+      if (cals) setLocalCalendars(cals);
+      if (cats) setLocalCategories(cats);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Sémantique calendrier : `selectedCalendarIds === undefined` → tout coché.
+  const isCalChecked = (calId: string): boolean => {
+    if (!account.selectedCalendarIds) return true;
+    return account.selectedCalendarIds.includes(calId);
+  };
+
+  const toggleCalendar = async (calId: string) => {
+    const current = account.selectedCalendarIds ?? (localCalendars ?? []).map((c) => c.id);
+    const next = current.includes(calId)
+      ? current.filter((id) => id !== calId)
+      : [...current, calId];
+    await window.notch.meetings.setSelectedCalendars(account.id, next);
+  };
+
+  // Sémantique catégorie : valeur du toggle = "masquée" (présente dans
+  // excludedCategories). ON = la catégorie est exclue.
+  const isCatExcluded = (name: string): boolean => {
+    return (account.excludedCategories ?? []).includes(name);
+  };
+
+  const toggleCategory = async (name: string) => {
+    const current = account.excludedCategories ?? [];
+    const next = current.includes(name)
+      ? current.filter((n) => n !== name)
+      : [...current, name];
+    await window.notch.meetings.setExcludedCategories(account.id, next);
+  };
+
+  return (
+    <div className="meetings-account-block">
+      <SettingsRow
+        icon={
+          account.provider === 'outlook'
+            ? 'fa-brands fa-microsoft'
+            : 'fa-brands fa-google'
+        }
+        iconColor={account.color}
+        label={account.email}
+        description={account.provider === 'outlook' ? 'Outlook' : 'Google'}
+        right={
+          <div className="meetings-account-actions">
+            <button
+              type="button"
+              className="settings-link-btn"
+              onClick={() => setExpanded((e) => !e)}
+              aria-expanded={expanded}
+              aria-label={expanded ? 'Masquer le panneau' : 'Afficher le panneau'}
+            >
+              <i
+                className={
+                  'fa-solid ' + (expanded ? 'fa-chevron-up' : 'fa-chevron-down')
+                }
+                style={{ marginRight: 4 }}
+              />
+              {supportsCategories ? 'Filtres' : 'Calendriers'}
+            </button>
+            <button
+              type="button"
+              className="settings-link-btn"
+              onClick={onDisconnect}
+            >
+              Déconnecter
+            </button>
+          </div>
+        }
+      />
+      {expanded && (
+        <div className="meetings-calendars">
+          <div className="meetings-subsection-title">Calendriers à inclure</div>
+          {refreshing && (!localCalendars || localCalendars.length === 0) ? (
+            <div className="settings-empty">Chargement des calendriers…</div>
+          ) : !localCalendars || localCalendars.length === 0 ? (
+            <div className="settings-empty">
+              Impossible de récupérer la liste des calendriers. Vérifie que
+              le compte est toujours autorisé puis clique sur Rafraîchir.
+            </div>
+          ) : (
+            localCalendars.map((cal) => (
+              <SettingsToggleRow
+                key={cal.id}
+                icon={cal.isPrimary ? 'fa-solid fa-star' : 'fa-regular fa-calendar'}
+                iconColor={cal.color ?? '#60a5fa'}
+                label={cal.name}
+                description={cal.isPrimary ? 'Calendrier principal' : undefined}
+                value={isCalChecked(cal.id)}
+                onChange={() => void toggleCalendar(cal.id)}
+              />
+            ))
+          )}
+
+          {supportsCategories && (
+            <>
+              <div className="meetings-subsection-title">
+                Catégories à masquer
+              </div>
+              {refreshing && (!localCategories || localCategories.length === 0) ? (
+                <div className="settings-empty">Chargement des catégories…</div>
+              ) : !localCategories || localCategories.length === 0 ? (
+                <div className="settings-empty">
+                  Aucune catégorie définie sur ce compte Outlook. Crée-en
+                  depuis Outlook (clic droit sur un event → Catégoriser).
+                </div>
+              ) : (
+                localCategories.map((cat) => (
+                  <SettingsToggleRow
+                    key={cat.name}
+                    icon="fa-solid fa-tag"
+                    iconColor={
+                      cat.preset
+                        ? OUTLOOK_PRESET_HEX[cat.preset] ?? DEFAULT_CATEGORY_HEX
+                        : DEFAULT_CATEGORY_HEX
+                    }
+                    label={cat.name}
+                    description={
+                      isCatExcluded(cat.name)
+                        ? 'Events masqués dans WinNotch'
+                        : undefined
+                    }
+                    value={isCatExcluded(cat.name)}
+                    onChange={() => void toggleCategory(cat.name)}
+                  />
+                ))
+              )}
+            </>
+          )}
+
+          <div className="meetings-calendars-footer">
+            <button
+              type="button"
+              className="settings-link-btn"
+              disabled={refreshing}
+              onClick={() => void handleRefresh()}
+            >
+              <i
+                className={
+                  'fa-solid fa-arrows-rotate' + (refreshing ? ' fa-spin' : '')
+                }
+                style={{ marginRight: 4 }}
+              />
+              {refreshing ? 'Actualisation…' : 'Rafraîchir la liste'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

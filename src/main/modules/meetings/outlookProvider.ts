@@ -15,9 +15,11 @@
  * tenant ID dans `OAuthClientCredentials.tenantId`.
  */
 import type {
+  CalendarInfo,
   Meeting,
   MeetingAttendee,
   OAuthClientCredentials,
+  OutlookCategory,
 } from '../../../shared/types';
 import { startAuthFlow, refreshAccessToken, type OAuthTokens } from './oauth';
 import type { CalendarProvider } from './calendarProvider';
@@ -54,6 +56,8 @@ interface GraphEvent {
   attendees?: Array<{ emailAddress?: GraphEmailAddress }>;
   isCancelled?: boolean;
   webLink?: string;
+  /** Catégories de couleur (noms) attachées par l'utilisateur. */
+  categories?: string[];
 }
 
 /**
@@ -173,16 +177,47 @@ export const outlookProvider: CalendarProvider = {
     return fetchSelfPhotoOutlook(accessToken);
   },
 
-  async listUpcomingMeetings({ account, accessToken, windowHours }) {
+  async listCalendars(accessToken: string): Promise<CalendarInfo[]> {
+    // `/me/calendars` retourne le calendrier personnel ET les calendriers
+    // partagés / d'équipe ajoutés par l'utilisateur. Pas de pagination
+    // configurable (top n'est pas garanti par Graph pour cet endpoint) —
+    // on prend tout d'un coup, en pratique on a < 50 calendriers.
+    const res = await fetch('https://graph.microsoft.com/v1.0/me/calendars', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Graph /me/calendars failed (${res.status}): ${txt}`);
+    }
+    const json = (await res.json()) as {
+      value: Array<{
+        id: string;
+        name?: string;
+        isDefaultCalendar?: boolean;
+        hexColor?: string;
+      }>;
+    };
+    return json.value.map<CalendarInfo>((c) => ({
+      id: c.id,
+      name: c.name ?? 'Calendrier',
+      // Outlook expose `hexColor` quand l'utilisateur a personnalisé la
+      // couleur ; sinon une string vide → on filtre.
+      color: c.hexColor && c.hexColor.length > 0 ? c.hexColor : undefined,
+      isPrimary: c.isDefaultCalendar === true,
+    }));
+  },
+
+  async listUpcomingMeetings({ account, accessToken, windowHours, calendarId }) {
     const now = new Date();
     const end = new Date(now.getTime() + windowHours * 3600 * 1000);
-    // `/me/calendarView` étale les événements récurrents en occurrences
-    // individuelles — c'est ce qu'on veut pour la vue "prochains
-    // rendez-vous". Il faut le header `Prefer: outlook.timezone="UTC"`
-    // sinon les heures sont retournées dans la TZ utilisateur sans info
-    // claire ; ici on demande UTC et on convertit côté UI.
+    // `/me/calendars/{id}/calendarView` étale les événements récurrents
+    // en occurrences individuelles — c'est ce qu'on veut pour la vue
+    // "prochains rendez-vous". Il faut le header `Prefer:
+    // outlook.timezone="UTC"` sinon les heures sont retournées dans la
+    // TZ utilisateur sans info claire ; ici on demande UTC et on
+    // convertit côté UI.
     const url =
-      `https://graph.microsoft.com/v1.0/me/calendarView` +
+      `https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(calendarId)}/calendarView` +
       `?startDateTime=${now.toISOString()}` +
       `&endDateTime=${end.toISOString()}` +
       `&$orderby=start/dateTime` +
@@ -227,7 +262,34 @@ export const outlookProvider: CalendarProvider = {
           ...timing,
           attendees: mapAttendees(e, account.email, account.selfPhotoDataUrl),
           webLink: e.webLink,
+          categories: e.categories,
         };
       });
+  },
+
+  async listCategories(accessToken: string): Promise<OutlookCategory[]> {
+    // `/me/outlook/masterCategories` retourne les catégories définies
+    // par l'utilisateur côté Outlook (nom + preset de couleur). C'est
+    // un endpoint Graph dédié — il n'y a pas pagination significative
+    // (utilisateurs ont typiquement <30 catégories).
+    const res = await fetch(
+      'https://graph.microsoft.com/v1.0/me/outlook/masterCategories',
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Graph masterCategories failed (${res.status}): ${txt}`);
+    }
+    const json = (await res.json()) as {
+      value: Array<{ id: string; displayName?: string; color?: string }>;
+    };
+    return json.value
+      .filter((c) => !!c.displayName)
+      .map<OutlookCategory>((c) => ({
+        name: c.displayName!,
+        // `color` est l'un de `preset0`…`preset24` ou `none`. On garde
+        // tel quel, l'UI mappe en hex via une table.
+        preset: c.color,
+      }));
   },
 };

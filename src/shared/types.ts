@@ -721,6 +721,49 @@ export interface UpdateState {
 export type CalendarProviderId = 'outlook' | 'google';
 
 /**
+ * Calendrier disponible sur un compte (Outlook ou Google). Représente
+ * un calendrier auquel l'utilisateur a accès — son calendrier perso,
+ * mais aussi les calendriers partagés / d'équipe.
+ *
+ * Sert à laisser l'utilisateur cocher uniquement ceux dont il veut voir
+ * les meetings dans WinNotch (ex. exclure le calendrier "Anniversaires"
+ * ou un calendrier d'équipe spammé de RDV qui ne le concernent pas).
+ */
+export interface CalendarInfo {
+  /** ID du calendrier côté provider (Graph: calendar.id, Google: calendarList.id). */
+  id: string;
+  /** Nom d'affichage. */
+  name: string;
+  /** Couleur hex éventuellement remontée par le provider (Google: backgroundColor). */
+  color?: string;
+  /** True si c'est le calendrier principal du compte. Toujours coché par défaut. */
+  isPrimary?: boolean;
+}
+
+/**
+ * Catégorie de couleur Outlook (lue depuis `/me/outlook/masterCategories`).
+ *
+ * Permet à l'utilisateur de masquer les meetings d'une catégorie donnée
+ * dans WinNotch — typiquement utile quand on tagge des events "Perso"
+ * dans son calendrier pro pour les exclure du résumé visuel.
+ *
+ * Spécifique Outlook : Google n'expose pas de catégories nommées
+ * équivalentes (juste 10 `colorId` non nommés), donc on n'embarque pas
+ * cette feature pour Google. Côté provider, l'interface
+ * `CalendarProvider.listCategories` est optionnelle.
+ */
+export interface OutlookCategory {
+  /** Nom de la catégorie. Sert d'identifiant (Outlook ne fournit pas d'ID stable). */
+  name: string;
+  /**
+   * Preset de couleur Outlook (`preset0` à `preset24`, ou `none`).
+   * Sert juste à afficher une pastille de couleur cohérente avec
+   * l'application Outlook. Mappé en hex par l'UI.
+   */
+  preset?: string;
+}
+
+/**
  * Compte calendrier connecté.
  *
  * Les `tokens` sont chiffrés via Electron `safeStorage` avant d'être
@@ -747,6 +790,52 @@ export interface CalendarAccount {
   selfPhotoDataUrl?: string;
   /** Timestamp Unix ms du dernier fetch réussi (ou tentative). Sert au TTL. */
   selfPhotoFetchedAt?: number;
+  /**
+   * Cache des calendriers disponibles sur le compte. Rafraîchi
+   * périodiquement (TTL côté `meetingsService`) ou à la demande via
+   * `meetings:listCalendars`. Vide tant qu'on n'a pas réussi à les fetch
+   * — dans ce cas on agrège quand même le calendrier "primary" pour ne
+   * pas se retrouver sans aucun meeting au premier connect.
+   */
+  calendars?: CalendarInfo[];
+  /** Timestamp Unix ms du dernier fetch de `calendars`. */
+  calendarsFetchedAt?: number;
+  /**
+   * Liste blanche des calendriers (IDs) à inclure dans l'agrégation.
+   *
+   *  - `undefined` : pas encore initialisé (ex. ancien compte avant
+   *    cette feature, ou nouveau compte avant le premier fetch des
+   *    calendriers) → fallback : on agrège tous les calendriers connus.
+   *    Cela garde la rétro-compat : les comptes existants continuent à
+   *    voir tous leurs meetings sans intervention.
+   *  - Tableau (même vide) : la sélection est explicite. Un calendrier
+   *    nouvellement apparu côté provider n'apparaît PAS automatiquement
+   *    — c'est la sémantique "inclusion" : seul ce qui est coché compte.
+   */
+  selectedCalendarIds?: string[];
+  /**
+   * Cache des catégories Outlook définies sur le compte. Outlook only —
+   * reste `undefined` pour les comptes Google. Rafraîchi à la même
+   * cadence que `calendars` (même TTL côté `meetingsService`).
+   */
+  categories?: OutlookCategory[];
+  /** Timestamp Unix ms du dernier fetch de `categories`. */
+  categoriesFetchedAt?: number;
+  /**
+   * Liste noire de **noms** de catégories Outlook à masquer après
+   * l'agrégation. Sémantique d'exclusion :
+   *
+   *  - `undefined` ou `[]` : aucune exclusion (comportement par défaut
+   *    rétro-compatible).
+   *  - `["Perso", "Sport"]` : tout event dont `categories` contient au
+   *    moins un de ces noms est masqué. Les events **sans** catégorie
+   *    passent toujours (choix explicite — voir doc utilisateur).
+   *
+   * Compare sur le nom car Outlook ne fournit pas d'ID stable pour les
+   * masterCategories ; renommer une catégorie côté Outlook = la sortir
+   * du filtre, c'est attendu.
+   */
+  excludedCategories?: string[];
 }
 
 /** Type de localisation/visio détecté à partir de la chaîne `location`. */
@@ -801,6 +890,12 @@ export interface Meeting {
    * n'est attachée.
    */
   webLink?: string;
+  /**
+   * Catégories Outlook attachées à l'event. Outlook only (Graph renvoie
+   * `categories: string[]` directement). Reste vide pour Google. Sert
+   * au filtre d'exclusion utilisateur (`CalendarAccount.excludedCategories`).
+   */
+  categories?: string[];
 }
 
 /**
@@ -1041,6 +1136,32 @@ export const IpcChannel = {
   MeetingsRefresh: 'meetings:refresh',
   /** Renderer → main (invoke) : indique si des credentials par défaut sont embarqués. */
   MeetingsHasDefaults: 'meetings:hasDefaults',
+  /**
+   * Renderer → main (invoke) : retourne les calendriers disponibles sur
+   * un compte. Force un refetch côté provider (skip cache) — utilisé
+   * quand l'utilisateur ouvre la section "Calendriers" dans Settings ou
+   * clique sur le bouton "Rafraîchir".
+   */
+  MeetingsListCalendars: 'meetings:listCalendars',
+  /**
+   * Renderer → main (invoke) : met à jour la liste blanche des calendriers
+   * sélectionnés pour un compte donné. Déclenche un refresh immédiat de
+   * l'agrégation pour que le changement soit visible sans attendre le
+   * prochain tick de polling.
+   */
+  MeetingsSetSelectedCalendars: 'meetings:setSelectedCalendars',
+  /**
+   * Renderer → main (invoke) : retourne les catégories Outlook
+   * disponibles sur un compte. Outlook only — retourne `null` pour un
+   * compte Google. Force un refetch côté provider.
+   */
+  MeetingsListCategories: 'meetings:listCategories',
+  /**
+   * Renderer → main (invoke) : met à jour la liste noire des catégories
+   * Outlook à masquer pour un compte. `null` côté names = reset (plus
+   * aucune exclusion). Déclenche un refresh immédiat.
+   */
+  MeetingsSetExcludedCategories: 'meetings:setExcludedCategories',
   /** Main → renderer : push de la nouvelle liste de meetings (polling 5 min). */
   MeetingsChange: 'meetings:change',
 
@@ -1297,6 +1418,40 @@ export interface NotchApi {
      * section "Saisir Client ID" quand les defaults sont en place.
      */
     hasDefaults: () => Promise<Record<CalendarProviderId, boolean>>;
+    /**
+     * Récupère la liste des calendriers disponibles pour un compte —
+     * force un refetch côté provider et persiste le résultat sur le
+     * `CalendarAccount.calendars`. Retourne `null` si le compte n'existe
+     * pas, si le refresh token est mort, ou si le provider renvoie une
+     * erreur.
+     */
+    listCalendars: (accountId: string) => Promise<CalendarInfo[] | null>;
+    /**
+     * Met à jour la liste blanche des calendriers à inclure dans
+     * l'agrégation pour un compte. `null` côté ids = reset (revient au
+     * fallback "tous les calendriers connus"). Déclenche un refresh
+     * immédiat des meetings.
+     */
+    setSelectedCalendars: (
+      accountId: string,
+      ids: string[] | null,
+    ) => Promise<{ ok: boolean }>;
+    /**
+     * Outlook uniquement. Retourne la liste des catégories de couleur
+     * définies par l'utilisateur sur son compte Outlook (lue depuis
+     * `/me/outlook/masterCategories`). `null` pour un compte Google
+     * ou en cas d'erreur réseau.
+     */
+    listCategories: (accountId: string) => Promise<OutlookCategory[] | null>;
+    /**
+     * Met à jour la liste noire des catégories Outlook à masquer pour
+     * un compte. `null` = reset (aucune exclusion). Déclenche un refresh
+     * immédiat.
+     */
+    setExcludedCategories: (
+      accountId: string,
+      names: string[] | null,
+    ) => Promise<{ ok: boolean }>;
     /** S'abonne au push de la liste de meetings (polling 5 min). */
     onChange: (cb: (meetings: Meeting[]) => void) => () => void;
   };
