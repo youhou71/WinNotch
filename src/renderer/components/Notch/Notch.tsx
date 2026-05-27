@@ -237,6 +237,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
     gitlab: 140,
     claude: 200,
     gitlocal: 122,
+    vpn: 122,
   };
   const hasMusicCard = settings.modules.music && !!music.title;
   const hasClaudeCard =

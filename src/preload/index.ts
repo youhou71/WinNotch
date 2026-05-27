@@ -32,6 +32,7 @@ import {
   type SearchResult,
   type Settings,
   type UpdateState,
+  type VpnState,
 } from '../shared/types';
 
 const api: NotchApi = {
@@ -229,6 +230,17 @@ const api: NotchApi = {
       ipcRenderer.on(IpcChannel.GitLocalChange, handler);
       return () => {
         ipcRenderer.off(IpcChannel.GitLocalChange, handler);
+      };
+    },
+  },
+  vpn: {
+    getState: () => ipcRenderer.invoke(IpcChannel.VpnGetState),
+    refresh: () => ipcRenderer.invoke(IpcChannel.VpnRefresh),
+    onChange: (cb: (state: VpnState) => void) => {
+      const handler = (_: unknown, state: VpnState) => cb(state);
+      ipcRenderer.on(IpcChannel.VpnChange, handler);
+      return () => {
+        ipcRenderer.off(IpcChannel.VpnChange, handler);
       };
     },
   },

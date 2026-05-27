@@ -94,6 +94,7 @@ export function SettingsModulePage({ moduleId, onBack }: Props) {
       {moduleId === 'claude' && <ClaudeSettings />}
       {moduleId === 'messages' && <MessagesSettings />}
       {moduleId === 'clipboard' && <ClipboardSettings />}
+      {moduleId === 'vpn' && <VpnSettings />}
     </>
   );
 }
@@ -1429,6 +1430,71 @@ function ClipboardSettings() {
             </button>
           }
         />
+      </SettingsSection>
+    </>
+  );
+}
+
+/* ───────────── VPN ───────────── */
+function VpnSettings() {
+  const { settings, patchModuleConfig } = useSettingsContext();
+  const cfg = settings.moduleConfig.vpn;
+
+  return (
+    <>
+      <SettingsSection title="Affichage">
+        <SettingsToggleRow
+          icon="fa-solid fa-minimize"
+          iconColor="#06b6d4"
+          label="Afficher la chip dans le notch rétracté"
+          description="Bouclier cyan quand une session VPN est active. Toujours visible, même en mode Ne pas Déranger (c'est un état système, pas une notification)."
+          value={cfg.collapsed}
+          onChange={(next) => void patchModuleConfig('vpn', { collapsed: next })}
+        />
+        <SettingsToggleRow
+          icon="fa-solid fa-eye"
+          iconColor="#06b6d4"
+          label="Afficher même quand déconnecté"
+          description="Garde la chip visible en gris quand aucune connexion n'est détectée. Pratique pour confirmer en permanence qu'aucun VPN n'est actif à ton insu."
+          value={cfg.showWhenDisconnected}
+          onChange={(next) =>
+            void patchModuleConfig('vpn', { showWhenDisconnected: next })
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Données">
+        <SettingsToggleRow
+          icon="fa-solid fa-globe"
+          iconColor="#06b6d4"
+          label="Résoudre le pays via ipapi.co"
+          description="Récupère le pays du serveur VPN à partir de son IP (lookup mis en cache 6 h, gratuit). Désactive pour rester strictement offline."
+          value={cfg.lookupCountry}
+          onChange={(next) =>
+            void patchModuleConfig('vpn', { lookupCountry: next })
+          }
+        />
+        <SettingsSliderRow
+          icon="fa-solid fa-clock-rotate-left"
+          iconColor="#06b6d4"
+          label="Fréquence de check"
+          description="Intervalle entre deux interrogations PowerShell. Plus c'est court, plus l'état affiché est frais — coût négligeable (~150 ms par tick)."
+          value={cfg.pollSec}
+          min={5}
+          max={60}
+          step={5}
+          formatValue={(v) => `${v} s`}
+          onChange={(v) => void patchModuleConfig('vpn', { pollSec: v })}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="À propos">
+        <div className="settings-empty">
+          Clients reconnus : <strong>ProtonVPN</strong>, <strong>NordVPN</strong>,{' '}
+          <strong>OpenVPN</strong>, <strong>WireGuard</strong>, et les VPN
+          configurés dans Windows (PPTP / L2TP / SSTP / IKEv2). Module
+          read-only : aucune action n'est exposée (pas de connect / disconnect).
+        </div>
       </SettingsSection>
     </>
   );

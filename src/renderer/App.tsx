@@ -39,6 +39,8 @@ import { GitLabProvider } from './modules/gitlab/GitLabContext';
 import { useGitLabReviewToasts } from './modules/gitlab/useGitLabReviewToasts';
 import { useGitLabIssueToasts } from './modules/gitlab/useGitLabIssueToasts';
 import { GitLocalProvider } from './modules/gitlocal/GitLocalContext';
+import { VpnProvider } from './modules/vpn/VpnContext';
+import { useVpnToasts } from './modules/vpn/useVpnToasts';
 import { UpdaterProvider } from './modules/updater/UpdaterContext';
 import { useUpdateToasts } from './modules/updater/useUpdateToasts';
 import {
@@ -99,6 +101,8 @@ function AppInner() {
   useGitLabIssueToasts();
   // Toasts aux transitions du flux d'update (available / downloaded / error).
   useUpdateToasts();
+  // Toasts à chaque connexion / déconnexion VPN détectée par le polling.
+  useVpnToasts();
   // Le raccourci global Ctrl+Shift+V incrémente `pendingFocusAt` côté
   // clipboard ; on force alors le passage en expanded pour que la page
   // (auto-ouverte par useClipboard) soit visible.
@@ -137,11 +141,13 @@ export function App() {
             <ClaudeProvider>
               <GitLabProvider>
                 <GitLocalProvider>
-                  <UpdaterProvider>
-                    <ClipboardProvider>
-                      <AppInner />
-                    </ClipboardProvider>
-                  </UpdaterProvider>
+                  <VpnProvider>
+                    <UpdaterProvider>
+                      <ClipboardProvider>
+                        <AppInner />
+                      </ClipboardProvider>
+                    </UpdaterProvider>
+                  </VpnProvider>
                 </GitLocalProvider>
               </GitLabProvider>
             </ClaudeProvider>

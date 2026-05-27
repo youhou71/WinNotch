@@ -59,6 +59,11 @@ Historique du presse-papier chiffré localement (DPAPI), avec détection automat
 
 Recherche, épinglage, masquage automatique des secrets détectés (tokens, passwords). Limite par défaut 50 entrées non-épinglées (configurable jusqu'à 200). Raccourci global `Ctrl + Shift + V` pour ouvrir directement la card avec focus sur la recherche.
 
+### VPN
+Détecte les sessions VPN actives sur la machine — **ProtonVPN**, **NordVPN**, **OpenVPN**, **WireGuard** et les VPN configurés dans Windows (PPTP / L2TP / SSTP / IKEv2). Chip bouclier cyan dans le notch rétracté quand une connexion est active (visible même en Ne pas Déranger — c'est un état système). Card compacte dans le dashboard avec le client + nom de connexion + pays (optionnel) + durée de session. Toast à chaque transition connexion / déconnexion.
+
+Read-only : aucune action exposée (pas de connect / disconnect). Le module observe l'état via `Get-NetAdapter` + `Get-VpnConnection` + scan de processus, sans toucher à la session. Résolution du pays best-effort via `ipapi.co` (cache 6 h, désactivable).
+
 ### Updater
 Mises à jour automatiques via GitHub Releases. Check au boot + toutes les heures. Notifications utilisateur à chaque étape (disponible → téléchargée → installée). Aucun téléchargement ni install sans confirmation explicite.
 

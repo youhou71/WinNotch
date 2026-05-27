@@ -21,6 +21,9 @@ import { GitLabChip } from '../../modules/gitlab/GitLabChip';
 import { useGitLabContext } from '../../modules/gitlab/GitLabContext';
 import { GitLocalChip } from '../../modules/gitlocal/GitLocalChip';
 import { useGitLocalContext } from '../../modules/gitlocal/GitLocalContext';
+import { VpnChip } from '../../modules/vpn/VpnChip';
+import { useVpnContext } from '../../modules/vpn/VpnContext';
+import { NotchTooltip } from '../Tooltip/NotchTooltip';
 import { ClipboardChip } from '../../modules/clipboard/ClipboardChip';
 import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
 import { useSettingsContext } from '../../modules/settings/SettingsContext';
@@ -31,6 +34,7 @@ export function CollapsedRow() {
   const { active: activeClaude } = useClaudeContext();
   const { state: gitlab } = useGitLabContext();
   const { state: gitlocal } = useGitLocalContext();
+  const { state: vpn } = useVpnContext();
   const { state: clipboard } = useClipboardContext();
   const { settings, toggleDnd } = useSettingsContext();
 
@@ -95,6 +99,17 @@ export function CollapsedRow() {
     clipboardCfg.collapsed &&
     clipboard.entries.length > 0;
 
+  // La chip VPN : module activé + autorisée en collapsed + (connexion
+  // active OU showWhenDisconnected). Pas masquée en DND — c'est un état
+  // système, pas une notification ; l'utilisateur veut savoir en
+  // permanence si son VPN tourne, même quand il ne veut plus être
+  // dérangé par des toasts.
+  const vpnCfg = settings.moduleConfig.vpn;
+  const vpnEnabled =
+    settings.modules.vpn &&
+    vpnCfg.collapsed &&
+    (vpn.connected || vpnCfg.showWhenDisconnected);
+
   return (
     <div
       className="collapsed-row"
@@ -106,17 +121,32 @@ export function CollapsedRow() {
       </div>
       <div className="cr-right">
         {settings.dnd ? (
-          <div
-            className="chip chip-dnd"
-            onClick={(e) => {
-              // stopPropagation : sinon le clic remonte au notch et
-              // déclencherait une bascule collapsed → expanded.
-              e.stopPropagation();
-              void toggleDnd();
-            }}
+          <NotchTooltip
+            content={
+              <div className="tt-body">
+                <div className="tt-head">
+                  <i className="fa-solid fa-moon" />
+                  <span>ne pas déranger</span>
+                </div>
+                <div className="tt-sub">
+                  Notifications et pills masquées. Cliquer pour désactiver,
+                  ou utilise Ctrl + Shift + D.
+                </div>
+              </div>
+            }
           >
-            <i className="fa-solid fa-moon" />
-          </div>
+            <div
+              className="chip chip-dnd"
+              onClick={(e) => {
+                // stopPropagation : sinon le clic remonte au notch et
+                // déclencherait une bascule collapsed → expanded.
+                e.stopPropagation();
+                void toggleDnd();
+              }}
+            >
+              <i className="fa-solid fa-moon" />
+            </div>
+          </NotchTooltip>
         ) : (
           <>
             {meetingEnabled && <MeetingChip />}
@@ -125,6 +155,10 @@ export function CollapsedRow() {
             {claudeEnabled && <ClaudeChip />}
           </>
         )}
+        {/* VPN reste visible même en DND : c'est un état système, pas une
+            notification — l'utilisateur veut savoir en permanence si son
+            VPN tourne, indépendamment du mode "ne pas déranger". */}
+        {vpnEnabled && <VpnChip />}
       </div>
     </div>
   );

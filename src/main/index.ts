@@ -39,6 +39,7 @@ import {
   registerGitLocalIpc,
   stopGitLocal,
 } from './modules/gitlocal/gitlocalService';
+import { registerVpnIpc, stopVpn } from './modules/vpn/vpnService';
 import {
   registerUpdaterIpc,
   stopUpdater,
@@ -87,6 +88,11 @@ app.whenReady().then(async () => {
       '[WinNotch] Module Git local désactivé (WINNOTCH_DISABLE_GITLOCAL=1)',
     );
   }
+  if (process.env.WINNOTCH_DISABLE_VPN !== '1') {
+    registerVpnIpc();
+  } else {
+    console.log('[WinNotch] Module VPN désactivé (WINNOTCH_DISABLE_VPN=1)');
+  }
   registerUpdaterIpc();
   registerAudioIpc();
   if (process.env.WINNOTCH_DISABLE_MUSIC !== '1') {
@@ -112,6 +118,7 @@ app.whenReady().then(async () => {
   //  - WINNOTCH_DISABLE_ALT_PEEK=1   : coupe le hook clavier global
   //  - WINNOTCH_DISABLE_MUSIC=1      : coupe le monitor SMTC + media keys
   //  - WINNOTCH_DISABLE_CLIPBOARD=1  : coupe le polling clipboard + IPC
+  //  - WINNOTCH_DISABLE_VPN=1        : coupe le polling PowerShell VPN
   if (process.env.WINNOTCH_DISABLE_AUDIO_POLL !== '1') {
     startAudioPolling();
   } else {
@@ -145,6 +152,7 @@ app.on('window-all-closed', () => {
   stopClaude();
   stopGitLab();
   stopGitLocal();
+  stopVpn();
   stopUpdater();
   stopFullscreenDetector();
   unregisterGlobalShortcuts();
@@ -164,6 +172,7 @@ app.on('before-quit', () => {
   stopClaude();
   stopGitLab();
   stopGitLocal();
+  stopVpn();
   stopUpdater();
   stopFullscreenDetector();
   unregisterGlobalShortcuts();

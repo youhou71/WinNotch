@@ -17,6 +17,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { useMusicContext } from './MusicContext';
+import { getMusicSourceMeta } from './musicSourceMeta';
 
 function formatElapsed(seconds: number): string {
   // Defense-in-depth : si seconds n'est pas un nombre fini, on retombe sur
@@ -83,6 +84,8 @@ export function MusicCard() {
   // pendant que `getState` est en vol.
   if (!state.title) return null;
 
+  const sourceMeta = state.source ? getMusicSourceMeta(state.source) : null;
+
   return (
     <div className="card card-music is-compact">
       <div className="mc-compact-cover">
@@ -104,6 +107,15 @@ export function MusicCard() {
               {state.artist}
               {state.album && ` · ${state.album}`}
             </div>
+            {sourceMeta && (
+              <div className="mc-source">
+                <i
+                  className={sourceMeta.icon}
+                  style={sourceMeta.color ? { color: sourceMeta.color } : undefined}
+                />
+                <span>{sourceMeta.label}</span>
+              </div>
+            )}
           </div>
           <div className="mc-controls">
             <button

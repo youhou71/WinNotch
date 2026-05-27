@@ -73,6 +73,14 @@ export const SETTINGS_MODULES: ModuleMeta[] = [
     description:
       'Historique chiffré, détection URL/JSON/couleur/image, Ctrl+Shift+V.',
   },
+  {
+    id: 'vpn',
+    label: 'VPN',
+    icon: 'fa-solid fa-shield-halved',
+    color: '#06b6d4',
+    description:
+      'État de connexion VPN (ProtonVPN, NordVPN, OpenVPN, WireGuard).',
+  },
 ];
 
 export const MODULE_META_BY_ID: Record<ModuleId, ModuleMeta> =

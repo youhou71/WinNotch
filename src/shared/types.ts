@@ -100,7 +100,8 @@ export type ModuleId =
   | 'claude'
   | 'tasks'
   | 'messages'
-  | 'clipboard';
+  | 'clipboard'
+  | 'vpn';
 
 /** Densité visuelle du dashboard étendu. */
 export type Density = 'dense' | 'normal' | 'airy';
@@ -117,7 +118,8 @@ export type DashTileId =
   | 'gitlab'
   | 'gitlocal'
   | 'claude'
-  | 'tasks';
+  | 'tasks'
+  | 'vpn';
 
 /**
  * Une tuile du dashboard. `cols` est la largeur en colonnes sur une
@@ -280,6 +282,25 @@ export interface ModuleConfig {
      */
     maskSensitive: boolean;
   };
+  vpn: {
+    /**
+     * Fréquence de polling en secondes. Minimum 5 s — un appel PowerShell
+     * coûte ~150 ms, on peut descendre bas sans saturer. Défaut 10 s.
+     */
+    pollSec: number;
+    /**
+     * Récupère le pays de l'IP du peer/serveur via `ipapi.co` (lookup
+     * caché 6 h par IP). Désactivable pour rester offline-only.
+     */
+    lookupCountry: boolean;
+    /**
+     * Affiche la chip même quand aucune connexion VPN n'est active (gris).
+     * Par défaut la chip disparaît quand déconnecté pour rester discrète.
+     */
+    showWhenDisconnected: boolean;
+    /** Afficher la chip dans le notch rétracté quand une connexion est active. */
+    collapsed: boolean;
+  };
 }
 
 /**
@@ -333,6 +354,7 @@ export const DEFAULT_SETTINGS: Settings = {
     tasks: true,
     messages: true,
     clipboard: true,
+    vpn: true,
   },
   moduleConfig: {
     music: {
@@ -387,6 +409,12 @@ export const DEFAULT_SETTINGS: Settings = {
       enableUnfurl: true,
       maskSensitive: true,
     },
+    vpn: {
+      pollSec: 10,
+      lookupCountry: true,
+      showWhenDisconnected: false,
+      collapsed: true,
+    },
   },
   // Layout par défaut — reproduit l'agencement historique :
   //   ┌── tasks (4) ─┬─── meetings (8) ───┐
@@ -400,7 +428,8 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: 'music', cols: 12 },
     { id: 'gitlab', cols: 6 },
     { id: 'claude', cols: 6 },
-    { id: 'gitlocal', cols: 12 },
+    { id: 'gitlocal', cols: 8 },
+    { id: 'vpn', cols: 4 },
   ],
 };
 
@@ -667,6 +696,77 @@ export interface GitLocalState {
   /**
    * Erreur globale du dernier scan (ex: `git` introuvable dans le PATH).
    * Les erreurs par repo restent dans `repos[].error`.
+   */
+  lastError: string | null;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  VPN
+ * ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * Client VPN identifié. `windows-native` couvre les connexions VPN
+ * configurées dans Windows (PPTP/L2TP/SSTP/IKEv2), `unknown` est utilisé
+ * quand on détecte une interface VPN active sans pouvoir l'attribuer à un
+ * client connu.
+ */
+export type VpnClient =
+  | 'protonvpn'
+  | 'nordvpn'
+  | 'openvpn'
+  | 'wireguard'
+  | 'windows-native'
+  | 'unknown';
+
+/**
+ * Une connexion VPN active détectée sur la machine. Plusieurs peuvent
+ * coexister (multi-tunnel WireGuard, OpenVPN + Proton, etc.).
+ *
+ * `connectionName` et `serverAddress` sont best-effort : Proton/Nord
+ * exposent rarement le serveur précis sans plugin propriétaire, alors que
+ * WireGuard, OpenVPN et le VPN Windows natif sont fiables.
+ *
+ * `connectedSince` est initialisé à `Date.now()` quand la connexion passe
+ * de `disconnected` à `connected`. Si WinNotch démarre alors qu'une
+ * connexion VPN est déjà active, le timestamp vaut l'heure du premier
+ * tick — l'UI affiche alors « connecté » sans durée pour ne pas mentir.
+ */
+export interface VpnConnection {
+  /** Client identifié via le nom de l'interface + scan de processus. */
+  client: VpnClient;
+  /** Nom Windows de l'adaptateur réseau (clé unique pour le dédup). */
+  interfaceName: string;
+  /** Nom logique de la connexion (config OpenVPN, tunnel WG, nom Windows VPN). */
+  connectionName?: string;
+  /** IP ou hostname de l'endpoint si exposé par le client. */
+  serverAddress?: string;
+  /** Pays résolu en async via `countryLookup` (cache 6 h). */
+  country?: string;
+  /** Unix ms du passage `disconnected → connected` (best-effort au boot). */
+  connectedSince: number;
+  /**
+   * True quand `connectedSince` correspond au démarrage de WinNotch et
+   * non à la connexion réelle (cas du VPN déjà actif au lancement de
+   * l'app). L'UI utilise ce flag pour masquer la durée et éviter une
+   * valeur trompeuse.
+   */
+  connectedSinceIsApprox: boolean;
+}
+
+/**
+ * Snapshot complet exposé au renderer via `vpn:getState` + push
+ * `vpn:change`.
+ */
+export interface VpnState {
+  /** True si au moins une connexion VPN active a été détectée. */
+  connected: boolean;
+  /** Connexions actives. Dédupliquées par `interfaceName`. */
+  connections: VpnConnection[];
+  /** Unix ms du dernier tick de polling terminé. 0 tant qu'aucun tick n'a fini. */
+  lastCheckAt: number;
+  /**
+   * Erreur globale du dernier tick (PowerShell introuvable, timeout, etc.).
+   * `null` quand le dernier tick s'est bien passé.
    */
   lastError: string | null;
 }
@@ -1250,6 +1350,16 @@ export const IpcChannel = {
    */
   ClipboardFocusCard: 'clipboard:focusCard',
 
+  /** Renderer → main (invoke) : retourne le VpnState courant. */
+  VpnGetState: 'vpn:getState',
+  /**
+   * Renderer → main (invoke) : force un check VPN immédiat (skip
+   * l'attente du tick de polling). Retourne le nouveau snapshot.
+   */
+  VpnRefresh: 'vpn:refresh',
+  /** Main → renderer : push d'un nouveau VpnState (polling ou refresh). */
+  VpnChange: 'vpn:change',
+
   /** Renderer → main (invoke) : retourne l'UpdateState courant. */
   UpdaterGetState: 'updater:getState',
   /** Renderer → main (invoke) : déclenche un check immédiat auprès du provider. */
@@ -1396,6 +1506,14 @@ export interface NotchApi {
     ) => Promise<{ ok: boolean; via?: 'sln' | 'vscode'; error?: string }>;
     /** S'abonne au push de GitLocalState (polling ou refresh). */
     onChange: (cb: (state: GitLocalState) => void) => () => void;
+  };
+  vpn: {
+    /** Snapshot complet de l'état VPN (connexions actives + erreurs). */
+    getState: () => Promise<VpnState>;
+    /** Force un check VPN immédiat (saute l'attente du prochain tick). */
+    refresh: () => Promise<VpnState>;
+    /** S'abonne au push de VpnState (polling ou refresh). */
+    onChange: (cb: (state: VpnState) => void) => () => void;
   };
   meetings: {
     /**

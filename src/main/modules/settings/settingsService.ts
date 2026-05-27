@@ -39,6 +39,7 @@ const VALID_DASH_TILE_IDS: DashTileId[] = [
   'gitlocal',
   'claude',
   'tasks',
+  'vpn',
 ];
 import { getNotchWindow } from '../../window/notchWindow';
 

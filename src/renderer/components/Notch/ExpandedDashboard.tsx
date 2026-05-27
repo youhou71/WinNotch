@@ -33,6 +33,7 @@ import { GitLabCard } from '../../modules/gitlab/GitLabCard';
 import { GitLabPanel } from '../../modules/gitlab/GitLabPanel';
 import { GitLocalCard } from '../../modules/gitlocal/GitLocalCard';
 import { GitLocalPanel } from '../../modules/gitlocal/GitLocalPanel';
+import { VpnCard } from '../../modules/vpn/VpnCard';
 import { ClipboardPage } from '../../modules/clipboard/ClipboardPage';
 import { ClipboardDetectionView } from '../../modules/clipboard/ClipboardDetectionView';
 import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
@@ -301,6 +302,7 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
                   {tile.id === 'gitlocal' && (
                     <GitLocalCard onOpen={() => setGitlocalPanelOpen(true)} />
                   )}
+                  {tile.id === 'vpn' && <VpnCard />}
                 </div>
               );
             })}

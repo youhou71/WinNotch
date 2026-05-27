@@ -7,12 +7,38 @@
  *  - un badge `+N` quand il y a N nouvelles entrées depuis le dernier
  *    `markSeen` (déclenché à l'ouverture de la card).
  *
- * Pas d'attribut `title` (cf. note dans MusicChip : tooltip natif Windows
- * s'afficherait sur le bureau sous le notch).
+ * Tooltip rich au survol : dernière entrée + total + non-vus.
  */
-import { useEffect, useState } from 'react';
-import type { ClipboardEntry } from '../../../shared/types';
+import { useEffect, useState, type CSSProperties } from 'react';
+import type { ClipboardEntry, ClipboardEntryType } from '../../../shared/types';
 import { useClipboardContext } from './ClipboardContext';
+import { NotchTooltip } from '../../components/Tooltip/NotchTooltip';
+
+const CLIPBOARD_ACCENT: CSSProperties = {
+  '--tt-accent': '#a78bfa',
+  '--tt-accent-fade': 'rgba(167, 139, 250, 0.18)',
+} as CSSProperties;
+
+const TYPE_META: Record<ClipboardEntryType, { icon: string; label: string }> = {
+  image: { icon: 'fa-regular fa-image', label: 'Image' },
+  jwt: { icon: 'fa-solid fa-key', label: 'JWT' },
+  url: { icon: 'fa-solid fa-globe', label: 'URL' },
+  json: { icon: 'fa-solid fa-brackets-curly', label: 'JSON' },
+  color: { icon: 'fa-solid fa-palette', label: 'Couleur' },
+  path: { icon: 'fa-regular fa-folder', label: 'Chemin' },
+  text: { icon: 'fa-solid fa-quote-right', label: 'Texte' },
+};
+
+function fmtRelative(copiedAt: number, now: number): string {
+  const s = Math.max(0, Math.round((now - copiedAt) / 1000));
+  if (s < 60) return 'à l’instant';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `il y a ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const d = Math.floor(h / 24);
+  return `il y a ${d} j`;
+}
 
 function ImageChipThumb({ entry }: { entry: ClipboardEntry }) {
   const [src, setSrc] = useState<string | null>(null);
@@ -61,7 +87,6 @@ function ChipPreview({ entry }: { entry: ClipboardEntry }) {
       <i className="fa-solid fa-globe cb-chip-icon" />
     );
   }
-  // Icône par type pour les autres
   const iconByType: Record<string, string> = {
     json: 'fa-solid fa-brackets-curly',
     jwt: 'fa-solid fa-key',
@@ -74,26 +99,72 @@ function ChipPreview({ entry }: { entry: ClipboardEntry }) {
 export function ClipboardChip() {
   const { state } = useClipboardContext();
   const last = state.entries[0];
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const handle = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(handle);
+  }, []);
 
   // Badge "non vu" : nombre d'items copiés après le dernier markSeen.
   const unseen = state.entries.filter((e) => e.copiedAt > state.lastSeenAt).length;
+  const pinned = state.entries.filter((e) => e.pinned).length;
 
-  if (!last) {
-    // Rien dans l'historique → on ne montre pas la chip (cohérent avec
-    // les autres modules qui se masquent quand ils n'ont rien à dire).
-    return null;
-  }
+  if (!last) return null;
+
+  const lastMeta = TYPE_META[last.type] ?? TYPE_META.text;
 
   return (
-    <div className="chip chip-clipboard">
-      <span className="cb-chip-preview">
-        <ChipPreview entry={last} />
-      </span>
-      {unseen > 0 && (
-        <span className="cb-chip-badge" aria-label={`${unseen} non vu`}>
-          +{unseen > 99 ? '99' : unseen}
+    <NotchTooltip
+      accentStyle={CLIPBOARD_ACCENT}
+      content={
+        <div className="tt-body">
+          <div className="tt-head">
+            <i className="fa-solid fa-clipboard" />
+            <span>presse-papier</span>
+            <span className="tt-head-count">
+              {state.entries.length} entrée{state.entries.length > 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="tt-row">
+            <div className="tt-row-head">
+              <span className="tt-meta-pill">
+                <i className={lastMeta.icon} />
+                {lastMeta.label}
+              </span>
+              <span className="tt-sub">{fmtRelative(last.copiedAt, now)}</span>
+            </div>
+            <span className="tt-title">{last.preview || '(vide)'}</span>
+          </div>
+          {(unseen > 0 || pinned > 0) && (
+            <div className="tt-meta">
+              {unseen > 0 && (
+                <span className="tt-meta-pill tt-meta-pill-warn">
+                  +{unseen} non vu{unseen > 1 ? 's' : ''}
+                </span>
+              )}
+              {pinned > 0 && (
+                <span className="tt-meta-pill tt-meta-pill-dim">
+                  <i className="fa-solid fa-thumbtack" />
+                  {pinned} épinglé{pinned > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          )}
+          <div className="tt-sub">Ctrl + Shift + V pour ouvrir l'historique.</div>
+        </div>
+      }
+    >
+      <div className="chip chip-clipboard">
+        <span className="cb-chip-preview">
+          <ChipPreview entry={last} />
         </span>
-      )}
-    </div>
+        {unseen > 0 && (
+          <span className="cb-chip-badge" aria-label={`${unseen} non vu`}>
+            +{unseen > 99 ? '99' : unseen}
+          </span>
+        )}
+      </div>
+    </NotchTooltip>
   );
 }

@@ -1,0 +1,197 @@
+/*
+ * tooltip.css — bulle tooltip rich réutilisable par tous les modules.
+ *
+ * Rendu via React portal dans `document.body`, hors du shell notch.
+ * `position: fixed` calculé en JS depuis le `getBoundingClientRect` de
+ * la chip, `translateX(-50%)` pour centrer horizontalement.
+ *
+ * Couleur signature par module : passer `--tt-accent: <color>` sur l'élément
+ * racine `.notch-tooltip` (via attribut style ou wrapper). Les classes
+ * `.tt-head` et `.tt-meta-pill` consomment cette variable — chaque module
+ * garde donc sa palette sans dupliquer les règles.
+ */
+.notch-tooltip {
+  --tt-accent: rgba(244, 244, 245, 0.7);
+  --tt-accent-fade: rgba(244, 244, 245, 0.12);
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 1000;
+  pointer-events: none;
+  background: rgba(20, 22, 28, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--txt);
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  max-width: 280px;
+  white-space: normal;
+  animation: notch-tooltip-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes notch-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ───────────── Blocs génériques ───────────── */
+.tt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.tt-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tt-accent);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.tt-head i {
+  font-size: 11px;
+}
+
+.tt-head-count {
+  margin-left: auto;
+  font-weight: 500;
+  color: var(--txt-dim);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.tt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tt-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tt-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+.tt-sub {
+  font-size: 11px;
+  color: var(--txt-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+.tt-empty {
+  font-size: 11px;
+  color: var(--txt-dim);
+  font-style: italic;
+}
+
+.tt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-top: 2px;
+}
+
+.tt-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--tt-accent-fade);
+  color: var(--tt-accent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-meta-pill i {
+  font-size: 9px;
+}
+
+.tt-meta-pill-dim {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--txt-dim);
+}
+
+.tt-meta-pill-warn {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+}
+
+.tt-meta-pill-err {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+}
+
+.tt-meta-pill-ok {
+  background: rgba(52, 211, 153, 0.18);
+  color: #34d399;
+}
+
+/* Séparateur fin (utilisé entre groupes d'infos dans gitlab) */
+.tt-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 2px 0;
+}
+
+/* Image inline (cover musique, miniature clipboard) */
+.tt-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tt-row-with-thumb {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tt-row-with-thumb .tt-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
