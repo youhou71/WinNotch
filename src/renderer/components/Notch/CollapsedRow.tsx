@@ -15,6 +15,7 @@ import { useMusicContext } from '../../modules/music/MusicContext';
 import { MusicChip } from '../../modules/music/MusicChip';
 import { MeetingChip } from '../../modules/meetings/MeetingChip';
 import { useMeetingsContext } from '../../modules/meetings/MeetingsContext';
+import { isToday } from '../../modules/meetings/helpers';
 import { ClaudeChip } from '../../modules/claude/ClaudeChip';
 import { useClaudeContext } from '../../modules/claude/ClaudeContext';
 import { GitLabChip } from '../../modules/gitlab/GitLabChip';
@@ -48,14 +49,17 @@ export function CollapsedRow() {
     musicCfg.collapsed &&
     (!musicCfg.hideWhenStopped || !!music.title);
 
-  // La chip Meeting : module activé + meeting upcoming/ongoing détecté.
+  // La chip Meeting : module activé + meeting upcoming/ongoing **du jour même**.
+  // Les RDV du lendemain et au-delà n'apparaissent pas dans le notch
+  // rétracté — ils restent visibles dans la card du dashboard étendu.
   // Masquée en DND (toutes les chips droite le sont sauf la lune).
   const meetingsCfg = settings.moduleConfig.meetings;
   const meetingEnabled =
     !settings.dnd &&
     settings.modules.meetings &&
     meetingsCfg.collapsed &&
-    !!nextMeeting;
+    !!nextMeeting &&
+    isToday(nextMeeting.start);
 
   // La chip Claude : module activé + au moins 1 session active.
   const claudeCfg = settings.moduleConfig.claude;

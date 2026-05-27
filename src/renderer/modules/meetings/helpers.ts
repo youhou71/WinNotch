@@ -33,6 +33,22 @@ export function hueFromString(s: string): number {
   return Math.abs(h) % 360;
 }
 
+/**
+ * True si le timestamp ISO correspond au jour calendaire local courant.
+ * Travaille en jours locaux pour qu'un RDV à 23h aujourd'hui reste
+ * "aujourd'hui" même quand on est à 22h59 (et inversement pour demain
+ * tôt le matin).
+ */
+export function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
 /** Formate une date ISO en `14:30` (heure locale). */
 export function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('fr-FR', {
