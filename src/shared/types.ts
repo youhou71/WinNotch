@@ -738,10 +738,35 @@ export interface CalendarAccount {
   encryptedTokens: string;
   /** Date d'expiration de l'access token (Unix ms). */
   expiresAt: number;
+  /**
+   * Photo de profil de l'utilisateur connecté (data URL). Récupérée
+   * via /me/photo (Graph) ou équivalent. Sert à enrichir les avatars
+   * du module Meetings quand cet utilisateur est listé comme participant
+   * d'un RDV.
+   */
+  selfPhotoDataUrl?: string;
+  /** Timestamp Unix ms du dernier fetch réussi (ou tentative). Sert au TTL. */
+  selfPhotoFetchedAt?: number;
 }
 
 /** Type de localisation/visio détecté à partir de la chaîne `location`. */
 export type MeetingKind = 'meet' | 'teams' | 'zoom' | 'room' | 'other';
+
+/** Participant d'un rendez-vous normalisé. */
+export interface MeetingAttendee {
+  /** Nom d'affichage tel que renvoyé par le provider. Peut être vide. */
+  name: string;
+  /** Adresse email. Peut être vide si le provider ne l'expose pas. */
+  email: string;
+  /** True si ce participant est l'organisateur du RDV. */
+  isOrganizer: boolean;
+  /**
+   * Data URL de la photo de profil. Présent uniquement quand cet
+   * attendee correspond à un CalendarAccount connecté (V1 : sa propre
+   * photo uniquement, pas celle des autres participants).
+   */
+  photoDataUrl?: string;
+}
 
 /** Rendez-vous normalisé renvoyé par n'importe quel provider. */
 export interface Meeting {
@@ -761,12 +786,21 @@ export interface Meeting {
   end: string;
   /** Durée en minutes calculée à partir de start/end. */
   durationMin: number;
-  /** Initiales 2 chars des N premiers participants pour l'affichage. */
-  attendees: string[];
+  /**
+   * Participants triés organisateur en premier. Les initiales pour
+   * l'affichage en avatar sont calculées côté UI à partir de `name`.
+   */
+  attendees: MeetingAttendee[];
   /** True si l'événement est en cours (start <= now < end). */
   ongoing: boolean;
   /** Minutes jusqu'au début (négatif si en cours ou passé). */
   minutesUntil: number;
+  /**
+   * URL pour ouvrir le RDV dans le calendrier web du provider (Outlook
+   * web / Google Calendar). Sert au bouton "Ouvrir" quand aucune visio
+   * n'est attachée.
+   */
+  webLink?: string;
 }
 
 /**

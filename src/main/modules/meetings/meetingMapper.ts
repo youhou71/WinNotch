@@ -17,20 +17,6 @@ export function detectKind(location: string): MeetingKind {
 }
 
 /**
- * Convertit "Jean-Pierre Dupont" → "JD". Si une seule chaîne,
- * prend les 2 premières lettres.
- */
-export function initials(name: string): string {
-  const parts = name
-    .replace(/[<>"'`]/g, '')
-    .split(/\s+/)
-    .filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-/**
  * Calcule la durée et l'état d'avancement (en cours, à venir, passé)
  * à partir des bornes ISO 8601 du provider.
  */

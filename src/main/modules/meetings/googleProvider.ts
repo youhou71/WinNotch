@@ -16,10 +16,14 @@
  * (sinon le refresh token n'est délivré qu'à la première connexion).
  * Le clientSecret est obligatoire même pour un desktop client.
  */
-import type { Meeting, OAuthClientCredentials } from '../../../shared/types';
+import type {
+  Meeting,
+  MeetingAttendee,
+  OAuthClientCredentials,
+} from '../../../shared/types';
 import { startAuthFlow, refreshAccessToken, type OAuthTokens } from './oauth';
 import type { CalendarProvider } from './calendarProvider';
-import { detectKind, deriveTiming, initials } from './meetingMapper';
+import { detectKind, deriveTiming } from './meetingMapper';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -36,7 +40,50 @@ interface GoogleEvent {
   location?: string;
   hangoutLink?: string;
   conferenceData?: { entryPoints?: Array<{ uri?: string }> };
-  attendees?: Array<{ email?: string; displayName?: string }>;
+  organizer?: { email?: string; displayName?: string };
+  attendees?: Array<{
+    email?: string;
+    displayName?: string;
+    organizer?: boolean;
+  }>;
+  htmlLink?: string;
+}
+
+/**
+ * Construit la liste des participants triée organisateur en premier.
+ * Google expose `organizer` à la fois au niveau event ET sur certains
+ * `attendees[].organizer = true`. On combine les deux sources et dédup
+ * sur l'email pour ne pas dupliquer l'organisateur.
+ */
+function mapAttendees(e: GoogleEvent): MeetingAttendee[] {
+  const organizerEmail = e.organizer?.email?.toLowerCase() ?? '';
+
+  // Filtrer les "resources" (salles) qu'on ne veut pas afficher comme
+  // participants — Google n'a pas de flag explicite, on garde donc tout
+  // ce qui ressemble à une adresse humaine.
+  const raw = (e.attendees ?? [])
+    .filter((a) => a.email)
+    .map<MeetingAttendee>((a) => ({
+      name: a.displayName ?? '',
+      email: a.email ?? '',
+      isOrganizer: !!a.organizer || a.email?.toLowerCase() === organizerEmail,
+    }));
+
+  // Si l'organizer n'apparaît pas dans la liste attendees, l'ajouter
+  // explicitement en tête.
+  if (
+    organizerEmail &&
+    !raw.some((a) => a.email.toLowerCase() === organizerEmail)
+  ) {
+    raw.unshift({
+      name: e.organizer?.displayName ?? '',
+      email: e.organizer?.email ?? '',
+      isOrganizer: true,
+    });
+  }
+
+  // Tri stable : organizers en premier, ordre d'origine préservé.
+  return raw.sort((a, b) => Number(b.isOrganizer) - Number(a.isOrganizer));
 }
 
 async function fetchUserEmail(accessToken: string): Promise<string> {
@@ -132,11 +179,8 @@ export const googleProvider: CalendarProvider = {
           start: startIso,
           end: endIso,
           ...timing,
-          attendees: (e.attendees ?? [])
-            .map((a) => a.displayName ?? a.email ?? '')
-            .filter(Boolean)
-            .slice(0, 4)
-            .map(initials),
+          attendees: mapAttendees(e),
+          webLink: e.htmlLink,
         };
       });
   },

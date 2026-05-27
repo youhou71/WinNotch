@@ -16,11 +16,12 @@
  */
 import type {
   Meeting,
+  MeetingAttendee,
   OAuthClientCredentials,
 } from '../../../shared/types';
 import { startAuthFlow, refreshAccessToken, type OAuthTokens } from './oauth';
 import type { CalendarProvider } from './calendarProvider';
-import { detectKind, deriveTiming, initials } from './meetingMapper';
+import { detectKind, deriveTiming } from './meetingMapper';
 
 const SCOPE = 'Calendars.Read User.Read offline_access';
 
@@ -36,6 +37,11 @@ function tokenUrl(creds: OAuthClientCredentials): string {
   return `https://login.microsoftonline.com/${tenant(creds)}/oauth2/v2.0/token`;
 }
 
+interface GraphEmailAddress {
+  name?: string;
+  address?: string;
+}
+
 interface GraphEvent {
   id: string;
   subject?: string;
@@ -44,8 +50,62 @@ interface GraphEvent {
   end?: { dateTime: string; timeZone: string };
   location?: { displayName?: string };
   onlineMeeting?: { joinUrl?: string };
-  attendees?: Array<{ emailAddress?: { name?: string; address?: string } }>;
+  organizer?: { emailAddress?: GraphEmailAddress };
+  attendees?: Array<{ emailAddress?: GraphEmailAddress }>;
   isCancelled?: boolean;
+  webLink?: string;
+}
+
+/**
+ * Construit la liste des participants triée organisateur en premier.
+ * Dédupe sur l'email pour éviter l'organisateur en double quand Graph
+ * l'inclut aussi dans la liste `attendees`.
+ *
+ * Injecte `photoDataUrl` sur l'attendee dont l'email matche celui du
+ * compte connecté (V1 : sa propre photo uniquement).
+ */
+function mapAttendees(
+  e: GraphEvent,
+  selfEmail: string,
+  selfPhotoDataUrl: string | undefined,
+): MeetingAttendee[] {
+  const organizerEmail = e.organizer?.emailAddress?.address?.toLowerCase() ?? '';
+  const selfLower = selfEmail.toLowerCase();
+
+  const decorate = (a: MeetingAttendee): MeetingAttendee => {
+    if (
+      selfPhotoDataUrl &&
+      a.email &&
+      a.email.toLowerCase() === selfLower
+    ) {
+      return { ...a, photoDataUrl: selfPhotoDataUrl };
+    }
+    return a;
+  };
+
+  const organizer: MeetingAttendee | null = e.organizer?.emailAddress
+    ? decorate({
+        name: e.organizer.emailAddress.name ?? '',
+        email: e.organizer.emailAddress.address ?? '',
+        isOrganizer: true,
+      })
+    : null;
+
+  const others: MeetingAttendee[] = (e.attendees ?? [])
+    .filter(
+      (a) =>
+        a.emailAddress?.address &&
+        a.emailAddress.address.toLowerCase() !== organizerEmail,
+    )
+    .map((a) =>
+      decorate({
+        name: a.emailAddress?.name ?? '',
+        email: a.emailAddress?.address ?? '',
+        isOrganizer: false,
+      }),
+    );
+
+  return organizer ? [organizer, ...others] : others;
 }
 
 async function fetchUserEmail(accessToken: string): Promise<string> {
@@ -55,6 +115,28 @@ async function fetchUserEmail(accessToken: string): Promise<string> {
   if (!res.ok) throw new Error(`/me failed: ${res.status}`);
   const json = (await res.json()) as { mail?: string; userPrincipalName?: string };
   return json.mail ?? json.userPrincipalName ?? 'unknown@outlook';
+}
+
+/**
+ * Lit la photo de profil du compte connecté via /me/photo/$value.
+ * Retourne une data URL (base64) ou null si pas de photo (404) ou
+ * permission manquante (403). Pas d'exception levée pour ces cas
+ * "normaux" — la photo est un bonus, son absence ne doit pas casser
+ * le polling des meetings.
+ */
+async function fetchSelfPhotoOutlook(accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.status === 404 || res.status === 403) return null;
+    if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') ?? 'image/jpeg';
+    const buf = Buffer.from(await res.arrayBuffer());
+    return `data:${contentType};base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
+  }
 }
 
 export const outlookProvider: CalendarProvider = {
@@ -85,6 +167,10 @@ export const outlookProvider: CalendarProvider = {
       },
       refreshToken,
     );
+  },
+
+  async fetchSelfPhoto(accessToken) {
+    return fetchSelfPhotoOutlook(accessToken);
   },
 
   async listUpcomingMeetings({ account, accessToken, windowHours }) {
@@ -139,11 +225,8 @@ export const outlookProvider: CalendarProvider = {
           start: startIso,
           end: endIso,
           ...timing,
-          attendees: (e.attendees ?? [])
-            .map((a) => a.emailAddress?.name ?? '')
-            .filter(Boolean)
-            .slice(0, 4)
-            .map(initials),
+          attendees: mapAttendees(e, account.email, account.selfPhotoDataUrl),
+          webLink: e.webLink,
         };
       });
   },
