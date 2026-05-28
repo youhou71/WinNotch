@@ -985,12 +985,14 @@ function GitLabSettings() {
           iconColor="#FC6D26"
           label="Fréquence de polling"
           description="Intervalle entre deux requêtes à l'API GitLab."
-          value={cfg.pollSec}
-          min={30}
-          max={600}
-          step={30}
-          formatValue={(v) => (v >= 60 ? `${Math.round(v / 60)} min` : `${v} s`)}
-          onChange={(v) => void patchModuleConfig('gitlab', { pollSec: v })}
+          value={cfg.pollMs}
+          min={30_000}
+          max={600_000}
+          step={30_000}
+          formatValue={(v) =>
+            v >= 60_000 ? `${Math.round(v / 60_000)} min` : `${Math.round(v / 1000)} s`
+          }
+          onChange={(v) => void patchModuleConfig('gitlab', { pollMs: v })}
         />
       </SettingsSection>
     </>
@@ -1208,12 +1210,14 @@ function GitLocalSettings() {
           iconColor="#f97316"
           label="Fréquence de rescan"
           description="Intervalle entre deux scans complets (statut git de chaque repo)."
-          value={cfg.pollSec}
-          min={15}
-          max={600}
-          step={15}
-          formatValue={(v) => (v >= 60 ? `${Math.round(v / 60)} min` : `${v} s`)}
-          onChange={(v) => void patchModuleConfig('gitlocal', { pollSec: v })}
+          value={cfg.pollMs}
+          min={15_000}
+          max={600_000}
+          step={15_000}
+          formatValue={(v) =>
+            v >= 60_000 ? `${Math.round(v / 60_000)} min` : `${Math.round(v / 1000)} s`
+          }
+          onChange={(v) => void patchModuleConfig('gitlocal', { pollMs: v })}
         />
       </SettingsSection>
     </>
@@ -1505,12 +1509,12 @@ function VpnSettings() {
           iconColor="#06b6d4"
           label="Fréquence de check"
           description="Intervalle entre deux interrogations PowerShell. Plus c'est court, plus l'état affiché est frais — coût négligeable (~150 ms par tick)."
-          value={cfg.pollSec}
-          min={5}
-          max={60}
-          step={5}
-          formatValue={(v) => `${v} s`}
-          onChange={(v) => void patchModuleConfig('vpn', { pollSec: v })}
+          value={cfg.pollMs}
+          min={5_000}
+          max={60_000}
+          step={5_000}
+          formatValue={(v) => `${Math.round(v / 1000)} s`}
+          onChange={(v) => void patchModuleConfig('vpn', { pollMs: v })}
         />
       </SettingsSection>
 
@@ -1614,12 +1618,12 @@ function TeamsSettings() {
           iconColor="#7c3aed"
           label="Fréquence de check"
           description="Intervalle entre deux interrogations Graph /me/presence. Microsoft throttle à ~1500 req / 30 s par app — 30 s est largement sous la limite."
-          value={cfg.pollSec}
-          min={15}
-          max={300}
-          step={15}
-          formatValue={(v) => `${v} s`}
-          onChange={(v) => void patchModuleConfig('teams', { pollSec: v })}
+          value={cfg.pollMs}
+          min={15_000}
+          max={300_000}
+          step={15_000}
+          formatValue={(v) => `${Math.round(v / 1000)} s`}
+          onChange={(v) => void patchModuleConfig('teams', { pollMs: v })}
         />
       </SettingsSection>
 

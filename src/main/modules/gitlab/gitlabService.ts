@@ -32,8 +32,8 @@ import {
 } from './gitlabClient';
 import { broadcastSettings } from '../settings/settingsService';
 
-/** Borne minimale pour `pollSec` (sécurité contre une config trop agressive). */
-const MIN_POLL_SEC = 30;
+/** Borne minimale pour `pollMs` (sécurité contre une config trop agressive). */
+const MIN_POLL_MS = 30_000;
 
 /**
  * Store partagé avec settingsService — même fichier `config.json`, même
@@ -206,7 +206,7 @@ async function refreshOnce(): Promise<GitLabState> {
 
 /**
  * Démarre / restart le polling avec l'intervalle courant. À appeler après
- * tout changement de config (save / clear / pollSec).
+ * tout changement de config (save / clear / pollMs).
  */
 function restartPolling(): void {
   if (pollTimer) {
@@ -214,10 +214,10 @@ function restartPolling(): void {
     pollTimer = null;
   }
   const cfg = store.get('moduleConfig').gitlab;
-  const sec = Math.max(MIN_POLL_SEC, cfg.pollSec || 120);
+  const ms = Math.max(MIN_POLL_MS, cfg.pollMs || 120_000);
   pollTimer = setInterval(() => {
     void refreshOnce();
-  }, sec * 1000);
+  }, ms);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -293,7 +293,7 @@ function handleClearCredentials(): void {
  * Réagit aux changements de `moduleConfig.gitlab` depuis les Settings :
  *  - `watchedLabels` modifié → refresh immédiat (ne pas attendre 120 s
  *    avant de voir la nouvelle liste d'issues correspondante).
- *  - `pollSec` modifié → restart du timer avec le nouvel intervalle.
+ *  - `pollMs` modifié → restart du timer avec le nouvel intervalle.
  *  - autres champs (notify, collapsed, etc.) → pas d'action backend
  *    nécessaire ; le renderer relit `settings.moduleConfig` directement.
  */
@@ -310,7 +310,7 @@ function subscribeConfigChanges(): void {
       void refreshOnce();
     }
 
-    if (newG.pollSec !== oldG.pollSec && newG.account && newG.encryptedToken) {
+    if (newG.pollMs !== oldG.pollMs && newG.account && newG.encryptedToken) {
       restartPolling();
     }
   });

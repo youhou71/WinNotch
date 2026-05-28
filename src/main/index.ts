@@ -49,6 +49,7 @@ import {
   registerSystemIpc,
   stopSystem,
 } from './modules/system/systemService';
+import { registerTasksIpc, stopTasks } from './modules/tasks/tasksService';
 import {
   registerUpdaterIpc,
   stopUpdater,
@@ -87,6 +88,7 @@ app.whenReady().then(async () => {
   syncAutoStartFromSystem();
   registerShellIpc();
   registerSearchIpc();
+  registerTasksIpc();
   registerMeetingsIpc();
   void registerClaudeIpc();
   registerGitLabIpc();
@@ -176,6 +178,7 @@ app.on('window-all-closed', () => {
   stopVpn();
   stopTeams();
   stopSystem();
+  stopTasks();
   stopUpdater();
   stopFullscreenDetector();
   unregisterGlobalShortcuts();
@@ -198,6 +201,7 @@ app.on('before-quit', () => {
   stopVpn();
   stopTeams();
   stopSystem();
+  stopTasks();
   stopUpdater();
   stopFullscreenDetector();
   unregisterGlobalShortcuts();

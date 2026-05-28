@@ -25,10 +25,6 @@ import {
 interface SettingsContextValue {
   settings: Settings;
   toggleDnd: () => Promise<Settings>;
-  addTask: (text: string) => Promise<Settings>;
-  toggleTask: (id: string) => Promise<Settings>;
-  removeTask: (id: string) => Promise<Settings>;
-  clearDoneTasks: () => Promise<Settings>;
   setModule: (id: ModuleId, enabled: boolean) => Promise<Settings>;
   setDensity: (density: Density) => Promise<Settings>;
   patchModuleConfig: <K extends ModuleId>(
@@ -37,18 +33,12 @@ interface SettingsContextValue {
   ) => Promise<Settings>;
   setAutoStart: (enabled: boolean) => Promise<Settings>;
   setDashboardLayout: (layout: DashTile[]) => Promise<Settings>;
-  /** ID de la tâche la plus récemment ajoutée (pour animation flash). */
-  lastAddedId: string | null;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  // Mémorise l'ID de la dernière tâche ajoutée pour permettre à TaskRow
-  // de jouer une animation flash verte. Comparaison "premier élément" car
-  // settingsService unshift la nouvelle tâche en tête de liste.
-  const [lastAddedId, setLastAddedId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -64,46 +54,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Update optimiste : pour DND on bascule le booléen tout de suite ; pour
-  // les tâches on attend la réponse (l'id généré par le main n'est pas
-  // connu côté renderer, donc pas de bascule optimiste possible).
+  // Le module Tasks a son propre Context + canal IPC depuis v1, mais
+  // `Settings.tasks` reste le champ persisté. On garde le champ
+  // synchrone côté UI en abonnant un listener `tasks:change` qui patche
+  // localement — ainsi un consommateur qui lit `settings.tasks` voit
+  // toujours la version à jour sans devoir migrer vers `useTasksContext()`.
+  useEffect(() => {
+    const off = window.notch.tasks.onChange((tasks) => {
+      setSettings((s) => ({ ...s, tasks }));
+    });
+    return off;
+  }, []);
+
   const toggleDnd = useCallback(async () => {
     setSettings((s) => ({ ...s, dnd: !s.dnd }));
     const next = await window.notch.settings.toggleDnd();
-    setSettings(next);
-    return next;
-  }, []);
-
-  const addTask = useCallback(async (text: string) => {
-    const next = await window.notch.settings.addTask(text);
-    setSettings(next);
-    // La tâche fraîchement ajoutée est toujours en tête (settingsService
-    // fait un unshift). On capture son ID pour le flash visuel.
-    const added = next.tasks[0];
-    if (added) setLastAddedId(added.id);
-    return next;
-  }, []);
-
-  const toggleTask = useCallback(async (id: string) => {
-    setSettings((s) => ({
-      ...s,
-      tasks: s.tasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
-    }));
-    const next = await window.notch.settings.toggleTask(id);
-    setSettings(next);
-    return next;
-  }, []);
-
-  const removeTask = useCallback(async (id: string) => {
-    setSettings((s) => ({ ...s, tasks: s.tasks.filter((t) => t.id !== id) }));
-    const next = await window.notch.settings.removeTask(id);
-    setSettings(next);
-    return next;
-  }, []);
-
-  const clearDoneTasks = useCallback(async () => {
-    setSettings((s) => ({ ...s, tasks: s.tasks.filter((t) => !t.done) }));
-    const next = await window.notch.settings.clearDoneTasks();
     setSettings(next);
     return next;
   }, []);
@@ -162,16 +127,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       value={{
         settings,
         toggleDnd,
-        addTask,
-        toggleTask,
-        removeTask,
-        clearDoneTasks,
         setModule,
         setDensity,
         patchModuleConfig,
         setAutoStart,
         setDashboardLayout,
-        lastAddedId,
       }}
     >
       {children}

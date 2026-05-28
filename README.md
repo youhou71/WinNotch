@@ -181,7 +181,21 @@ L'ajout d'un nouveau module suit ce patron : un dossier `main/modules/<id>/` + u
 ## Modes spéciaux
 
 ### Mode Ne pas Déranger
-Masque toutes les chips de notifications (Meetings, Claude, GitLab) et bloque les toasts. Indicateur visuel : icône lune dans le notch rétracté. Toggle via `Ctrl + Shift + D` ou dans Settings.
+Masque les chips de **notifications** et bloque les toasts. Indicateur visuel : icône lune dans le notch rétracté. Toggle via `Ctrl + Shift + D` ou dans Settings.
+
+**Comportement par chip** :
+
+| Chip | En DND | Pourquoi |
+|---|---|---|
+| Meeting | masquée | notification (RDV imminent) |
+| GitLab | masquée | notification (MR / issues) |
+| Git local | masquée | notification (repos dirty) |
+| Claude | masquée | notification (sessions actives) |
+| VPN | **visible** | état système — l'utilisateur veut savoir en permanence si son tunnel est actif |
+| Teams (présence) | **visible** | état système — la pastille reste pertinente même en DND, surtout avec le couplage bidirectionnel `Ctrl+Shift+D ↔ Teams DoNotDisturb` |
+| Système (CPU/RAM/Net) | **visible** | état système — la jauge est utile même pendant une démo |
+| Music | non affectée | la chip est dans `cr-left`, pas une notification |
+| Clipboard | non affectée | rappel passif d'historique, pas une notification |
 
 ### Mode Peek
 Maintenir `Alt` rend le notch à 15 % d'opacité et le rend click-through complet. Utile pour vérifier ce qui se trouve derrière sans avoir à le rétracter.

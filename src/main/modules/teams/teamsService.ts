@@ -2,7 +2,7 @@
  * Service du module Teams Presence.
  *
  * Responsabilités :
- *  - Polling Microsoft Graph `GET /me/presence` toutes les `pollSec` secondes
+ *  - Polling Microsoft Graph `GET /me/presence` toutes les `pollMs` ms
  *    sur le compte Outlook désigné (par `outlookAccountId` ou fallback
  *    "premier compte Outlook trouvé").
  *  - Maintien d'un `TeamsState` cohérent : availability, activity, erreur
@@ -14,7 +14,7 @@
  *    no-account) — un nouveau tick ne servirait à rien tant que la config
  *    n'a pas changé.
  *  - Restart le polling quand `moduleConfig.meetings.accounts` ou
- *    `moduleConfig.teams.outlookAccountId/pollSec` changent.
+ *    `moduleConfig.teams.outlookAccountId/pollMs` changent.
  *
  * Couplage DND (P3) : non encore implémenté dans cette phase P1.
  *
@@ -50,7 +50,7 @@ import {
   type DndChangedPayload,
 } from '../settings/settingsService';
 
-const MIN_POLL_SEC = 15;
+const MIN_POLL_MS = 15_000;
 
 /**
  * Fenêtre pendant laquelle un changement Graph détecté par le polling
@@ -263,10 +263,10 @@ async function doPoll(): Promise<void> {
 function startPolling(): void {
   if (pollTimer) return;
   const cfg = store.get('moduleConfig').teams;
-  const sec = Math.max(MIN_POLL_SEC, cfg.pollSec || 30);
+  const ms = Math.max(MIN_POLL_MS, cfg.pollMs || 30_000);
   pollTimer = setInterval(() => {
     void doPoll();
-  }, sec * 1000);
+  }, ms);
 }
 
 function stopPolling(): void {
@@ -420,7 +420,7 @@ const dndChangedListener = (payload: DndChangedPayload) => {
  * quand l'utilisateur :
  *  - reconnecte un compte Outlook (ajout dans `meetings.accounts`)
  *  - change le compte choisi (`teams.outlookAccountId`)
- *  - change la fréquence de polling (`teams.pollSec`)
+ *  - change la fréquence de polling (`teams.pollMs`)
  */
 function subscribeConfigChanges(): void {
   store.onDidChange('moduleConfig', (newVal, oldVal) => {
@@ -429,7 +429,7 @@ function subscribeConfigChanges(): void {
       newVal.meetings.accounts !== oldVal.meetings.accounts;
     const teamsChanged =
       newVal.teams.outlookAccountId !== oldVal.teams.outlookAccountId ||
-      newVal.teams.pollSec !== oldVal.teams.pollSec;
+      newVal.teams.pollMs !== oldVal.teams.pollMs;
     if (meetingsChanged || teamsChanged) {
       restartPolling();
     }
@@ -574,7 +574,7 @@ export function registerTeamsIpc(): void {
   // Démarrage : un premier poll immédiat + le timer.
   const cfg = store.get('moduleConfig').teams;
   console.log(
-    `[teams] config initiale : pollSec=${cfg.pollSec} outlookAccountId=${cfg.outlookAccountId} dndCouplingEnabled=${cfg.dndCouplingEnabled}`,
+    `[teams] config initiale : pollMs=${cfg.pollMs} outlookAccountId=${cfg.outlookAccountId} dndCouplingEnabled=${cfg.dndCouplingEnabled}`,
   );
   const accounts = store.get('moduleConfig').meetings.accounts;
   console.log(

@@ -11,7 +11,7 @@
  *
  * État vide : icône + message + petit code stylé du préfixe `-`.
  */
-import { useSettingsContext } from '../settings/SettingsContext';
+import { useTasksContext } from './TasksContext';
 import type { Task } from '../../../shared/types';
 
 interface RowProps {
@@ -54,9 +54,7 @@ function TaskRow({ task, highlight, onToggle, onRemove }: RowProps) {
 }
 
 export function TasksList() {
-  const { settings, toggleTask, removeTask, clearDoneTasks, lastAddedId } =
-    useSettingsContext();
-  const tasks = settings.tasks;
+  const { tasks, lastAddedId, toggle, remove, clearDone } = useTasksContext();
 
   const active = tasks.filter((t) => !t.done);
   const done = tasks.filter((t) => t.done);
@@ -82,7 +80,7 @@ export function TasksList() {
           <button
             type="button"
             className="tasks-clear"
-            onClick={() => void clearDoneTasks()}
+            onClick={() => void clearDone()}
           >
             <i className="fa-regular fa-trash-can" />
             Effacer terminées
@@ -111,8 +109,8 @@ export function TasksList() {
               key={t.id}
               task={t}
               highlight={t.id === lastAddedId}
-              onToggle={toggleTask}
-              onRemove={removeTask}
+              onToggle={toggle}
+              onRemove={remove}
             />
           ))}
           {done.length > 0 && (
@@ -126,8 +124,8 @@ export function TasksList() {
               key={t.id}
               task={t}
               highlight={false}
-              onToggle={toggleTask}
-              onRemove={removeTask}
+              onToggle={toggle}
+              onRemove={remove}
             />
           ))}
         </div>

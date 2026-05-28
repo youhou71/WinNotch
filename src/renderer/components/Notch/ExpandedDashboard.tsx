@@ -24,6 +24,7 @@ import { AudioFooter } from '../../modules/audio/AudioFooter';
 import { MusicCard } from '../../modules/music/MusicCard';
 import { useMusicContext } from '../../modules/music/MusicContext';
 import { useSettingsContext } from '../../modules/settings/SettingsContext';
+import { useSearchContext } from '../../modules/search/SearchContext';
 import { TasksCounterCard } from '../../modules/tasks/TasksCounterCard';
 import { TasksList } from '../../modules/tasks/TasksList';
 import { MeetingsCard } from '../../modules/meetings/MeetingsCard';
@@ -55,7 +56,7 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
   const { state: music } = useMusicContext();
   const { active: claudeActive } = useClaudeContext();
   const { settings, toggleDnd } = useSettingsContext();
-  const [query, setQuery] = useState('');
+  const { query, setQuery } = useSearchContext();
   const [settingsOpen, setSettingsOpen] = useState(false);
   /**
    * Overlay GitLab plein dashboard. Ouvert par clic sur la GitLabCard

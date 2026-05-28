@@ -37,6 +37,7 @@ import {
   type UpdateState,
   type VpnState,
   type SystemState,
+  type Task,
 } from '../shared/types';
 
 const api: NotchApi = {
@@ -322,17 +323,23 @@ const api: NotchApi = {
       };
     },
   },
+  tasks: {
+    getState: () => ipcRenderer.invoke(IpcChannel.TasksGetState),
+    add: (text: string) => ipcRenderer.invoke(IpcChannel.TasksAdd, text),
+    toggle: (id: string) => ipcRenderer.invoke(IpcChannel.TasksToggle, id),
+    remove: (id: string) => ipcRenderer.invoke(IpcChannel.TasksRemove, id),
+    clearDone: () => ipcRenderer.invoke(IpcChannel.TasksClearDone),
+    onChange: (cb: (tasks: Task[]) => void) => {
+      const handler = (_: unknown, tasks: Task[]) => cb(tasks);
+      ipcRenderer.on(IpcChannel.TasksChange, handler);
+      return () => {
+        ipcRenderer.off(IpcChannel.TasksChange, handler);
+      };
+    },
+  },
   settings: {
     getAll: () => ipcRenderer.invoke(IpcChannel.SettingsGetAll),
     toggleDnd: () => ipcRenderer.invoke(IpcChannel.SettingsToggleDnd),
-    addTask: (text: string) =>
-      ipcRenderer.invoke(IpcChannel.SettingsAddTask, text),
-    toggleTask: (id: string) =>
-      ipcRenderer.invoke(IpcChannel.SettingsToggleTask, id),
-    removeTask: (id: string) =>
-      ipcRenderer.invoke(IpcChannel.SettingsRemoveTask, id),
-    clearDoneTasks: () =>
-      ipcRenderer.invoke(IpcChannel.SettingsClearDoneTasks),
     setModule: (id: ModuleId, enabled: boolean) =>
       ipcRenderer.invoke(IpcChannel.SettingsSetModule, id, enabled),
     setDensity: (density: Density) =>

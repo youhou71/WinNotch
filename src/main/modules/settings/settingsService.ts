@@ -20,7 +20,6 @@
  */
 import { app, ipcMain } from 'electron';
 import Store from 'electron-store';
-import { randomUUID } from 'crypto';
 import { EventEmitter } from 'node:events';
 import {
   DEFAULT_SETTINGS,
@@ -31,7 +30,6 @@ import {
   type ModuleConfig,
   type ModuleId,
   type Settings,
-  type Task,
 } from '../../../shared/types';
 
 /**
@@ -123,7 +121,39 @@ function mergeDefaults(): void {
       ...((existing as Partial<ModuleConfig>)[key] ?? {}),
     };
   }
+
+  // Migration douce `pollSec` (legacy) → `pollMs` (v1.0+). Si une vieille
+  // config porte encore `pollSec`, on le convertit (×1000) puis on retire
+  // le champ legacy. Ainsi les préférences utilisateur survivent au bump.
+  migratePollSecToPollMs(mergedModuleConfig);
+
   store.set('moduleConfig', mergedModuleConfig);
+}
+
+/**
+ * Migration `pollSec` → `pollMs` au boot (v0.9.x → v1.0).
+ *
+ * 4 modules concernés : `vpn`, `teams`, `gitlab`, `gitlocal`. Pour chacun :
+ *  - si la config persistée contient encore `pollSec` (cast volontaire car
+ *    le type TS ne l'a plus), on calcule `pollMs = pollSec × 1000`
+ *  - on supprime le champ legacy pour que la prochaine lecture parte propre
+ *
+ * Idempotent : déjà migré → no-op.
+ */
+function migratePollSecToPollMs(config: ModuleConfig): void {
+  const modules: Array<keyof ModuleConfig> = ['vpn', 'teams', 'gitlab', 'gitlocal'];
+  for (const key of modules) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const section = config[key] as any;
+    if (!section) continue;
+    if (typeof section.pollSec === 'number' && typeof section.pollMs !== 'number') {
+      section.pollMs = section.pollSec * 1000;
+      console.log(
+        `[settings] migration v1: ${key}.pollSec=${section.pollSec}s → pollMs=${section.pollMs}ms`,
+      );
+    }
+    if ('pollSec' in section) delete section.pollSec;
+  }
 }
 
 /**
@@ -220,48 +250,6 @@ export function setDndFromExternal(value: boolean): void {
   if (store.get('dnd') === value) return;
   store.set('dnd', value);
   broadcast(getAll());
-}
-
-function addTask(text: string): Settings {
-  const trimmed = text.trim();
-  if (!trimmed) return getAll();
-  const task: Task = {
-    id: randomUUID(),
-    text: trimmed,
-    done: false,
-    createdAt: Date.now(),
-  };
-  const tasks = [task, ...store.get('tasks')];
-  store.set('tasks', tasks);
-  const state = getAll();
-  broadcast(state);
-  return state;
-}
-
-function toggleTask(id: string): Settings {
-  const tasks = store
-    .get('tasks')
-    .map((t) => (t.id === id ? { ...t, done: !t.done } : t));
-  store.set('tasks', tasks);
-  const state = getAll();
-  broadcast(state);
-  return state;
-}
-
-function removeTask(id: string): Settings {
-  const tasks = store.get('tasks').filter((t) => t.id !== id);
-  store.set('tasks', tasks);
-  const state = getAll();
-  broadcast(state);
-  return state;
-}
-
-function clearDoneTasks(): Settings {
-  const tasks = store.get('tasks').filter((t) => !t.done);
-  store.set('tasks', tasks);
-  const state = getAll();
-  broadcast(state);
-  return state;
 }
 
 function setModule(id: ModuleId, enabled: boolean): Settings {
@@ -368,10 +356,6 @@ export function syncAutoStartFromSystem(): void {
 export function registerSettingsIpc(): void {
   ipcMain.handle(IpcChannel.SettingsGetAll, () => getAll());
   ipcMain.handle(IpcChannel.SettingsToggleDnd, () => toggleDnd());
-  ipcMain.handle(IpcChannel.SettingsAddTask, (_e, text: string) => addTask(text));
-  ipcMain.handle(IpcChannel.SettingsToggleTask, (_e, id: string) => toggleTask(id));
-  ipcMain.handle(IpcChannel.SettingsRemoveTask, (_e, id: string) => removeTask(id));
-  ipcMain.handle(IpcChannel.SettingsClearDoneTasks, () => clearDoneTasks());
   ipcMain.handle(
     IpcChannel.SettingsSetModule,
     (_e, id: ModuleId, enabled: boolean) => setModule(id, enabled),

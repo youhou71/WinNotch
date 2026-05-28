@@ -15,7 +15,7 @@
  * `key={count}` sur chaque chiffre déclenche l'animation pop CSS à chaque
  * changement (même technique que `<TasksCounterCard>`).
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGitLabContext } from './GitLabContext';
 
 interface Props {
@@ -49,6 +49,13 @@ function Stat({ icon, iconColor, count, label, alert }: StatProps) {
 export function GitLabCard({ onOpen }: Props) {
   const { state, refresh } = useGitLabContext();
   const [refreshing, setRefreshing] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const handleRefresh = async () => {
     if (refreshing) return;
@@ -56,8 +63,14 @@ export function GitLabCard({ onOpen }: Props) {
     try {
       await refresh();
     } finally {
-      // Min 400 ms pour le retour visuel du spinner.
-      setTimeout(() => setRefreshing(false), 400);
+      // Min 400 ms pour le retour visuel du spinner. Capture le handle pour
+      // pouvoir le clear si le composant se démonte avant l'expiration
+      // (sinon warning React + setState sur un node mort).
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        setRefreshing(false);
+        timeoutRef.current = null;
+      }, 400);
     }
   };
 
