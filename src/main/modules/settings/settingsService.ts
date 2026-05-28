@@ -31,6 +31,11 @@ import {
   type ModuleId,
   type Settings,
 } from '../../../shared/types';
+import {
+  createAutostartTask,
+  isAutostartTaskRegistered,
+  removeAutostartTask,
+} from './autostartTask';
 
 /**
  * IDs valides pour une tuile du dashboard — utilisé en validation runtime
@@ -310,28 +315,49 @@ function patchModuleConfig<K extends ModuleId>(
 /**
  * Active ou désactive le démarrage automatique avec Windows.
  *
- * `app.setLoginItemSettings({ openAtLogin })` écrit / supprime une entrée
- * dans `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Pas besoin
- * d'élévation (clé HKCU = courant). En dev (`!app.isPackaged`), Electron
- * crée une entrée qui pointe vers electron.exe — pas idéal, mais le toggle
- * reste fonctionnel pour tester le code.
+ * Depuis v1.0, on passe par le **Task Scheduler** (`Register-ScheduledTask`
+ * via PowerShell) et plus par la Run key historique. Raison : la Run key
+ * subit le « Startup Delay » de Windows (10 s + jusqu'à 150 s aléatoires),
+ * ce qui faisait apparaître WinNotch 1 à 2 minutes après l'ouverture de
+ * session. Une task `AtLogOn` se déclenche immédiatement.
  *
- * `--hidden` est un flag custom qu'on pourrait lire dans `process.argv`
- * côté `index.ts` pour démarrer en mode super-discret (pas pour l'instant
- * — le notch démarre déjà en collapsed, donc pas d'intrusion).
+ * Migration douce des installations v0.x : à chaque appel (ON ou OFF),
+ * on supprime aussi l'éventuelle entrée Run laissée par une version
+ * antérieure via `app.setLoginItemSettings({ openAtLogin: false })`. Ça
+ * évite que l'utilisateur se retrouve avec les DEUX mécanismes actifs
+ * en parallèle après bump.
+ *
+ * En dev (`!app.isPackaged`), on n'installe **pas** la task — sinon elle
+ * pointerait vers `electron.exe` qui n'a aucun sens à lancer seul au
+ * boot. Le toggle UI reste fonctionnel mais sans effet système.
+ *
+ * Le détail d'implémentation est dans `autostartTask.ts`.
  */
-function setAutoStart(enabled: boolean): Settings {
+async function setAutoStart(enabled: boolean): Promise<Settings> {
   store.set('autoStart', enabled);
+
+  // 1. Cleanup défensif de la Run key v0.x (idempotent).
   try {
-    app.setLoginItemSettings({
-      openAtLogin: enabled,
-      // `path` et `args` sont optionnels : par défaut Electron utilise
-      // `process.execPath`, ce qui est ce qu'on veut en prod
-      // (l'.exe installé via NSIS).
-    });
+    app.setLoginItemSettings({ openAtLogin: false });
   } catch (err) {
-    console.warn('[settings] setLoginItemSettings échec:', err);
+    console.warn('[settings] cleanup legacy Run key échec:', err);
   }
+
+  // 2. Apply via Task Scheduler. Skip en dev (cf. docstring).
+  if (app.isPackaged) {
+    if (enabled) {
+      const result = await createAutostartTask(app.getPath('exe'));
+      if (!result.ok) {
+        console.warn('[settings] createAutostartTask échec:', result.error);
+      }
+    } else {
+      const result = await removeAutostartTask();
+      if (!result.ok) {
+        console.warn('[settings] removeAutostartTask échec:', result.error);
+      }
+    }
+  }
+
   const state = getAll();
   broadcast(state);
   return state;
@@ -356,16 +382,59 @@ function setDashboardLayout(layout: DashTile[]): Settings {
 /**
  * Réconcilie l'état système avec le store au démarrage.
  *
- * Si l'utilisateur a supprimé manuellement l'entrée Run via msconfig,
- * regedit ou « Démarrage » du Gestionnaire des tâches, on veut que le
- * toggle UI reflète la réalité — pas l'état figé du store.
+ * Trois cas à gérer :
+ *  1. **Migration v0.x → v1** : l'utilisateur avait l'autostart activé
+ *     via Run key. Au premier boot v1, on crée la task Scheduler
+ *     équivalente et on supprime la legacy Run key. Transparent.
+ *  2. **Suppression manuelle de la task** : si l'utilisateur a supprimé
+ *     la task via Task Scheduler, msconfig ou « Démarrage » du Gestionnaire
+ *     des tâches, on met à jour le store pour que le toggle UI le reflète.
+ *  3. **État cohérent** : rien à faire.
+ *
+ * En dev (`!app.isPackaged`), on saute la sync (la task ne devrait pas
+ * exister, cf. `setAutoStart`).
  */
-export function syncAutoStartFromSystem(): void {
+export async function syncAutoStartFromSystem(): Promise<void> {
   try {
+    if (!app.isPackaged) return;
+
     const stored = store.get('autoStart');
-    const actual = app.getLoginItemSettings().openAtLogin;
-    if (stored !== actual) {
-      store.set('autoStart', actual);
+    const taskActive = await isAutostartTaskRegistered();
+    const legacyRunActive = app.getLoginItemSettings().openAtLogin;
+
+    // Cas 1 : migration v0.x → v1. Store dit « activé » mais aucune task,
+    // probablement parce que la version précédente utilisait la Run key.
+    // On crée la task et on nettoie la Run key.
+    if (stored && !taskActive) {
+      const result = await createAutostartTask(app.getPath('exe'));
+      if (result.ok) {
+        try { app.setLoginItemSettings({ openAtLogin: false }); } catch {
+          // Si l'effacement de la Run key échoue, pas grave : la task
+          // est en place, l'utilisateur aura juste un doublon temporaire
+          // visible dans « Démarrage ». Le prochain toggle nettoiera.
+        }
+      } else {
+        console.warn('[settings] migration v0→v1 autostart échec:', result.error);
+      }
+      return;
+    }
+
+    // Cas 1bis : Run key résiduelle alors que le store dit « désactivé ».
+    // Probablement une install v0.x avec autostart actif puis désactivé
+    // côté store seulement. Nettoyage opportuniste.
+    if (!stored && legacyRunActive) {
+      try { app.setLoginItemSettings({ openAtLogin: false }); } catch {
+        // ignore — cleanup best-effort
+      }
+    }
+
+    // Cas 2 : store ≠ état réel de la task → on aligne le store sur le
+    // système (l'utilisateur a probablement supprimé la task manuellement).
+    // On broadcast pour que le toggle UI dans Settings reflète la réalité
+    // même si le renderer était déjà monté avant la sync.
+    if (stored !== taskActive) {
+      store.set('autoStart', taskActive);
+      broadcast(getAll());
     }
   } catch (err) {
     console.warn('[settings] syncAutoStartFromSystem échec:', err);

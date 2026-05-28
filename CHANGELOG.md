@@ -21,6 +21,7 @@ Première version stable. Gel fonctionnel — pas de nouveau module avant la v1.
 
 ### Changed
 
+- **Démarrage automatique migré vers Task Scheduler** (`Register-ScheduledTask` via PowerShell) au lieu de la Run key historique (`HKCU\…\Run`). Raison : la Run key subit le « Startup Delay » de Windows 10/11 (10 s fixes + jusqu'à 150 s aléatoires), qui faisait apparaître WinNotch 1 à 2 minutes après l'ouverture de session. Une task `AtLogOn` se déclenche immédiatement. Migration douce : au premier boot v1, l'éventuelle Run key d'une install v0.x est convertie en task + nettoyée transparenttement.
 - **Migration `pollSec → pollMs`** sur les 4 modules concernés (`vpn`, `teams`, `gitlab`, `gitlocal`). Unité uniforme avec le module `system` (qui était déjà en `pollMs`). Migration douce du store dans `mergeDefaults` : une vieille config porteuse de `pollSec` est convertie au boot (`pollMs = pollSec × 1000`) sans perte des préférences utilisateur.
 - **Validator runtime `VALID_DASH_TILE_IDS`** : passage en `satisfies Record<DashTileId, true>`. Si un nouveau membre est ajouté à l'union sans être enregistré dans la table, le typecheck casse — élimine le piège du « drag-and-drop silencieusement filtré » rencontré sur la tuile Système live.
 - **Cap caches main process** pour borner le heap sous usage intensif :

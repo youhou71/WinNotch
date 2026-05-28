@@ -83,9 +83,12 @@ app.whenReady().then(async () => {
   // sinon le renderer peut émettre des `invoke` qui partent dans le vide.
   registerMouseIpc();
   registerSettingsIpc();
-  // Réconcilie le toggle autoStart avec l'état système (si l'utilisateur
-  // a supprimé l'entrée Run manuellement, on resynchronise le store).
-  syncAutoStartFromSystem();
+  // Réconcilie le toggle autoStart avec l'état système (migration v0.x →
+  // v1 Task Scheduler, ou suppression manuelle de la task via msconfig /
+  // Task Scheduler / Gestionnaire des tâches). Async (spawn PowerShell)
+  // mais non-bloquant : on n'attend pas, le renderer recevra la valeur à
+  // jour via le push `settings:change` quand la réconciliation termine.
+  void syncAutoStartFromSystem();
   registerShellIpc();
   registerSearchIpc();
   registerTasksIpc();
