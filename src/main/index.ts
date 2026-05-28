@@ -11,6 +11,10 @@
  * que l'ajout d'un nouveau module (Music, Meetings, GitLab, etc.) suive le
  * même patron : un service côté main + un handler IPC + un dossier renderer.
  */
+// `./bootstrap` DOIT rester en premier : il override `app.setPath('userData')`
+// en mode dev, et plusieurs services ci-dessous instancient `new Store()`
+// au top-level (electron-store résout le chemin à la construction).
+import './bootstrap';
 import { app, BrowserWindow } from 'electron';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import {

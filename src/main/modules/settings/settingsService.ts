@@ -1,8 +1,10 @@
 /**
  * Service de persistance des réglages utilisateur (electron-store).
  *
- * Stocke un objet `Settings` dans `%APPDATA%/winnotch/config.json`
- * (chemin par défaut d'electron-store). Le store survit entre les
+ * Stocke un objet `Settings` dans `%APPDATA%/WinNotch/config.json`
+ * (chemin par défaut d'electron-store). En mode dev (`npm run dev`),
+ * `src/main/bootstrap.ts` override `userData` vers `WinNotch-dev` pour
+ * isoler la config du build installé. Le store survit entre les
  * lancements et est partagé entre tous les modules de l'app.
  *
  * Tous les setters retournent le `Settings` complet à jour pour que le

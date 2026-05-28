@@ -136,7 +136,7 @@ Drilldown accessible via l'icône engrenage de la search bar :
 
 Chaque tuile (Tasks, Meetings, Music, GitLab, Claude, Git local) occupe N colonnes sur 12. Tant que la somme d'une rangée tient sous 12, les tuiles restent côte à côte ; sinon elles passent automatiquement à la rangée suivante. Réorganisation par glisser-déposer (poignée ⋮⋮), bouton "Réinitialiser" pour revenir au layout d'origine.
 
-Les réglages sont persistés dans `%APPDATA%/winnotch/config.json`.
+Les réglages sont persistés dans `%APPDATA%/WinNotch/config.json` (build installé) ou `%APPDATA%/WinNotch-dev/config.json` (mode `npm run dev`) — les deux ne se mélangent pas.
 
 ---
 
