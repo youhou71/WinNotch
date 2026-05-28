@@ -18,7 +18,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SearchResult } from '../../../shared/types';
 import { detectMode, MODE_META } from './detectMode';
 import { SearchResultsPanel } from './SearchResultsPanel';
-import { useSettingsContext } from '../settings/SettingsContext';
+import { useTasksContext } from '../tasks/TasksContext';
 import { useToast } from '../toast/ToastContext';
 
 interface Props {
@@ -50,7 +50,7 @@ export function NotchSearch({
   onClipboardClick,
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const { addTask } = useSettingsContext();
+  const { add: addTask } = useTasksContext();
   const { push: pushToast } = useToast();
 
   // Résultats bruts chargés via IPC selon le mode actif.

@@ -15,7 +15,7 @@
  * Clic sur une ligne → `shell.openExternal(webUrl)` ouvre dans le
  * navigateur par défaut.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GitLabIssue, GitLabMr } from '../../../shared/types';
 import { useGitLabContext } from './GitLabContext';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
@@ -96,14 +96,27 @@ export function GitLabPanel({ onClose }: Props) {
   useMouseBackButton(onClose);
   useEscapeKey(onClose);
 
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    };
+  }, []);
+
   const handleRefresh = async () => {
     if (refreshing) return;
     setRefreshing(true);
     try {
       await refresh();
     } finally {
-      // Min 400 ms pour le retour visuel du spinner.
-      setTimeout(() => setRefreshing(false), 400);
+      // Min 400 ms pour le retour visuel du spinner. Capture le handle pour
+      // pouvoir le clear si le composant se démonte avant l'expiration.
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = setTimeout(() => {
+        setRefreshing(false);
+        refreshTimeoutRef.current = null;
+      }, 400);
     }
   };
 

@@ -17,6 +17,13 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 const TIMEOUT_MS = 3000;
 const MAX_BYTES = 64 * 1024;
 const USER_AGENT = 'WinNotch/0.1 (+https://github.com/cfast)';
+/**
+ * Plafond LRU du cache d'unfurls. Une entrée fait ~0.5-2 KB (URL + titre
+ * + favicon URL + timestamp) — 500 entrées plafonnent à ~1 MB. Au-delà,
+ * on évince l'entrée la plus ancienne par insertion (Map.keys() préserve
+ * l'ordre d'insertion → `next().value` donne la plus vieille).
+ */
+const MAX_CACHE_ENTRIES = 500;
 
 const cache = new Map<string, UrlUnfurl>();
 
@@ -111,6 +118,13 @@ export async function unfurl(url: string): Promise<UrlUnfurl | null> {
       favicon: extractFavicon(html, baseUrl),
       fetchedAt: Date.now(),
     };
+    // LRU douce : si on dépasse le plafond, on évince la plus ancienne
+    // entrée par ordre d'insertion (l'API `Map.keys()` itère dans cet
+    // ordre — fonctionne tant qu'on n'a pas réinséré une clé existante).
+    if (cache.size >= MAX_CACHE_ENTRIES) {
+      const oldest = cache.keys().next().value;
+      if (oldest !== undefined) cache.delete(oldest);
+    }
     cache.set(url, result);
     return result;
   } catch {

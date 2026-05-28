@@ -99,7 +99,6 @@ export type ModuleId =
   | 'gitlocal'
   | 'claude'
   | 'tasks'
-  | 'messages'
   | 'clipboard'
   | 'vpn'
   | 'teams'
@@ -110,9 +109,8 @@ export type Density = 'dense' | 'normal' | 'airy';
 
 /**
  * Identifiants des modules qui rendent une tuile dans le dashboard étendu.
- * Sous-ensemble strict de `ModuleId` : `messages` et `clipboard` n'ont
- * pas de card (page dédiée pour clipboard, pas encore implémenté pour
- * messages).
+ * Sous-ensemble strict de `ModuleId` : `clipboard` n'a pas de card (page
+ * plein dashboard à la place, ouverte via bouton ou Ctrl+Shift+V).
  */
 export type DashTileId =
   | 'music'
@@ -137,9 +135,8 @@ export interface DashTile {
 }
 
 /**
- * Configuration spécifique à chaque module. Beaucoup de champs sont des
- * placeholders en attendant que les modules correspondants soient câblés
- * (gitlab, claude, meetings, messages restent en stub Phase 3).
+ * Configuration spécifique à chaque module. Chaque module câblé déclare
+ * ici sa structure de réglages persistés.
  */
 export interface ModuleConfig {
   music: {
@@ -194,10 +191,10 @@ export interface ModuleConfig {
      */
     ignorePatterns: string[];
     /**
-     * Fréquence de polling en secondes. Minimum 15 s pour ne pas saturer
-     * le disque ; défaut 60 s.
+     * Fréquence de polling en millisecondes. Minimum 15 000 ms pour ne pas
+     * saturer le disque ; défaut 60 000 ms.
      */
-    pollSec: number;
+    pollMs: number;
     /**
      * Afficher la chip dans le notch rétracté quand au moins un repo est
      * "dirty" (uncommitted > 0 OU ahead > 0).
@@ -237,8 +234,8 @@ export interface ModuleConfig {
     watchedLabels: string[];
     /** Filtrer uniquement les MR/issues assignées à l'utilisateur. */
     assignedOnly: boolean;
-    /** Fréquence de polling en secondes. */
-    pollSec: number;
+    /** Fréquence de polling en millisecondes (défaut 120 000 ms). */
+    pollMs: number;
     collapsed: boolean;
     /** Afficher la card dans le dashboard étendu. */
     showCard: boolean;
@@ -268,13 +265,6 @@ export interface ModuleConfig {
     /** Afficher la card compteur dans le dashboard étendu. */
     showCard: boolean;
   };
-  messages: {
-    /** Afficher l'aperçu du message dans la card. */
-    showPreview: boolean;
-    /** Marquer automatiquement comme lu à l'ouverture du notch. */
-    markReadOnOpen: boolean;
-    collapsed: boolean;
-  };
   clipboard: {
     /**
      * Nombre maximal d'entrées non-épinglées conservées dans l'historique.
@@ -298,10 +288,11 @@ export interface ModuleConfig {
   };
   vpn: {
     /**
-     * Fréquence de polling en secondes. Minimum 5 s — un appel PowerShell
-     * coûte ~150 ms, on peut descendre bas sans saturer. Défaut 10 s.
+     * Fréquence de polling en millisecondes. Minimum 5 000 ms — un appel
+     * PowerShell coûte ~150 ms, on peut descendre bas sans saturer.
+     * Défaut 10 000 ms.
      */
-    pollSec: number;
+    pollMs: number;
     /**
      * Récupère le pays de l'IP du peer/serveur via `ipapi.co` (lookup
      * caché 6 h par IP). Désactivable pour rester offline-only.
@@ -319,11 +310,11 @@ export interface ModuleConfig {
   };
   teams: {
     /**
-     * Fréquence de polling Graph `GET /me/presence` en secondes.
-     * Minimum 15 s — Graph throttle à ~1500 req / 30 s par app, on est
-     * largement sous. Défaut 30 s.
+     * Fréquence de polling Graph `GET /me/presence` en millisecondes.
+     * Minimum 15 000 ms — Graph throttle à ~1500 req / 30 s par app, on
+     * est largement sous. Défaut 30 000 ms.
      */
-    pollSec: number;
+    pollMs: number;
     /**
      * `accountId` du `CalendarAccount` Outlook utilisé pour Teams Presence.
      * `null` = fallback automatique sur le premier compte Outlook trouvé.
@@ -420,7 +411,6 @@ export const DEFAULT_SETTINGS: Settings = {
     gitlocal: true,
     claude: true,
     tasks: true,
-    messages: true,
     clipboard: true,
     vpn: true,
     teams: true,
@@ -448,7 +438,7 @@ export const DEFAULT_SETTINGS: Settings = {
       notify: { mr: true, pipelines: false, comments: false, watchedIssues: true },
       watchedLabels: [],
       assignedOnly: false,
-      pollSec: 120,
+      pollMs: 120_000,
       collapsed: true,
       showCard: true,
     },
@@ -456,7 +446,7 @@ export const DEFAULT_SETTINGS: Settings = {
       rootDirs: [],
       scanDepth: 3,
       ignorePatterns: ['node_modules', 'dist', 'out', 'bin', 'obj', '.next', '.vs'],
-      pollSec: 60,
+      pollMs: 60_000,
       collapsed: true,
       showCard: true,
     },
@@ -473,11 +463,6 @@ export const DEFAULT_SETTINGS: Settings = {
       collapsed: true,
       showCard: true,
     },
-    messages: {
-      showPreview: true,
-      markReadOnOpen: false,
-      collapsed: true,
-    },
     clipboard: {
       maxItems: 50,
       collapsed: true,
@@ -485,14 +470,14 @@ export const DEFAULT_SETTINGS: Settings = {
       maskSensitive: true,
     },
     vpn: {
-      pollSec: 10,
+      pollMs: 10_000,
       lookupCountry: true,
       showWhenDisconnected: false,
       collapsed: true,
       showCard: true,
     },
     teams: {
-      pollSec: 30,
+      pollMs: 30_000,
       outlookAccountId: null,
       dndCouplingEnabled: true,
       collapsed: true,
@@ -1380,14 +1365,18 @@ export const IpcChannel = {
   SettingsGetAll: 'settings:getAll',
   /** Renderer → main (invoke) : bascule l'état DND, retourne le nouveau Settings. */
   SettingsToggleDnd: 'settings:toggleDnd',
-  /** Renderer → main (invoke) : ajoute une tâche, retourne le nouveau Settings. */
-  SettingsAddTask: 'settings:addTask',
-  /** Renderer → main (invoke) : bascule done sur une tâche, retourne le nouveau Settings. */
-  SettingsToggleTask: 'settings:toggleTask',
-  /** Renderer → main (invoke) : supprime une tâche, retourne le nouveau Settings. */
-  SettingsRemoveTask: 'settings:removeTask',
-  /** Renderer → main (invoke) : supprime toutes les tâches done, retourne le nouveau Settings. */
-  SettingsClearDoneTasks: 'settings:clearDoneTasks',
+  /** Renderer → main (invoke) : snapshot des tâches courantes. */
+  TasksGetState: 'tasks:getState',
+  /** Renderer → main (invoke) : ajoute une tâche, retourne la liste mise à jour. */
+  TasksAdd: 'tasks:add',
+  /** Renderer → main (invoke) : bascule done sur une tâche, retourne la liste. */
+  TasksToggle: 'tasks:toggle',
+  /** Renderer → main (invoke) : supprime une tâche, retourne la liste. */
+  TasksRemove: 'tasks:remove',
+  /** Renderer → main (invoke) : supprime toutes les tâches done, retourne la liste. */
+  TasksClearDone: 'tasks:clearDone',
+  /** Main → renderer : push d'une nouvelle liste de tâches après mutation. */
+  TasksChange: 'tasks:change',
   /** Renderer → main (invoke) : active/désactive un module, retourne le nouveau Settings. */
   SettingsSetModule: 'settings:setModule',
   /** Renderer → main (invoke) : règle la densité visuelle, retourne le nouveau Settings. */
@@ -1612,8 +1601,6 @@ export const IpcChannel = {
   /** Main → renderer : push d'un nouvel UpdateState (event autoUpdater). */
   UpdaterChange: 'updater:change',
 } as const;
-
-export type IpcChannelValue = (typeof IpcChannel)[keyof typeof IpcChannel];
 
 /**
  * Surface API exposée au renderer via contextBridge.
@@ -1910,13 +1897,23 @@ export interface NotchApi {
     /** S'abonne au push de MusicState. Retourne une fonction de désabonnement. */
     onChange: (cb: (state: MusicState) => void) => () => void;
   };
+  tasks: {
+    /** Snapshot courant des tâches. */
+    getState: () => Promise<Task[]>;
+    /** Ajoute une tâche. Retourne la liste mise à jour. */
+    add: (text: string) => Promise<Task[]>;
+    /** Bascule done sur une tâche. Retourne la liste. */
+    toggle: (id: string) => Promise<Task[]>;
+    /** Supprime une tâche. Retourne la liste. */
+    remove: (id: string) => Promise<Task[]>;
+    /** Supprime toutes les tâches done. Retourne la liste. */
+    clearDone: () => Promise<Task[]>;
+    /** S'abonne au push de la liste de tâches après mutation. */
+    onChange: (cb: (tasks: Task[]) => void) => () => void;
+  };
   settings: {
     getAll: () => Promise<Settings>;
     toggleDnd: () => Promise<Settings>;
-    addTask: (text: string) => Promise<Settings>;
-    toggleTask: (id: string) => Promise<Settings>;
-    removeTask: (id: string) => Promise<Settings>;
-    clearDoneTasks: () => Promise<Settings>;
     /** Active ou désactive un module (Music, Tasks, etc.). */
     setModule: (id: ModuleId, enabled: boolean) => Promise<Settings>;
     /** Règle la densité visuelle globale du dashboard. */

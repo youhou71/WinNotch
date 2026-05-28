@@ -9,11 +9,11 @@
  *  - pourcentage tabular-nums à droite
  *  - dropdown des sorties disponibles ancré au bottom du footer
  *
- * Le composant est entièrement piloté par le hook `useAudio()` qui parle
- * au main via IPC. Aucune logique audio n'est dans le renderer.
+ * Le composant lit l'état audio depuis `<AudioProvider>` (subscription IPC
+ * unique). Aucune logique audio n'est dans le renderer.
  */
 import { useEffect, useRef, useState } from 'react';
-import { useAudio } from './useAudio';
+import { useAudioContext } from './AudioContext';
 import type { AudioDevice } from './types';
 
 /**
@@ -48,7 +48,7 @@ function deviceMeta(d: AudioDevice): string {
 }
 
 export function AudioFooter() {
-  const { state, setVolume, toggleMute, selectDevice } = useAudio();
+  const { state, setVolume, toggleMute, selectDevice } = useAudioContext();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   // Drapeau partagé entre handlers : true tant qu'on drag le slider, pour

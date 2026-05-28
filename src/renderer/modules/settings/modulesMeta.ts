@@ -59,13 +59,6 @@ export const SETTINGS_MODULES: ModuleMeta[] = [
     description: 'Liste rapide via le préfixe « - ».',
   },
   {
-    id: 'messages',
-    label: 'Messages',
-    icon: 'fa-solid fa-comment',
-    color: '#60a5fa',
-    description: 'Boîte unifiée WhatsApp, Messenger, etc. (à venir).',
-  },
-  {
     id: 'clipboard',
     label: 'Presse-papier intelligent',
     icon: 'fa-solid fa-clipboard',

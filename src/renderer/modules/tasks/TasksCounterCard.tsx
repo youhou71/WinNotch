@@ -8,7 +8,7 @@
  * Cliquer sur la card pré-remplit la search bar avec `-` pour basculer
  * en mode ajout de tâche.
  */
-import { useSettingsContext } from '../settings/SettingsContext';
+import { useTasksContext } from './TasksContext';
 
 interface Props {
   /** Pré-remplit la search bar avec un préfixe (ex. "-" pour activer le mode tâche). */
@@ -16,9 +16,9 @@ interface Props {
 }
 
 export function TasksCounterCard({ onOpen }: Props) {
-  const { settings } = useSettingsContext();
-  const active = settings.tasks.filter((t) => !t.done).length;
-  const total = settings.tasks.length;
+  const { tasks } = useTasksContext();
+  const active = tasks.filter((t) => !t.done).length;
+  const total = tasks.length;
 
   return (
     <button

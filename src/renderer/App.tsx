@@ -43,6 +43,9 @@ import { VpnProvider } from './modules/vpn/VpnContext';
 import { useVpnToasts } from './modules/vpn/useVpnToasts';
 import { TeamsProvider } from './modules/teams/TeamsContext';
 import { SystemProvider } from './modules/system/SystemContext';
+import { AudioProvider } from './modules/audio/AudioContext';
+import { SearchProvider, useSearchContext } from './modules/search/SearchContext';
+import { TasksProvider } from './modules/tasks/TasksContext';
 import { UpdaterProvider } from './modules/updater/UpdaterContext';
 import { useUpdateToasts } from './modules/updater/useUpdateToasts';
 import {
@@ -120,6 +123,12 @@ function AppInner() {
   useEffect(() => {
     if (mode === 'collapsed') closeClipboardPage();
   }, [mode, closeClipboardPage]);
+  // Idem pour la search bar : on vide la query au passage en collapsed
+  // pour que la prochaine ouverture du notch parte sur un état neutre.
+  const { clearSearch } = useSearchContext();
+  useEffect(() => {
+    if (mode === 'collapsed') clearSearch();
+  }, [mode, clearSearch]);
 
   return (
     <>
@@ -138,6 +147,9 @@ export function App() {
   return (
     <SettingsProvider>
       <ToastProvider>
+        <AudioProvider>
+        <SearchProvider>
+        <TasksProvider>
         <MusicProvider>
           <MeetingsProvider>
             <ClaudeProvider>
@@ -159,6 +171,9 @@ export function App() {
             </ClaudeProvider>
           </MeetingsProvider>
         </MusicProvider>
+        </TasksProvider>
+        </SearchProvider>
+        </AudioProvider>
       </ToastProvider>
     </SettingsProvider>
   );

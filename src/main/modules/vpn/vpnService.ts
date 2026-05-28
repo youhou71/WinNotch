@@ -2,7 +2,7 @@
  * Service du module VPN status.
  *
  * Responsabilités :
- *  - Polling PowerShell toutes les `pollSec` secondes (défaut 10).
+ *  - Polling PowerShell toutes les `pollMs` ms (défaut 10 000).
  *  - Maintien d'une table interne `connectedSince` indexée par
  *    `interfaceName` pour fournir une durée de session stable même
  *    entre deux ticks.
@@ -29,7 +29,7 @@ import { getNotchWindow } from '../../window/notchWindow';
 import { buildConnections, runDetectScript, toVpnConnection } from './vpnDetector';
 import { lookupCountry } from './countryLookup';
 
-const MIN_POLL_SEC = 5;
+const MIN_POLL_MS = 5_000;
 
 const store = new Store<Settings>({
   defaults: DEFAULT_SETTINGS,
@@ -168,19 +168,19 @@ function restartPolling(): void {
     pollTimer = null;
   }
   const cfg = store.get('moduleConfig').vpn;
-  const sec = Math.max(MIN_POLL_SEC, cfg.pollSec || 10);
+  const ms = Math.max(MIN_POLL_MS, cfg.pollMs || 10_000);
   pollTimer = setInterval(() => {
     void refreshOnce();
-  }, sec * 1000);
+  }, ms);
 }
 
-/** Restart du timer si l'utilisateur change `pollSec`. */
+/** Restart du timer si l'utilisateur change `pollMs`. */
 function subscribeConfigChanges(): void {
   store.onDidChange('moduleConfig', (newVal, oldVal) => {
     const n = newVal?.vpn;
     const o = oldVal?.vpn;
     if (!n || !o) return;
-    if (n.pollSec !== o.pollSec) restartPolling();
+    if (n.pollMs !== o.pollMs) restartPolling();
   });
 }
 

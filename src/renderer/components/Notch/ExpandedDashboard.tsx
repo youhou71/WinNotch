@@ -19,32 +19,71 @@
  *
  * Les modules sont rendus uniquement si activés dans `settings.modules`.
  */
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { AudioFooter } from '../../modules/audio/AudioFooter';
 import { MusicCard } from '../../modules/music/MusicCard';
 import { useMusicContext } from '../../modules/music/MusicContext';
 import { useSettingsContext } from '../../modules/settings/SettingsContext';
+import { useSearchContext } from '../../modules/search/SearchContext';
 import { TasksCounterCard } from '../../modules/tasks/TasksCounterCard';
 import { TasksList } from '../../modules/tasks/TasksList';
 import { MeetingsCard } from '../../modules/meetings/MeetingsCard';
 import { ClaudeCard } from '../../modules/claude/ClaudeCard';
 import { useClaudeContext } from '../../modules/claude/ClaudeContext';
 import { GitLabCard } from '../../modules/gitlab/GitLabCard';
-import { GitLabPanel } from '../../modules/gitlab/GitLabPanel';
 import { GitLocalCard } from '../../modules/gitlocal/GitLocalCard';
 import { GitLocalPanel } from '../../modules/gitlocal/GitLocalPanel';
 import { VpnCard } from '../../modules/vpn/VpnCard';
 import { TeamsCard } from '../../modules/teams/TeamsCard';
 import { SystemCard } from '../../modules/system/SystemCard';
-import { ClipboardPage } from '../../modules/clipboard/ClipboardPage';
 import { ClipboardDetectionView } from '../../modules/clipboard/ClipboardDetectionView';
 import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
 import { NotchSearch } from '../../modules/search/NotchSearch';
 import { detectMode } from '../../modules/search/detectMode';
 import { SearchHelp } from '../../modules/search/SearchHelp';
-import { SettingsView } from '../../modules/settings/SettingsView';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
+
+// Lazy-load des 3 pages plein dashboard (chargées à la 1ère ouverture
+// seulement). Économise ~150 KB de JS au boot du renderer et réduit le
+// heap au repos quand l'utilisateur n'a jamais ouvert ces overlays.
+// `React.lazy` requiert un default export → on remappe le named export.
+const SettingsView = lazy(() =>
+  import('../../modules/settings/SettingsView').then((m) => ({
+    default: m.SettingsView,
+  })),
+);
+const GitLabPanel = lazy(() =>
+  import('../../modules/gitlab/GitLabPanel').then((m) => ({
+    default: m.GitLabPanel,
+  })),
+);
+const ClipboardPage = lazy(() =>
+  import('../../modules/clipboard/ClipboardPage').then((m) => ({
+    default: m.ClipboardPage,
+  })),
+);
+
+/**
+ * Placeholder discret affiché pendant le fetch+parse d'un chunk lazy.
+ * Volontairement minimal : l'utilisateur ouvre une page connue, le notch
+ * est déjà étendu, on évite un saut visuel trop violent.
+ */
+function DashboardLoader() {
+  return (
+    <div className="dashboard-loader" data-notch-hit="true">
+      <i className="fa-solid fa-circle-notch fa-spin" />
+    </div>
+  );
+}
 
 interface Props {
   /** Appelé après une action de search réussie (rétracte le notch). */
@@ -55,7 +94,7 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
   const { state: music } = useMusicContext();
   const { active: claudeActive } = useClaudeContext();
   const { settings, toggleDnd } = useSettingsContext();
-  const [query, setQuery] = useState('');
+  const { query, setQuery } = useSearchContext();
   const [settingsOpen, setSettingsOpen] = useState(false);
   /**
    * Overlay GitLab plein dashboard. Ouvert par clic sur la GitLabCard
@@ -231,14 +270,19 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
         )}
 
         {/* Settings : prend la place du dashboard tant que ni la search
-            ni un autre overlay n'est actif. */}
+            ni un autre overlay n'est actif. Chargé en lazy. */}
         {settingsOpen && !inSearch && (
-          <SettingsView onClose={() => setSettingsOpen(false)} />
+          <Suspense fallback={<DashboardLoader />}>
+            <SettingsView onClose={() => setSettingsOpen(false)} />
+          </Suspense>
         )}
 
-        {/* Panel GitLab plein dashboard, ouvert par clic sur la card. */}
+        {/* Panel GitLab plein dashboard, ouvert par clic sur la card.
+            Chargé en lazy. */}
         {gitlabPanelOpen && !inSearch && !settingsOpen && (
-          <GitLabPanel onClose={() => setGitlabPanelOpen(false)} />
+          <Suspense fallback={<DashboardLoader />}>
+            <GitLabPanel onClose={() => setGitlabPanelOpen(false)} />
+          </Suspense>
         )}
 
         {/* Panel Git local plein dashboard, ouvert par clic sur la card. */}
@@ -247,9 +291,11 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
         )}
 
         {/* Page Clipboard plein dashboard, ouverte via bouton search bar
-            ou raccourci global Ctrl+Shift+V. */}
+            ou raccourci global Ctrl+Shift+V. Chargée en lazy. */}
         {clipboardOpen && !inSearch && !settingsOpen && !gitlabPanelOpen && !gitlocalPanelOpen && (
-          <ClipboardPage onClose={closeClipboard} />
+          <Suspense fallback={<DashboardLoader />}>
+            <ClipboardPage onClose={closeClipboard} />
+          </Suspense>
         )}
 
         {/* Mode `-` (tâche) : liste détaillée. Compteur déjà inclus dans
@@ -281,8 +327,8 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
               // Module éteint dans Settings → on n'occupe pas le slot.
               if (!modulesOn[tile.id]) return null;
               // Skip si la card est désactivée via Settings (showCard=false).
-              // Toutes les tuiles supportent ce toggle ; clipboard et
-              // messages ne sont pas dans DashTileId donc pas concernées.
+              // Toutes les tuiles supportent ce toggle ; clipboard n'est pas
+              // dans DashTileId (page plein dashboard à la place) donc pas concerné.
               const tileCfg = settings.moduleConfig[tile.id] as
                 | { showCard?: boolean }
                 | undefined;

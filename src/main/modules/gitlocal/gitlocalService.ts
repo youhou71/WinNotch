@@ -32,7 +32,7 @@ import {
 import { getNotchWindow } from '../../window/notchWindow';
 import { scanForRepos } from './gitlocalScanner';
 
-const MIN_POLL_SEC = 15;
+const MIN_POLL_MS = 15_000;
 
 const store = new Store<Settings>({
   defaults: DEFAULT_SETTINGS,
@@ -190,16 +190,16 @@ function restartPolling(): void {
     pollTimer = null;
   }
   const cfg = store.get('moduleConfig').gitlocal;
-  const sec = Math.max(MIN_POLL_SEC, cfg.pollSec || 60);
+  const ms = Math.max(MIN_POLL_MS, cfg.pollMs || 60_000);
   pollTimer = setInterval(() => {
     void refreshOnce();
-  }, sec * 1000);
+  }, ms);
 }
 
 /**
  * Réagit aux changements de `moduleConfig.gitlocal` :
  *  - `rootDirs` / `scanDepth` / `ignorePatterns` modifié → rescan immédiat
- *  - `pollSec` modifié → restart du timer
+ *  - `pollMs` modifié → restart du timer
  */
 function subscribeConfigChanges(): void {
   store.onDidChange('moduleConfig', (newVal, oldVal) => {
@@ -215,7 +215,7 @@ function subscribeConfigChanges(): void {
       void refreshOnce();
     }
 
-    if (newG.pollSec !== oldG.pollSec) {
+    if (newG.pollMs !== oldG.pollMs) {
       restartPolling();
     }
   });
