@@ -1,0 +1,144 @@
+/*
+ * system.css — chip + card du module Système live (CPU / RAM / Réseau).
+ *
+ * Couleur signature : vert `--accent-green` (#34d399). La couleur exacte
+ * de chaque cellule et du sparkline est dynamique selon le seuil
+ * (vert → or → rouge) — voir `thresholdColor` dans `formatters.ts`.
+ *
+ * Layout volontairement très dense : la card est conçue pour tenir sur
+ * une seule rangée horizontale (12 cols), à la manière d'une status bar.
+ */
+
+/* ───────────── Chip (collapsed row) ─────────────
+ *
+ * Mini-sparkline SVG + valeur courte. Couleur pilotée par inline style
+ * (`color: var(--accent-green) | --accent-warm | --accent-red`), héritée
+ * par les enfants via `currentColor`.
+ */
+.chip-system {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chip-system-val {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: currentColor;
+  /* Largeur fixe pour ne pas faire bouger la chip à chaque tick — la
+     valeur la plus longue raisonnable est ~"1.5 Gb/s". */
+  min-width: 42px;
+  text-align: left;
+  letter-spacing: 0.01em;
+}
+
+.system-sparkline {
+  display: block;
+}
+
+/* ───────────── Card dashboard ─────────────
+ *
+ * Une seule rangée, 3 cellules métriques (CPU/RAM/NET) + l'uptime tout à
+ * droite. Aucun header ni icône module — la lisibilité prime, l'espace
+ * vertical reste minimal.
+ */
+.system-card {
+  padding: var(--d-card-pad-y) var(--d-card-pad-x);
+  background: rgba(52, 211, 153, 0.05);
+  border: 1px solid rgba(52, 211, 153, 0.16);
+  border-radius: var(--d-card-radius);
+  color: var(--txt);
+  min-width: 0;
+}
+
+.system-row {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  min-width: 0;
+}
+
+/* Une cellule prend la place dispo, la barre peut s'étirer ; min-width:0
+ * pour permettre la troncature interne propre. */
+.system-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.system-cell-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.system-cell-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--txt-dim);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.system-cell-val {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  /* color piloté par inline style en JS selon le seuil. */
+}
+
+.system-cell-track {
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.system-cell-fill {
+  height: 100%;
+  border-radius: 3px;
+  /* Transition douce à 1 Hz, ne saccade pas la lecture des valeurs. */
+  transition: width 220ms ease, background-color 220ms ease;
+}
+
+/* L'uptime à droite : icône horloge + chiffres, sans barre. */
+.system-uptime {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--txt-dim);
+  padding-left: 6px;
+}
+
+.system-uptime i {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.system-uptime-val {
+  letter-spacing: 0.02em;
+}
+
+.system-error-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-red);
+}

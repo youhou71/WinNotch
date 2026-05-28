@@ -46,6 +46,10 @@ import {
 import { registerVpnIpc, stopVpn } from './modules/vpn/vpnService';
 import { registerTeamsIpc, stopTeams } from './modules/teams/teamsService';
 import {
+  registerSystemIpc,
+  stopSystem,
+} from './modules/system/systemService';
+import {
   registerUpdaterIpc,
   stopUpdater,
 } from './modules/updater/updaterService';
@@ -102,6 +106,13 @@ app.whenReady().then(async () => {
     registerTeamsIpc();
   } else {
     console.log('[WinNotch] Module Teams désactivé (WINNOTCH_DISABLE_TEAMS=1)');
+  }
+  if (process.env.WINNOTCH_DISABLE_SYSTEM !== '1') {
+    registerSystemIpc();
+  } else {
+    console.log(
+      '[WinNotch] Module Système live désactivé (WINNOTCH_DISABLE_SYSTEM=1)',
+    );
   }
   registerUpdaterIpc();
   registerAudioIpc();
@@ -164,6 +175,7 @@ app.on('window-all-closed', () => {
   stopGitLocal();
   stopVpn();
   stopTeams();
+  stopSystem();
   stopUpdater();
   stopFullscreenDetector();
   unregisterGlobalShortcuts();
@@ -185,6 +197,7 @@ app.on('before-quit', () => {
   stopGitLocal();
   stopVpn();
   stopTeams();
+  stopSystem();
   stopUpdater();
   stopFullscreenDetector();
   unregisterGlobalShortcuts();

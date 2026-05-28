@@ -35,6 +35,7 @@ import { GitLocalCard } from '../../modules/gitlocal/GitLocalCard';
 import { GitLocalPanel } from '../../modules/gitlocal/GitLocalPanel';
 import { VpnCard } from '../../modules/vpn/VpnCard';
 import { TeamsCard } from '../../modules/teams/TeamsCard';
+import { SystemCard } from '../../modules/system/SystemCard';
 import { ClipboardPage } from '../../modules/clipboard/ClipboardPage';
 import { ClipboardDetectionView } from '../../modules/clipboard/ClipboardDetectionView';
 import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
@@ -312,6 +313,7 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
                   )}
                   {tile.id === 'vpn' && <VpnCard />}
                   {tile.id === 'teams' && <TeamsCard />}
+                  {tile.id === 'system' && <SystemCard />}
                 </div>
               );
             })}

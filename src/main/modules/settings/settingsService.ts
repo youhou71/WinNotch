@@ -34,17 +34,32 @@ import {
   type Task,
 } from '../../../shared/types';
 
-/** IDs valides pour une tuile du dashboard — utilisé en validation runtime. */
-const VALID_DASH_TILE_IDS: DashTileId[] = [
-  'music',
-  'meetings',
-  'gitlab',
-  'gitlocal',
-  'claude',
-  'tasks',
-  'vpn',
-  'teams',
-];
+/**
+ * IDs valides pour une tuile du dashboard — utilisé en validation runtime
+ * de `dashboardLayout` quand le renderer pousse un nouveau layout (drag-
+ * and-drop dans Settings → Disposition) ET au boot pour réconcilier un
+ * `config.json` éventuellement périmé.
+ *
+ * On déclare une table `Record<DashTileId, true>` (via `satisfies`) plutôt
+ * qu'un simple `DashTileId[]` : ainsi TypeScript échoue au build si un
+ * nouvel ID est ajouté à l'union sans être enregistré ici. Sans ce filet,
+ * un drag-and-drop d'une nouvelle tuile serait silencieusement filtré par
+ * `mergeDashboardLayout()` et l'utilisateur ne pourrait jamais la
+ * réordonner. Cas réel rencontré au moment d'ajouter la tuile `system`.
+ */
+const DASH_TILE_ID_TABLE = {
+  music: true,
+  meetings: true,
+  gitlab: true,
+  gitlocal: true,
+  claude: true,
+  tasks: true,
+  vpn: true,
+  teams: true,
+  system: true,
+} satisfies Record<DashTileId, true>;
+
+const VALID_DASH_TILE_IDS = Object.keys(DASH_TILE_ID_TABLE) as DashTileId[];
 import { getNotchWindow } from '../../window/notchWindow';
 
 const store = new Store<Settings>({

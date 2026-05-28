@@ -25,6 +25,7 @@ import { useGitLocalContext } from '../../modules/gitlocal/GitLocalContext';
 import { VpnChip } from '../../modules/vpn/VpnChip';
 import { useVpnContext } from '../../modules/vpn/VpnContext';
 import { TeamsChip } from '../../modules/teams/TeamsChip';
+import { SystemChip } from '../../modules/system/SystemChip';
 import { NotchTooltip } from '../Tooltip/NotchTooltip';
 import { ClipboardChip } from '../../modules/clipboard/ClipboardChip';
 import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
@@ -122,6 +123,13 @@ export function CollapsedRow() {
   const teamsCfg = settings.moduleConfig.teams;
   const teamsEnabled = settings.modules.teams && teamsCfg.collapsed;
 
+  // La chip Système live : module activé + autorisée en collapsed. Toujours
+  // pertinente (pas de condition "no-data") puisque CPU/RAM/uptime sont
+  // toujours disponibles. Pas masquée en DND — c'est un état système :
+  // l'utilisateur veut voir la charge même pendant une démo.
+  const systemCfg = settings.moduleConfig.system;
+  const systemEnabled = settings.modules.system && systemCfg.collapsed;
+
   return (
     <div
       className="collapsed-row"
@@ -175,6 +183,9 @@ export function CollapsedRow() {
             (le statut Teams reste pertinent pendant un mode DND, surtout
             avec le couplage bidirectionnel P3 où DND WinNotch écrit Teams). */}
         {teamsEnabled && <TeamsChip />}
+        {/* Système live (CPU/RAM/NET) — toujours pertinent, jamais masqué
+            par DND : c'est une jauge d'état de la machine, pas une alerte. */}
+        {systemEnabled && <SystemChip />}
       </div>
     </div>
   );

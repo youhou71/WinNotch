@@ -36,6 +36,7 @@ import {
   type TeamsState,
   type UpdateState,
   type VpnState,
+  type SystemState,
 } from '../shared/types';
 
 const api: NotchApi = {
@@ -244,6 +245,16 @@ const api: NotchApi = {
       ipcRenderer.on(IpcChannel.VpnChange, handler);
       return () => {
         ipcRenderer.off(IpcChannel.VpnChange, handler);
+      };
+    },
+  },
+  system: {
+    getState: () => ipcRenderer.invoke(IpcChannel.SystemGetState),
+    onChange: (cb: (state: SystemState) => void) => {
+      const handler = (_: unknown, state: SystemState) => cb(state);
+      ipcRenderer.on(IpcChannel.SystemChange, handler);
+      return () => {
+        ipcRenderer.off(IpcChannel.SystemChange, handler);
       };
     },
   },

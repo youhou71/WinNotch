@@ -42,6 +42,7 @@ import { GitLocalProvider } from './modules/gitlocal/GitLocalContext';
 import { VpnProvider } from './modules/vpn/VpnContext';
 import { useVpnToasts } from './modules/vpn/useVpnToasts';
 import { TeamsProvider } from './modules/teams/TeamsContext';
+import { SystemProvider } from './modules/system/SystemContext';
 import { UpdaterProvider } from './modules/updater/UpdaterContext';
 import { useUpdateToasts } from './modules/updater/useUpdateToasts';
 import {
@@ -144,11 +145,13 @@ export function App() {
                 <GitLocalProvider>
                   <VpnProvider>
                     <TeamsProvider>
-                      <UpdaterProvider>
-                        <ClipboardProvider>
-                          <AppInner />
-                        </ClipboardProvider>
-                      </UpdaterProvider>
+                      <SystemProvider>
+                        <UpdaterProvider>
+                          <ClipboardProvider>
+                            <AppInner />
+                          </ClipboardProvider>
+                        </UpdaterProvider>
+                      </SystemProvider>
                     </TeamsProvider>
                   </VpnProvider>
                 </GitLocalProvider>

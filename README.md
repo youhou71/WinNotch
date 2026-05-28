@@ -64,6 +64,15 @@ Détecte les sessions VPN actives sur la machine — **ProtonVPN**, **NordVPN**,
 
 Read-only : aucune action exposée (pas de connect / disconnect). Le module observe l'état via `Get-NetAdapter` + `Get-VpnConnection` + scan de processus, sans toucher à la session. Résolution du pays best-effort via `ipapi.co` (cache 6 h, désactivable).
 
+### Système live (CPU / RAM / Réseau)
+Module toujours actif, lecture seule. Chip dans le notch rétracté avec un **mini-sparkline** (60 dernières secondes) + pourcentage de la métrique choisie (CPU par défaut, ou RAM, ou NET — configurable). Couleur dynamique vert → or → rouge selon des seuils raisonnables (CPU/RAM : 50 % / 80 % ; NET : 1 Mb/s / 10 Mb/s). Visible même en mode Ne pas Déranger — c'est un état système.
+
+Dans le dashboard étendu, une card compacte avec trois jauges horizontales (`CPU 14%`, `RAM 45%`, `NET 1.5 Mb/s`) + l'**uptime du PC** aligné à droite. La largeur des barres est animée doucement (transition 180 ms) pour rester lisible à 1 Hz.
+
+CPU/RAM/uptime sont lus en pur Node natif (`os.cpus()`, `os.totalmem()`, `os.uptime()`) — zéro dépendance. Le débit réseau est calculé via `Get-NetAdapterStatistics` (PowerShell, encodé en base64 comme le module VPN) sur deux snapshots consécutifs, en filtrant automatiquement les interfaces loopback / vEthernet / WSL / Bluetooth PAN / pseudo-interfaces. L'utilisateur peut whitelist explicitement certaines interfaces dans Settings.
+
+Polling configurable de 500 ms à 5 s (défaut 1 s).
+
 ### Teams (présence)
 Statut Microsoft Teams lu et piloté via Microsoft Graph (`/me/presence`). Pastille colorée dans le notch rétracté (vert = Disponible, rouge = Occupé, rouge foncé = Ne pas déranger, jaune = De retour bientôt / Absent). Card compacte avec les 5 boutons pour changer manuellement le statut + bouton « Auto » qui retire le statut manuel (`clearUserPreferredPresence`). Polling 30 s par défaut.
 

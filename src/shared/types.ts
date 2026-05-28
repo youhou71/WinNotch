@@ -102,7 +102,8 @@ export type ModuleId =
   | 'messages'
   | 'clipboard'
   | 'vpn'
-  | 'teams';
+  | 'teams'
+  | 'system';
 
 /** Densité visuelle du dashboard étendu. */
 export type Density = 'dense' | 'normal' | 'airy';
@@ -121,7 +122,8 @@ export type DashTileId =
   | 'claude'
   | 'tasks'
   | 'vpn'
-  | 'teams';
+  | 'teams'
+  | 'system';
 
 /**
  * Une tuile du dashboard. `cols` est la largeur en colonnes sur une
@@ -342,6 +344,31 @@ export interface ModuleConfig {
     /** Afficher la card dans le dashboard étendu. */
     showCard: boolean;
   };
+  system: {
+    /**
+     * Fréquence d'échantillonnage en millisecondes. 1 000 ms par défaut
+     * pour un sparkline temps réel ; minimum 500 ms (au-delà la lecture
+     * `os.cpus()` perd en stabilité), maximum 5 000 ms (~2 % CPU machine
+     * et sparkline trop lent).
+     */
+    pollMs: number;
+    /**
+     * Métrique affichée dans la chip du notch rétracté : `cpu` (défaut),
+     * `ram`, ou `net`. La card étendue affiche toujours les 3 jauges
+     * indépendamment de ce choix.
+     */
+    primaryMetric: SystemMetricKey;
+    /**
+     * Liste blanche des interfaces réseau à agréger pour la métrique NET
+     * (noms d'adaptateur Windows). `null` = auto (toutes les interfaces
+     * `Up` hors loopback, vEthernet, WSL, Bluetooth PAN, Pseudo-Interface).
+     */
+    netInterfaces: string[] | null;
+    /** Afficher la chip dans le notch rétracté. */
+    collapsed: boolean;
+    /** Afficher la card dans le dashboard étendu. */
+    showCard: boolean;
+  };
 }
 
 /**
@@ -397,6 +424,7 @@ export const DEFAULT_SETTINGS: Settings = {
     clipboard: true,
     vpn: true,
     teams: true,
+    system: true,
   },
   moduleConfig: {
     music: {
@@ -470,6 +498,13 @@ export const DEFAULT_SETTINGS: Settings = {
       collapsed: true,
       showCard: true,
     },
+    system: {
+      pollMs: 1000,
+      primaryMetric: 'cpu',
+      netInterfaces: null,
+      collapsed: true,
+      showCard: true,
+    },
   },
   // Layout par défaut — reproduit l'agencement historique :
   //   ┌── tasks (4) ─┬─── meetings (8) ───┐
@@ -486,6 +521,7 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: 'gitlocal', cols: 8 },
     { id: 'vpn', cols: 4 },
     { id: 'teams', cols: 4 },
+    { id: 'system', cols: 12 },
   ],
 };
 
@@ -823,6 +859,60 @@ export interface VpnState {
   /**
    * Erreur globale du dernier tick (PowerShell introuvable, timeout, etc.).
    * `null` quand le dernier tick s'est bien passé.
+   */
+  lastError: string | null;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  SYSTEM (CPU / RAM / Network live)
+ * ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * Métrique affichée dans la chip du notch rétracté. La card étendue
+ * affiche toujours les 3 jauges indépendamment de ce choix.
+ */
+export type SystemMetricKey = 'cpu' | 'ram' | 'net';
+
+/**
+ * Série historique pour le sparkline du chip. `points` est une fenêtre
+ * coulissante des dernières secondes ; sa longueur est fixée à 60 (voir
+ * `SYSTEM_HISTORY_LENGTH` côté main). `points[0]` est l'échantillon le
+ * plus ancien, `points[length - 1]` le plus récent.
+ */
+export interface SystemMetricSeries {
+  /** Valeur courante. Unité dépendante de la métrique (% pour cpu/ram, bytes/s pour net). */
+  value: number;
+  /** Fenêtre coulissante des N dernières mesures. */
+  history: number[];
+}
+
+/**
+ * Snapshot complet exposé au renderer via `system:getState` + push
+ * `system:change` à chaque tick de polling.
+ */
+export interface SystemState {
+  /** Utilisation CPU globale, 0-100. Calculé via deux snapshots `os.cpus()` consécutifs. */
+  cpu: SystemMetricSeries;
+  /** Utilisation mémoire physique, 0-100. */
+  ram: SystemMetricSeries & {
+    /** Octets utilisés (totalmem - freemem). */
+    usedBytes: number;
+    /** Mémoire totale en octets. */
+    totalBytes: number;
+  };
+  /**
+   * Débit réseau total (réception + émission) en bytes/seconde. Calculé via
+   * deux snapshots `Get-NetAdapterStatistics` consécutifs et le delta temps.
+   */
+  net: SystemMetricSeries;
+  /** Uptime du système en secondes (`os.uptime()`). */
+  uptimeSec: number;
+  /** Unix ms du dernier tick. 0 tant qu'aucun tick n'a fini. */
+  lastTickAt: number;
+  /**
+   * Erreur globale du dernier tick (PowerShell introuvable, timeout, etc.).
+   * `null` quand le dernier tick s'est bien passé. CPU/RAM continuent
+   * à fonctionner même si la lecture réseau échoue (NET reste à 0).
    */
   lastError: string | null;
 }
@@ -1506,6 +1596,11 @@ export const IpcChannel = {
   /** Main → renderer : push d'un nouveau TeamsState (polling ou action). */
   TeamsChange: 'teams:change',
 
+  /** Renderer → main (invoke) : retourne le SystemState courant. */
+  SystemGetState: 'system:getState',
+  /** Main → renderer : push d'un nouveau SystemState à chaque tick de polling. */
+  SystemChange: 'system:change',
+
   /** Renderer → main (invoke) : retourne l'UpdateState courant. */
   UpdaterGetState: 'updater:getState',
   /** Renderer → main (invoke) : déclenche un check immédiat auprès du provider. */
@@ -1682,6 +1777,12 @@ export interface NotchApi {
     reconnect: () => Promise<{ ok: boolean; error?: string }>;
     /** S'abonne au push de TeamsState (polling ou action). */
     onChange: (cb: (state: TeamsState) => void) => () => void;
+  };
+  system: {
+    /** Snapshot courant des métriques système (CPU/RAM/NET + uptime). */
+    getState: () => Promise<SystemState>;
+    /** S'abonne au push de SystemState à chaque tick de polling. */
+    onChange: (cb: (state: SystemState) => void) => () => void;
   };
   meetings: {
     /**

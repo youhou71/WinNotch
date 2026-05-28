@@ -27,6 +27,7 @@ import type {
 } from '../../../shared/types';
 import { useSettingsContext } from './SettingsContext';
 import { useMeetingsContext } from '../meetings/MeetingsContext';
+import { SystemSettings } from '../system/SystemSettings';
 import { useToast } from '../toast/ToastContext';
 import { MODULE_META_BY_ID } from './modulesMeta';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
@@ -96,6 +97,7 @@ export function SettingsModulePage({ moduleId, onBack }: Props) {
       {moduleId === 'clipboard' && <ClipboardSettings />}
       {moduleId === 'vpn' && <VpnSettings />}
       {moduleId === 'teams' && <TeamsSettings />}
+      {moduleId === 'system' && <SystemSettings />}
     </>
   );
 }

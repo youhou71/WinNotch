@@ -89,6 +89,14 @@ export const SETTINGS_MODULES: ModuleMeta[] = [
     description:
       'Statut Microsoft Teams (Disponible / Occupé / NPD…) lu et écrit via Graph.',
   },
+  {
+    id: 'system',
+    label: 'Système live',
+    icon: 'fa-solid fa-gauge-high',
+    color: '#34d399',
+    description:
+      'Utilisation CPU, RAM et réseau en temps réel avec sparkline.',
+  },
 ];
 
 export const MODULE_META_BY_ID: Record<ModuleId, ModuleMeta> =
