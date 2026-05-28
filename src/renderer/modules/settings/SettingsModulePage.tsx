@@ -8,10 +8,7 @@
  *   │  Sections spécifiques au module      │
  *   └──────────────────────────────────────┘
  *
- * Pour les modules avec backend déjà câblé (music, tasks), on affiche
- * leurs vraies configs. Pour les modules en stub (meetings, gitlab,
- * claude, messages), on affiche un placeholder + le toggle d'activation
- * principal — les configs détaillées arriveront avec leurs backends.
+ * Chaque module câblé déclare ici sa page de réglages (sections + rows).
  *
  * Le switch dans le header sert à activer/désactiver le module
  * directement depuis sa page (équivaut au toggle dans Home).
@@ -93,7 +90,6 @@ export function SettingsModulePage({ moduleId, onBack }: Props) {
       {moduleId === 'gitlab' && <GitLabSettings />}
       {moduleId === 'gitlocal' && <GitLocalSettings />}
       {moduleId === 'claude' && <ClaudeSettings />}
-      {moduleId === 'messages' && <MessagesSettings />}
       {moduleId === 'clipboard' && <ClipboardSettings />}
       {moduleId === 'vpn' && <VpnSettings />}
       {moduleId === 'teams' && <TeamsSettings />}
@@ -1355,43 +1351,6 @@ function GitLocalIgnoreField() {
   );
 }
 
-/* ───────────── Messages (stub backend) ───────────── */
-function MessagesSettings() {
-  const { settings, patchModuleConfig } = useSettingsContext();
-  const cfg = settings.moduleConfig.messages;
-  return (
-    <>
-      <SettingsSection title="Services">
-        <div className="settings-empty">
-          Connexion aux services (WhatsApp, Messenger, SMS, Telegram, Signal,
-          Discord…) à venir dans le module dédié.
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Affichage">
-        <SettingsToggleRow
-          icon="fa-solid fa-eye"
-          iconColor="#60a5fa"
-          label="Aperçu du message"
-          description="Affiche les premiers mots dans la liste."
-          value={cfg.showPreview}
-          onChange={(next) =>
-            void patchModuleConfig('messages', { showPreview: next })
-          }
-        />
-        <SettingsToggleRow
-          icon="fa-solid fa-check-double"
-          iconColor="#60a5fa"
-          label="Marquer comme lu à l'ouverture"
-          value={cfg.markReadOnOpen}
-          onChange={(next) =>
-            void patchModuleConfig('messages', { markReadOnOpen: next })
-          }
-        />
-      </SettingsSection>
-    </>
-  );
-}
 
 /* ───────────── Clipboard ───────────── */
 function ClipboardSettings() {

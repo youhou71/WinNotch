@@ -116,7 +116,7 @@
 }
 
 /* Classe de base partagée par toutes les chips de la collapsed row
-   (Music, Meetings, Messages, Tasks, GitLab, Claude, DND…).
+   (Music, Meetings, GitLab, GitLocal, Claude, Clipboard, VPN, Teams, Système, DND…).
    Sans cette règle, le contenu interne (cover + titre, icône + badge) se
    stacke verticalement et déborde la hauteur 34 px du notch. */
 .chip {

@@ -281,8 +281,8 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
               // Module éteint dans Settings → on n'occupe pas le slot.
               if (!modulesOn[tile.id]) return null;
               // Skip si la card est désactivée via Settings (showCard=false).
-              // Toutes les tuiles supportent ce toggle ; clipboard et
-              // messages ne sont pas dans DashTileId donc pas concernées.
+              // Toutes les tuiles supportent ce toggle ; clipboard n'est pas
+              // dans DashTileId (page plein dashboard à la place) donc pas concerné.
               const tileCfg = settings.moduleConfig[tile.id] as
                 | { showCard?: boolean }
                 | undefined;

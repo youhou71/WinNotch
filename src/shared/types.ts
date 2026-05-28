@@ -99,7 +99,6 @@ export type ModuleId =
   | 'gitlocal'
   | 'claude'
   | 'tasks'
-  | 'messages'
   | 'clipboard'
   | 'vpn'
   | 'teams'
@@ -110,9 +109,8 @@ export type Density = 'dense' | 'normal' | 'airy';
 
 /**
  * Identifiants des modules qui rendent une tuile dans le dashboard étendu.
- * Sous-ensemble strict de `ModuleId` : `messages` et `clipboard` n'ont
- * pas de card (page dédiée pour clipboard, pas encore implémenté pour
- * messages).
+ * Sous-ensemble strict de `ModuleId` : `clipboard` n'a pas de card (page
+ * plein dashboard à la place, ouverte via bouton ou Ctrl+Shift+V).
  */
 export type DashTileId =
   | 'music'
@@ -137,9 +135,8 @@ export interface DashTile {
 }
 
 /**
- * Configuration spécifique à chaque module. Beaucoup de champs sont des
- * placeholders en attendant que les modules correspondants soient câblés
- * (gitlab, claude, meetings, messages restent en stub Phase 3).
+ * Configuration spécifique à chaque module. Chaque module câblé déclare
+ * ici sa structure de réglages persistés.
  */
 export interface ModuleConfig {
   music: {
@@ -267,13 +264,6 @@ export interface ModuleConfig {
     collapsed: boolean;
     /** Afficher la card compteur dans le dashboard étendu. */
     showCard: boolean;
-  };
-  messages: {
-    /** Afficher l'aperçu du message dans la card. */
-    showPreview: boolean;
-    /** Marquer automatiquement comme lu à l'ouverture du notch. */
-    markReadOnOpen: boolean;
-    collapsed: boolean;
   };
   clipboard: {
     /**
@@ -420,7 +410,6 @@ export const DEFAULT_SETTINGS: Settings = {
     gitlocal: true,
     claude: true,
     tasks: true,
-    messages: true,
     clipboard: true,
     vpn: true,
     teams: true,
@@ -472,11 +461,6 @@ export const DEFAULT_SETTINGS: Settings = {
       sortBy: 'created',
       collapsed: true,
       showCard: true,
-    },
-    messages: {
-      showPreview: true,
-      markReadOnOpen: false,
-      collapsed: true,
     },
     clipboard: {
       maxItems: 50,
@@ -1612,8 +1596,6 @@ export const IpcChannel = {
   /** Main → renderer : push d'un nouvel UpdateState (event autoUpdater). */
   UpdaterChange: 'updater:change',
 } as const;
-
-export type IpcChannelValue = (typeof IpcChannel)[keyof typeof IpcChannel];
 
 /**
  * Surface API exposée au renderer via contextBridge.

@@ -5,11 +5,7 @@
  *  - chip Music : si `settings.modules.music` est activé, `moduleConfig.music.collapsed`
  *    est vrai, ET une lecture est détectée OU `hideWhenStopped === false`
  *  - chip DND : seulement quand `settings.dnd === true`. Masque les autres
- *    chips notifs (futur : Meetings/Messages/Tasks/GitLab/Claude)
- *
- * Les chips notifs des modules Meetings/GitLab/Claude/Tasks/Messages
- * arriveront avec leurs backends respectifs — placeholders ici pour le
- * moment.
+ *    chips notifs (Meetings/GitLab/GitLocal/Claude)
  */
 import { useMusicContext } from '../../modules/music/MusicContext';
 import { MusicChip } from '../../modules/music/MusicChip';
