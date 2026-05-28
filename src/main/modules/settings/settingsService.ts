@@ -127,7 +127,30 @@ function mergeDefaults(): void {
   // le champ legacy. Ainsi les préférences utilisateur survivent au bump.
   migratePollSecToPollMs(mergedModuleConfig);
 
+  // Clamp des champs avec borne dure (sécurité contre un édit manuel
+  // du config.json qui pousserait des valeurs aberrantes).
+  clampModuleConfigBounds(mergedModuleConfig);
+
   store.set('moduleConfig', mergedModuleConfig);
+}
+
+/**
+ * Clamps de sécurité pour les champs `ModuleConfig` à borne dure. Le UI
+ * Settings borne déjà via `<input type="range" min max>`, mais un édit
+ * direct du `config.json` pourrait pousser une valeur aberrante (ex.
+ * `clipboard.maxItems = 50000` qui ferait gonfler l'historique chiffré).
+ */
+function clampModuleConfigBounds(config: ModuleConfig): void {
+  // clipboard.maxItems : limite [10, 500]. Au-delà de 500 entrées texte
+  // chiffrées DPAPI, la latence de lecture-décodage devient sensible et
+  // la sérialisation IPC bourdonne. 10 est un plancher de sécurité pour
+  // ne pas perdre tout l'historique si quelqu'un règle à 0.
+  if (typeof config.clipboard?.maxItems === 'number') {
+    config.clipboard.maxItems = Math.max(
+      10,
+      Math.min(500, Math.round(config.clipboard.maxItems)),
+    );
+  }
 }
 
 /**

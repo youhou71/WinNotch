@@ -256,6 +256,18 @@
   color: var(--txt-dim);
 }
 
+/* Placeholder pendant le fetch d'un chunk lazy (SettingsView / GitLabPanel
+   / ClipboardPage). Minimal et silencieux — l'utilisateur a cliqué, le
+   notch est étendu, on évite un saut visuel. */
+.dashboard-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: var(--txt-mute);
+  font-size: 14px;
+}
+
 .dash-placeholder .dp-emoji {
   font-size: 32px;
   opacity: 0.8;

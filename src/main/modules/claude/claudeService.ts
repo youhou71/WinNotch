@@ -28,6 +28,21 @@ import { parseSessionFile } from './sessionParser';
 
 /** Fenêtre temporelle de visibilité (h) — sessions plus vieilles sont ignorées. */
 const VISIBILITY_HOURS = 24;
+/**
+ * Au-delà de cet âge, une session est évincée du cache (et plus seulement
+ * filtrée par `getVisibleSessions`). Le double de la fenêtre de visibilité
+ * laisse une marge pour ne pas retirer puis re-parser une session qui
+ * vient juste de basculer hors-visible — `slowTick` re-détectera si le
+ * fichier est modifié à nouveau via le scan PROJECTS_DIR.
+ */
+const EVICT_HOURS = VISIBILITY_HOURS * 2;
+/**
+ * Plafond dur du cache. Si l'utilisateur cumule beaucoup de sessions
+ * dormantes, on évince les plus anciennes au-delà de cette limite. Une
+ * `ClaudeSession` faisant ~1-2 KB, 200 entrées plafonnent le heap à
+ * ~400 KB pour ce module.
+ */
+const MAX_CACHE_ENTRIES = 200;
 
 /**
  * Tick rapide : détecte les changements mtime/size sur les fichiers
@@ -166,6 +181,37 @@ async function slowTick(): Promise<void> {
     }
   } catch (err) {
     console.warn('[claude] scan PROJECTS_DIR échoué:', err);
+  }
+
+  // Éviction par âge : retire du cache les sessions dont `lastActivity` est
+  // plus vieille que `EVICT_HOURS`. Bornage doux qui suit le rythme du
+  // tick lent (5 s). Une session re-modifiée plus tard sera ré-ingérée par
+  // le scan PROJECTS_DIR.
+  const evictCutoff = Date.now() - EVICT_HOURS * 3600 * 1000;
+  for (const [path, session] of cache) {
+    const t = Date.parse(session.lastActivity);
+    if (!Number.isFinite(t) || t < evictCutoff) {
+      cache.delete(path);
+      fileStats.delete(path);
+      changed = true;
+    }
+  }
+
+  // Bornage dur (cas extrême : > 200 sessions actives en cumulé). On
+  // évince les plus anciennes par `lastActivity` jusqu'à retomber sous
+  // le plafond.
+  if (cache.size > MAX_CACHE_ENTRIES) {
+    const sorted = [...cache.entries()].sort(
+      (a, b) =>
+        Date.parse(a[1].lastActivity) - Date.parse(b[1].lastActivity),
+    );
+    const excess = cache.size - MAX_CACHE_ENTRIES;
+    for (let i = 0; i < excess; i++) {
+      const [path] = sorted[i];
+      cache.delete(path);
+      fileStats.delete(path);
+    }
+    changed = true;
   }
 
   if (changed) broadcast();

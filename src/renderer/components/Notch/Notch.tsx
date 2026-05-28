@@ -117,12 +117,21 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
       // une page courte (dashboard), scrollHeight reste collé à l'ancienne
       // hauteur tant que le notch n'a pas rétréci. Boucle vicieuse.
       //
-      // Solution : sommer les `scrollHeight` des enfants directs du
-      // dashboard + paddings + gap flex. Pré-requis CSS : ces enfants
-      // (.settings-view, .gitlab-panel, .gitlocal-panel, .clipboard-view,
-      // .dash-grid, .search-bar, .dnd-banner) doivent prendre leur
-      // hauteur naturelle (pas de `flex: 1; min-height: 0`). Garanti par
-      // les modifs CSS associées.
+      // Solution : sommer les **`offsetHeight`** des enfants directs du
+      // dashboard + paddings + gap. Pourquoi `offsetHeight` et pas
+      // `scrollHeight` au niveau des enfants ? Certains composants ont
+      // un sous-arbre avec `overflow-y: auto` + `max-height` (ex.
+      // `.mnpt-list` de la card Meetings qui scroll en interne quand on
+      // a beaucoup de RDV). `scrollHeight` remonte la longueur totale
+      // du contenu y compris la partie cachée, ce qui gonflait la cell
+      // de plus de 200 px → le notch se dimensionnait beaucoup trop
+      // grand. `offsetHeight` donne la taille réelle occupée dans le
+      // layout, qui est exactement ce qu'on veut.
+      //
+      // Pré-requis CSS inchangé : les enfants (.settings-view,
+      // .gitlab-panel, .gitlocal-panel, .clipboard-view, .dash-grid,
+      // .search-bar, .dnd-banner) doivent prendre leur hauteur naturelle
+      // (pas de `flex: 1; min-height: 0`). Garanti par les modifs CSS.
       const cs = getComputedStyle(dashboard);
       const padTop = parseFloat(cs.paddingTop) || 0;
       const padBottom = parseFloat(cs.paddingBottom) || 0;
@@ -130,7 +139,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
       const children = Array.from(dashboard.children) as HTMLElement[];
       let h = padTop + padBottom;
       for (let i = 0; i < children.length; i++) {
-        h += children[i].scrollHeight;
+        h += children[i].offsetHeight;
         if (i > 0) h += gap;
       }
       h += footer?.offsetHeight ?? 0;
