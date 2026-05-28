@@ -20,9 +20,14 @@ export interface CalendarProvider {
   /**
    * Démarre le flow OAuth dans le navigateur et retourne les tokens
    * et l'email du compte connecté (lu depuis l'API user info).
+   *
+   * `opts.promptConsent === true` force `prompt=consent` côté provider —
+   * utilisé pour ré-élever les scopes d'un compte existant (ex. ajout du
+   * scope `Presence.ReadWrite` après mise à jour de l'app).
    */
   startAuth(
     credentials: OAuthClientCredentials,
+    opts?: { promptConsent?: boolean },
   ): Promise<{ tokens: OAuthTokens; email: string }>;
 
   /**

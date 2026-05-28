@@ -238,6 +238,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
     claude: 200,
     gitlocal: 122,
     vpn: 122,
+    teams: 160,
   };
   const hasMusicCard = settings.modules.music && !!music.title;
   const hasClaudeCard =
@@ -249,6 +250,11 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
   let rowMax = 0;
   for (const tile of settings.dashboardLayout) {
     if (!settings.modules[tile.id]) continue;
+    // Le toggle Settings « Afficher la card » court-circuite la tuile.
+    const tileCfg = settings.moduleConfig[tile.id] as
+      | { showCard?: boolean }
+      | undefined;
+    if (tileCfg?.showCard === false) continue;
     if (tile.id === 'music' && !hasMusicCard) continue;
     if (tile.id === 'claude' && !hasClaudeCard) continue;
     const cols = Math.max(1, Math.min(12, tile.cols));

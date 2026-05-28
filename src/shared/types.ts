@@ -101,7 +101,8 @@ export type ModuleId =
   | 'tasks'
   | 'messages'
   | 'clipboard'
-  | 'vpn';
+  | 'vpn'
+  | 'teams';
 
 /** Densité visuelle du dashboard étendu. */
 export type Density = 'dense' | 'normal' | 'airy';
@@ -119,7 +120,8 @@ export type DashTileId =
   | 'gitlocal'
   | 'claude'
   | 'tasks'
-  | 'vpn';
+  | 'vpn'
+  | 'teams';
 
 /**
  * Une tuile du dashboard. `cols` est la largeur en colonnes sur une
@@ -143,6 +145,8 @@ export interface ModuleConfig {
     hideWhenStopped: boolean;
     /** Afficher la chip dans le notch collapsed (vs. expanded only). */
     collapsed: boolean;
+    /** Afficher la card dans le dashboard étendu. */
+    showCard: boolean;
   };
   meetings: {
     /** Seuil sous lequel le prochain meeting est qualifié d'imminent (minutes). */
@@ -165,6 +169,8 @@ export interface ModuleConfig {
       google: OAuthClientCredentials | null;
     };
     collapsed: boolean;
+    /** Afficher la card dans le dashboard étendu. */
+    showCard: boolean;
   };
   gitlocal: {
     /**
@@ -195,6 +201,8 @@ export interface ModuleConfig {
      * "dirty" (uncommitted > 0 OU ahead > 0).
      */
     collapsed: boolean;
+    /** Afficher la card dans le dashboard étendu. */
+    showCard: boolean;
   };
   gitlab: {
     /** URL de l'instance GitLab (ex: "https://gitlab.cfast.fr"). */
@@ -230,6 +238,8 @@ export interface ModuleConfig {
     /** Fréquence de polling en secondes. */
     pollSec: number;
     collapsed: boolean;
+    /** Afficher la card dans le dashboard étendu. */
+    showCard: boolean;
   };
   claude: {
     /** Notifier la fin d'une session Claude qui était en cours. */
@@ -253,6 +263,8 @@ export interface ModuleConfig {
     /** Critère de tri par défaut. */
     sortBy: 'created' | 'alpha';
     collapsed: boolean;
+    /** Afficher la card compteur dans le dashboard étendu. */
+    showCard: boolean;
   };
   messages: {
     /** Afficher l'aperçu du message dans la card. */
@@ -300,6 +312,35 @@ export interface ModuleConfig {
     showWhenDisconnected: boolean;
     /** Afficher la chip dans le notch rétracté quand une connexion est active. */
     collapsed: boolean;
+    /** Afficher la card dans le dashboard étendu. */
+    showCard: boolean;
+  };
+  teams: {
+    /**
+     * Fréquence de polling Graph `GET /me/presence` en secondes.
+     * Minimum 15 s — Graph throttle à ~1500 req / 30 s par app, on est
+     * largement sous. Défaut 30 s.
+     */
+    pollSec: number;
+    /**
+     * `accountId` du `CalendarAccount` Outlook utilisé pour Teams Presence.
+     * `null` = fallback automatique sur le premier compte Outlook trouvé.
+     * Permet à l'utilisateur de choisir explicitement quand plusieurs
+     * comptes Outlook sont connectés (Settings → Teams).
+     */
+    outlookAccountId: string | null;
+    /**
+     * Si `true`, le toggle DND WinNotch et le statut Teams DoNotDisturb
+     * se synchronisent bidirectionnellement : `Ctrl+Shift+D` → set Teams
+     * DoNotDisturb ; et inversement, un Teams DoNotDisturb détecté par
+     * le polling active le DND WinNotch. Décocher rend Teams Presence
+     * purement manuel (boutons de la card + bascules Teams isolées).
+     */
+    dndCouplingEnabled: boolean;
+    /** Afficher la chip dans le notch rétracté. */
+    collapsed: boolean;
+    /** Afficher la card dans le dashboard étendu. */
+    showCard: boolean;
   };
 }
 
@@ -355,11 +396,13 @@ export const DEFAULT_SETTINGS: Settings = {
     messages: true,
     clipboard: true,
     vpn: true,
+    teams: true,
   },
   moduleConfig: {
     music: {
       hideWhenStopped: true,
       collapsed: true,
+      showCard: true,
     },
     meetings: {
       imminentMin: 5,
@@ -368,6 +411,7 @@ export const DEFAULT_SETTINGS: Settings = {
       accounts: [],
       clientCredentials: { outlook: null, google: null },
       collapsed: true,
+      showCard: true,
     },
     gitlab: {
       url: '',
@@ -378,6 +422,7 @@ export const DEFAULT_SETTINGS: Settings = {
       assignedOnly: false,
       pollSec: 120,
       collapsed: true,
+      showCard: true,
     },
     gitlocal: {
       rootDirs: [],
@@ -385,6 +430,7 @@ export const DEFAULT_SETTINGS: Settings = {
       ignorePatterns: ['node_modules', 'dist', 'out', 'bin', 'obj', '.next', '.vs'],
       pollSec: 60,
       collapsed: true,
+      showCard: true,
     },
     claude: {
       notifyCompletion: true,
@@ -397,6 +443,7 @@ export const DEFAULT_SETTINGS: Settings = {
       autoClearDays: 0,
       sortBy: 'created',
       collapsed: true,
+      showCard: true,
     },
     messages: {
       showPreview: true,
@@ -414,6 +461,14 @@ export const DEFAULT_SETTINGS: Settings = {
       lookupCountry: true,
       showWhenDisconnected: false,
       collapsed: true,
+      showCard: true,
+    },
+    teams: {
+      pollSec: 30,
+      outlookAccountId: null,
+      dndCouplingEnabled: true,
+      collapsed: true,
+      showCard: true,
     },
   },
   // Layout par défaut — reproduit l'agencement historique :
@@ -430,6 +485,7 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: 'claude', cols: 6 },
     { id: 'gitlocal', cols: 8 },
     { id: 'vpn', cols: 4 },
+    { id: 'teams', cols: 4 },
   ],
 };
 
@@ -769,6 +825,73 @@ export interface VpnState {
    * `null` quand le dernier tick s'est bien passé.
    */
   lastError: string | null;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  TEAMS PRESENCE (Microsoft Graph `/me/presence`)
+ * ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * Valeurs `availability` retournées par `GET /me/presence` (Graph v1.0).
+ *
+ *  - `Available`     : disponible
+ *  - `Busy`          : occupé (réunion, appel)
+ *  - `DoNotDisturb`  : ne pas déranger
+ *  - `BeRightBack`   : de retour bientôt
+ *  - `Away`          : absent
+ *  - `Offline`       : déconnecté
+ *  - `Unknown`       : pas encore lu (avant le premier polling)
+ *
+ * `setUserPreferredPresence` n'accepte qu'un sous-ensemble (pas
+ * `Unknown`, et `Offline` est mappé à `Offline/OffWork`).
+ */
+export type TeamsAvailability =
+  | 'Available'
+  | 'Busy'
+  | 'DoNotDisturb'
+  | 'BeRightBack'
+  | 'Away'
+  | 'Offline'
+  | 'Unknown';
+
+/**
+ * `activity` complémentaire à `availability`. Graph retourne des valeurs
+ * comme `Available`, `InACall`, `InAConferenceCall`, `Presenting`, etc.
+ * On ne valide pas en TypeScript (chaîne libre) — la card affiche la
+ * valeur brute pour l'utilisateur, le filtre métier ne s'appuie que sur
+ * `availability`.
+ */
+export type TeamsActivity = string;
+
+/**
+ * Erreurs typées du module Teams. L'UI les utilise pour afficher des
+ * bannières spécifiques et choisir si on continue à poller ou pas.
+ *
+ *  - `no-account`  : aucun compte Outlook connecté pour servir Teams Presence
+ *  - `no-scope`    : le compte Outlook n'a pas (ou plus) `Presence.ReadWrite`
+ *                    → demander une reconnexion (`prompt=consent`)
+ *  - `no-license`  : le compte Outlook n'a pas de licence Teams M365
+ *  - `network`     : erreur HTTP transitoire, refresh token mort, etc.
+ */
+export type TeamsError = 'no-account' | 'no-scope' | 'no-license' | 'network';
+
+/**
+ * Snapshot complet exposé au renderer via `teams:getState` + push
+ * `teams:change`.
+ */
+export interface TeamsState {
+  availability: TeamsAvailability;
+  activity: TeamsActivity;
+  /** Unix ms du dernier `GET /me/presence` réussi. 0 tant qu'aucun. */
+  lastSyncAt: number;
+  /** True pendant un appel Graph (set/clear/get). UI = spinner. */
+  loading: boolean;
+  /** Erreur typée, `null` quand tout va bien. */
+  error: TeamsError | null;
+  /** `accountId` du `CalendarAccount` Outlook utilisé. `null` si `no-account`. */
+  accountId: string | null;
+  /** Email du compte Outlook utilisé. Vide si `no-account`. */
+  accountEmail: string;
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -1360,6 +1483,29 @@ export const IpcChannel = {
   /** Main → renderer : push d'un nouveau VpnState (polling ou refresh). */
   VpnChange: 'vpn:change',
 
+  /** Renderer → main (invoke) : retourne le TeamsState courant. */
+  TeamsGetState: 'teams:getState',
+  /**
+   * Renderer → main (invoke) : applique un statut manuel via
+   * `setUserPreferredPresence` (PT8H). `activity` doit matcher
+   * `availability` (cf. table Graph). Retourne le nouveau TeamsState.
+   */
+  TeamsSetPresence: 'teams:setPresence',
+  /**
+   * Renderer → main (invoke) : retire le statut manuel via
+   * `clearUserPreferredPresence` → Teams revient à son statut auto.
+   */
+  TeamsClearPresence: 'teams:clearPresence',
+  /**
+   * Renderer → main (invoke) : déclenche un re-consent OAuth du compte
+   * Outlook lié à Teams Presence (force `prompt=consent`). Utilisé quand
+   * `state.error === 'no-scope'` pour qu'un compte ancien ré-élève
+   * ses scopes Graph (`Presence.ReadWrite`).
+   */
+  TeamsReconnect: 'teams:reconnect',
+  /** Main → renderer : push d'un nouveau TeamsState (polling ou action). */
+  TeamsChange: 'teams:change',
+
   /** Renderer → main (invoke) : retourne l'UpdateState courant. */
   UpdaterGetState: 'updater:getState',
   /** Renderer → main (invoke) : déclenche un check immédiat auprès du provider. */
@@ -1514,6 +1660,28 @@ export interface NotchApi {
     refresh: () => Promise<VpnState>;
     /** S'abonne au push de VpnState (polling ou refresh). */
     onChange: (cb: (state: VpnState) => void) => () => void;
+  };
+  teams: {
+    /** Snapshot complet de l'état Teams Presence (availability + activity). */
+    getState: () => Promise<TeamsState>;
+    /**
+     * Applique un statut manuel persistant (PT8H). `activity` doit
+     * correspondre à `availability` (table Graph) — sinon erreur 400.
+     */
+    setPresence: (
+      availability: TeamsAvailability,
+      activity: TeamsActivity,
+    ) => Promise<TeamsState>;
+    /** Retire le statut manuel → Teams revient en automatique. */
+    clearPresence: () => Promise<TeamsState>;
+    /**
+     * Déclenche un re-consent OAuth du compte Outlook lié pour ré-élever
+     * les scopes (utilisé quand `state.error === 'no-scope'`).
+     * Retourne `{ ok }` ; le nouveau TeamsState arrive via `onChange`.
+     */
+    reconnect: () => Promise<{ ok: boolean; error?: string }>;
+    /** S'abonne au push de TeamsState (polling ou action). */
+    onChange: (cb: (state: TeamsState) => void) => () => void;
   };
   meetings: {
     /**

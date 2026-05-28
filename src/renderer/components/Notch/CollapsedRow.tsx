@@ -24,6 +24,7 @@ import { GitLocalChip } from '../../modules/gitlocal/GitLocalChip';
 import { useGitLocalContext } from '../../modules/gitlocal/GitLocalContext';
 import { VpnChip } from '../../modules/vpn/VpnChip';
 import { useVpnContext } from '../../modules/vpn/VpnContext';
+import { TeamsChip } from '../../modules/teams/TeamsChip';
 import { NotchTooltip } from '../Tooltip/NotchTooltip';
 import { ClipboardChip } from '../../modules/clipboard/ClipboardChip';
 import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
@@ -114,6 +115,13 @@ export function CollapsedRow() {
     vpnCfg.collapsed &&
     (vpn.connected || vpnCfg.showWhenDisconnected);
 
+  // La chip Teams : module activé + autorisée en collapsed + un statut
+  // lisible (la chip se cache d'elle-même si `Unknown` ou `no-account`).
+  // Pas masquée en DND : c'est un état système comme la chip VPN,
+  // l'utilisateur veut savoir en permanence son statut Teams.
+  const teamsCfg = settings.moduleConfig.teams;
+  const teamsEnabled = settings.modules.teams && teamsCfg.collapsed;
+
   return (
     <div
       className="collapsed-row"
@@ -163,6 +171,10 @@ export function CollapsedRow() {
             notification — l'utilisateur veut savoir en permanence si son
             VPN tourne, indépendamment du mode "ne pas déranger". */}
         {vpnEnabled && <VpnChip />}
+        {/* Teams Presence — même logique que VPN : c'est un état système
+            (le statut Teams reste pertinent pendant un mode DND, surtout
+            avec le couplage bidirectionnel P3 où DND WinNotch écrit Teams). */}
+        {teamsEnabled && <TeamsChip />}
       </div>
     </div>
   );

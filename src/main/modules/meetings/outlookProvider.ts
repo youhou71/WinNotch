@@ -7,8 +7,13 @@
  *  - Calendar : GET /me/calendarView?startDateTime=…&endDateTime=…
  *  - User     : GET /me  (pour récupérer l'email du compte connecté)
  *
- * Scope minimal : `Calendars.Read User.Read offline_access`.
+ * Scope minimal : `Calendars.Read Presence.ReadWrite User.Read offline_access`.
  * `offline_access` est requis pour obtenir un refresh token.
+ * `Presence.ReadWrite` est utilisé par le module Teams (lecture + écriture
+ * du statut de présence Teams). Les comptes existants connectés avec
+ * l'ancien scope continuent de fonctionner pour Meetings, mais le premier
+ * `GET /me/presence` renverra 403 jusqu'à ce que l'utilisateur reconnecte
+ * son compte (re-consent).
  *
  * Le tenant par défaut est `common` (multi-tenant + comptes perso).
  * Pour restreindre à une org spécifique, l'utilisateur saisit son
@@ -25,7 +30,7 @@ import { startAuthFlow, refreshAccessToken, type OAuthTokens } from './oauth';
 import type { CalendarProvider } from './calendarProvider';
 import { detectKind, deriveTiming } from './meetingMapper';
 
-const SCOPE = 'Calendars.Read User.Read offline_access';
+const SCOPE = 'Calendars.Read Presence.ReadWrite User.Read offline_access';
 
 function tenant(creds: OAuthClientCredentials): string {
   return creds.tenantId?.trim() || 'common';
@@ -146,7 +151,7 @@ async function fetchSelfPhotoOutlook(accessToken: string): Promise<string | null
 export const outlookProvider: CalendarProvider = {
   id: 'outlook',
 
-  async startAuth(creds) {
+  async startAuth(creds, opts) {
     const tokens = await startAuthFlow({
       authUrl: authUrl(creds),
       tokenUrl: tokenUrl(creds),
@@ -155,9 +160,12 @@ export const outlookProvider: CalendarProvider = {
       // mais pour les desktop apps en Authorization Code + PKCE on
       // **ne doit pas** envoyer de secret. Donc on ignore creds.clientSecret.
       scope: SCOPE,
-      // `prompt=select_account` permet à l'utilisateur de choisir un
-      // compte différent du SSO en cours, utile pour les multi-comptes.
-      extraAuthParams: { prompt: 'select_account' },
+      // `prompt=consent` force le consentement (ré-élève les scopes
+      // d'un compte existant). Sinon `prompt=select_account` pour le
+      // multi-comptes au connect initial.
+      extraAuthParams: {
+        prompt: opts?.promptConsent ? 'consent' : 'select_account',
+      },
     });
     const email = await fetchUserEmail(tokens.accessToken);
     return { tokens, email };

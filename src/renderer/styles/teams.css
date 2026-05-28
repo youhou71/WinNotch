@@ -1,0 +1,249 @@
+/*
+ * teams.css — chip + card du module Teams Presence.
+ *
+ * La couleur n'est pas figée ici : elle est passée en custom property
+ * `--teams-color` par chaque consommateur (chip ou card) selon
+ * l'availability courante. Évite une combinatoire de classes par variant.
+ */
+
+/* ───────────── Chip (collapsed row) ─────────────
+ *
+ * Pastille colorée 10 px sans icône — c'est ainsi que Teams affiche
+ * la présence dans sa propre UI. Plus discret que les chips à icône
+ * (gitlab/claude/vpn) car la présence est un signal passif, pas une
+ * notif active.
+ */
+.chip-teams {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.chip-teams .teams-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--teams-color, #6b7280);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Tooltip — utilise la même base que les autres modules (cf. tooltip.css)
+   avec l'accent passé en var --tt-accent dynamiquement côté composant. */
+.tt-teams-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--txt-dim);
+}
+
+.tt-teams-meta strong {
+  color: var(--txt);
+  font-weight: 600;
+}
+
+.tt-teams-error {
+  font-size: 11px;
+  color: #fca5a5;
+  margin-top: 4px;
+}
+
+/* ───────────── Card dashboard ───────────── */
+.teams-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--d-card-pad-y) var(--d-card-pad-x);
+  background: rgba(120, 130, 150, 0.04);
+  border: 1px solid rgba(120, 130, 150, 0.15);
+  border-radius: var(--d-card-radius);
+  color: var(--txt);
+  text-align: left;
+  min-width: 0;
+}
+
+.teams-card .teams-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--teams-color, #6b7280);
+  font-weight: 600;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+.teams-card .teams-dot-sm {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--teams-color, #6b7280);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.teams-card .teams-label {
+  font-size: 11px;
+  color: var(--teams-color, #6b7280);
+}
+
+.teams-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-top-color: var(--teams-color, #6b7280);
+  animation: teams-spin 0.7s linear infinite;
+  margin-left: auto;
+}
+
+@keyframes teams-spin {
+  to { transform: rotate(360deg); }
+}
+
+.teams-status {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.teams-status-activity {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--txt-dim);
+}
+
+.teams-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+  color: var(--txt-dim);
+}
+
+.teams-sub-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teams-banner {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--txt-dim);
+}
+
+.teams-error {
+  margin-top: 2px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.teams-error-msg {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #fca5a5;
+}
+
+.teams-error-detail {
+  color: #fda4af;
+  font-style: italic;
+}
+
+.teams-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.teams-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--txt);
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 5px 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.teams-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.teams-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.teams-btn-availability {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.teams-btn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--btn-color, #6b7280);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.teams-btn-label {
+  font-size: 9px;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  color: var(--txt-dim);
+}
+
+.teams-btn-active {
+  background: color-mix(in srgb, var(--btn-color, #6b7280) 12%, transparent);
+  border-color: color-mix(in srgb, var(--btn-color, #6b7280) 40%, transparent);
+}
+
+.teams-btn-active .teams-btn-label {
+  color: var(--txt);
+}
+
+.teams-btn-auto {
+  margin-top: 2px;
+  padding: 5px;
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  color: var(--txt-dim);
+}
+
+.teams-btn-reconnect {
+  align-self: flex-start;
+  padding: 4px 10px;
+  font-size: 11px;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #fecaca;
+}
+
+.teams-btn-reconnect:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.4);
+}

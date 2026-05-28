@@ -127,18 +127,6 @@ async function refreshOnce(): Promise<VpnState> {
       return currentState;
     }
 
-    // Trace de diagnostic — utile pour comprendre pourquoi telle interface
-    // n'est pas reconnue. Une ligne par tick, niveau info.
-    console.log(
-      '[vpn] tick:',
-      `${snapshot.adapters.length} adapter(s)`,
-      snapshot.adapters.map((a) => `${a.name}|${a.description}|${a.mediaType}`).join(' ; ') || '(aucun)',
-      `· ${snapshot.processes.length} proc(s):`,
-      snapshot.processes.map((p) => p.name).join(',') || '(aucun)',
-      `· ${snapshot.windowsVpn.length} winvpn(s):`,
-      snapshot.windowsVpn.map((w) => w.name).join(',') || '(aucun)',
-    );
-
     const raws = buildConnections(snapshot);
     const keys = raws.map((r) => r.interfaceName.toLowerCase());
     reconcileSessions(keys, now);

@@ -81,6 +81,14 @@ export const SETTINGS_MODULES: ModuleMeta[] = [
     description:
       'État de connexion VPN (ProtonVPN, NordVPN, OpenVPN, WireGuard).',
   },
+  {
+    id: 'teams',
+    label: 'Teams (présence)',
+    icon: 'fa-solid fa-users',
+    color: '#7c3aed',
+    description:
+      'Statut Microsoft Teams (Disponible / Occupé / NPD…) lu et écrit via Graph.',
+  },
 ];
 
 export const MODULE_META_BY_ID: Record<ModuleId, ModuleMeta> =

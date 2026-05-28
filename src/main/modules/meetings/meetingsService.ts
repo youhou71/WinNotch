@@ -32,9 +32,12 @@ import { broadcastSettings } from '../settings/settingsService';
 import type { CalendarProvider } from './calendarProvider';
 import { outlookProvider } from './outlookProvider';
 import { googleProvider } from './googleProvider';
-import { decryptTokens, encryptTokens } from './tokenStore';
+import { encryptTokens } from './tokenStore';
 import { getDefaultCredentials, hasDefaultCredentials } from './defaultCredentials';
-import type { OAuthTokens } from './oauth';
+import {
+  ensureAccessToken as ensureAccessTokenHelper,
+  type EnsuredToken,
+} from './tokenHelpers';
 
 /** Intervalle de polling agrégé des meetings (ms). */
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
@@ -151,59 +154,78 @@ async function disconnect(accountId: string): Promise<{ ok: boolean }> {
   return { ok: true };
 }
 
+/**
+ * Relance le flow OAuth Outlook avec `prompt=consent` pour ré-élever les
+ * scopes d'un compte existant (ex. ajout de `Presence.ReadWrite`).
+ *
+ * Si l'utilisateur se reconnecte bien avec le même email, on patch les
+ * tokens du compte existant en place — la sélection des calendriers et
+ * les autres réglages sont préservés. Si l'email diffère (erreur de
+ * compte), on retourne une erreur sans toucher au store.
+ *
+ * Exporté pour être utilisé par d'autres modules qui partagent les
+ * comptes Outlook (Teams Presence notamment).
+ */
+export async function reconnectOutlookAccount(
+  accountId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const account = getAccounts().find((a) => a.id === accountId);
+  if (!account || account.provider !== 'outlook') {
+    return { ok: false, error: 'Compte Outlook introuvable.' };
+  }
+  const creds = getCredentials('outlook');
+  if (!creds || !creds.clientId) {
+    return {
+      ok: false,
+      error: "Configure d'abord le clientId Azure dans les réglages Meetings.",
+    };
+  }
+  try {
+    const { tokens, email } = await outlookProvider.startAuth(creds, {
+      promptConsent: true,
+    });
+    if (email.toLowerCase() !== account.email.toLowerCase()) {
+      return {
+        ok: false,
+        error: `Tu t'es connecté avec ${email} mais le compte à reconnecter est ${account.email}. Réessaie avec le bon compte.`,
+      };
+    }
+    const updated: CalendarAccount = {
+      ...account,
+      encryptedTokens: encryptTokens(tokens),
+      expiresAt: tokens.expiresAt,
+    };
+    setAccounts(getAccounts().map((a) => (a.id === account.id ? updated : a)));
+    void refresh();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 /* ───────────── Refresh + agrégation ───────────── */
 
 /**
  * Assure qu'un access token valide est disponible pour un compte.
- * Refresh si expiré. Met à jour la persistance si besoin.
+ * Délègue au helper partagé `tokenHelpers.ensureAccessToken` qui contient
+ * la logique de refresh + persistance — le helper est aussi utilisé par
+ * le module Teams qui partage les comptes Outlook avec Meetings.
  */
-async function ensureAccessToken(account: CalendarAccount): Promise<{
-  account: CalendarAccount;
-  accessToken: string;
-} | null> {
-  const tokens = decryptTokens(account.encryptedTokens);
-  if (!tokens) return null;
-
-  // Si l'access token est encore valide pour > 60 s, on l'utilise tel quel.
-  if (tokens.expiresAt - Date.now() > 60_000) {
-    return { account, accessToken: tokens.accessToken };
-  }
-
-  // Sinon, refresh.
-  if (!tokens.refreshToken) {
-    console.warn(
-      `[meetings] Pas de refresh token pour ${account.email} — reconnexion nécessaire.`,
-    );
-    return null;
-  }
+async function ensureAccessToken(
+  account: CalendarAccount,
+): Promise<EnsuredToken | null> {
   const creds = getCredentials(account.provider);
   if (!creds) return null;
-
-  try {
-    const provider = PROVIDERS[account.provider];
-    const newTokens: OAuthTokens = await provider.refresh(
-      creds,
-      tokens.refreshToken,
-    );
-    // Le provider peut retourner un nouveau refresh token. Le mapper
-    // ne renvoie pas null pour le refresh token si l'ancien doit être
-    // préservé (cf. refreshAccessToken dans oauth.ts).
-    const updatedAccount: CalendarAccount = {
-      ...account,
-      encryptedTokens: encryptTokens(newTokens),
-      expiresAt: newTokens.expiresAt,
-    };
-    setAccounts(
-      getAccounts().map((a) => (a.id === account.id ? updatedAccount : a)),
-    );
-    return { account: updatedAccount, accessToken: newTokens.accessToken };
-  } catch (err) {
-    console.warn(
-      `[meetings] refresh token KO pour ${account.email}:`,
-      err,
-    );
-    return null;
-  }
+  return ensureAccessTokenHelper({
+    account,
+    provider: PROVIDERS[account.provider],
+    credentials: creds,
+    persistAccount: (updated) => {
+      setAccounts(
+        getAccounts().map((a) => (a.id === updated.id ? updated : a)),
+      );
+    },
+  });
 }
 
 /**

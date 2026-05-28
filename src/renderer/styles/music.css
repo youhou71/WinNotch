@@ -185,7 +185,8 @@
 }
 
 .music-chip-artist {
-  font-size: 9.5px;
+  font-size: 8.5px;
+  font-style: italic;
   font-weight: 400;
   color: rgba(244, 244, 245, 0.55);
   max-width: 100px;

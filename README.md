@@ -64,6 +64,13 @@ Détecte les sessions VPN actives sur la machine — **ProtonVPN**, **NordVPN**,
 
 Read-only : aucune action exposée (pas de connect / disconnect). Le module observe l'état via `Get-NetAdapter` + `Get-VpnConnection` + scan de processus, sans toucher à la session. Résolution du pays best-effort via `ipapi.co` (cache 6 h, désactivable).
 
+### Teams (présence)
+Statut Microsoft Teams lu et piloté via Microsoft Graph (`/me/presence`). Pastille colorée dans le notch rétracté (vert = Disponible, rouge = Occupé, rouge foncé = Ne pas déranger, jaune = De retour bientôt / Absent). Card compacte avec les 5 boutons pour changer manuellement le statut + bouton « Auto » qui retire le statut manuel (`clearUserPreferredPresence`). Polling 30 s par défaut.
+
+Réutilise l'authentification du module **Prochains rendez-vous** (mêmes tokens OAuth Outlook avec le scope additionnel `Presence.ReadWrite`). Si tu as connecté ton compte Outlook avant cette feature, la card affiche un bouton « Reconnecter » qui relance le flow OAuth en mode `prompt=consent` pour ré-élever le scope.
+
+**Couplage DND bidirectionnel** (activé par défaut, désactivable dans Settings → Teams) : `Ctrl+Shift+D` bascule aussi ton statut Teams en DoNotDisturb (et inversement, un Teams DoNotDisturb détecté par le polling active le DND WinNotch). Un filtre anti-écho de 30 s évite les boucles entre l'écriture locale et la lecture du tick suivant.
+
 ### Updater
 Mises à jour automatiques via GitHub Releases. Check au boot + toutes les heures. Notifications utilisateur à chaque étape (disponible → téléchargée → installée). Aucun téléchargement ni install sans confirmation explicite.
 

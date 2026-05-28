@@ -21,6 +21,7 @@
 import { app, ipcMain } from 'electron';
 import Store from 'electron-store';
 import { randomUUID } from 'crypto';
+import { EventEmitter } from 'node:events';
 import {
   DEFAULT_SETTINGS,
   IpcChannel,
@@ -42,6 +43,7 @@ const VALID_DASH_TILE_IDS: DashTileId[] = [
   'claude',
   'tasks',
   'vpn',
+  'teams',
 ];
 import { getNotchWindow } from '../../window/notchWindow';
 
@@ -49,6 +51,26 @@ const store = new Store<Settings>({
   defaults: DEFAULT_SETTINGS,
   name: 'config',
 });
+
+/**
+ * Bus d'événements interne au main process, utilisé par les modules qui
+ * doivent réagir à un changement de réglage sans dépendre d'un push IPC.
+ *
+ * Événements :
+ *  - `dnd:changed` `{ value: boolean, source: 'user' | 'external' }` —
+ *    émis quand `dnd` bascule. `source='user'` quand l'utilisateur a
+ *    cliqué (UI, Ctrl+Shift+D), `source='external'` quand un autre module
+ *    a forcé la valeur via `setDndFromExternal` (typiquement le module
+ *    Teams qui synchronise le DND avec le statut DoNotDisturb de Teams).
+ *    Les consommateurs filtrent par `source` pour éviter les boucles —
+ *    par exemple Teams ignore `source='external'` car c'est lui qui a
+ *    initié la mise à jour.
+ */
+export const settingsEvents = new EventEmitter();
+export interface DndChangedPayload {
+  value: boolean;
+  source: 'user' | 'external';
+}
 
 /**
  * Complète l'état persisté avec les valeurs par défaut pour gérer les
@@ -156,13 +178,33 @@ export function broadcastSettings(): void {
 /**
  * Bascule l'état DND. Exporté car appelé directement par le raccourci
  * global Ctrl+Shift+D (côté main), pas seulement via IPC.
+ *
+ * Émet `dnd:changed` avec `source='user'` — c'est l'utilisateur qui a
+ * agi (UI ou raccourci). Les consommateurs (ex. teamsService) peuvent
+ * réagir en synchronisant un système externe (statut Teams DoNotDisturb).
  */
 export function toggleDnd(): Settings {
   const next = !store.get('dnd');
   store.set('dnd', next);
   const state = getAll();
   broadcast(state);
+  settingsEvents.emit('dnd:changed', {
+    value: next,
+    source: 'user',
+  } satisfies DndChangedPayload);
   return state;
+}
+
+/**
+ * Force la valeur de `dnd` depuis un autre module main (ex. teamsService
+ * qui a détecté un changement côté Teams). Persiste + broadcast au
+ * renderer **sans** ré-émettre `dnd:changed` (sinon le module qui a
+ * initié la mise à jour la re-recevrait → boucle infinie).
+ */
+export function setDndFromExternal(value: boolean): void {
+  if (store.get('dnd') === value) return;
+  store.set('dnd', value);
+  broadcast(getAll());
 }
 
 function addTask(text: string): Settings {

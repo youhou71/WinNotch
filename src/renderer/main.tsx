@@ -31,6 +31,7 @@ import './styles/claude.css';
 import './styles/gitlab.css';
 import './styles/gitlocal.css';
 import './styles/vpn.css';
+import './styles/teams.css';
 import './styles/tooltip.css';
 import './styles/clipboard.css';
 import './styles/settings.css';

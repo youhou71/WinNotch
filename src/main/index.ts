@@ -44,6 +44,7 @@ import {
   stopGitLocal,
 } from './modules/gitlocal/gitlocalService';
 import { registerVpnIpc, stopVpn } from './modules/vpn/vpnService';
+import { registerTeamsIpc, stopTeams } from './modules/teams/teamsService';
 import {
   registerUpdaterIpc,
   stopUpdater,
@@ -96,6 +97,11 @@ app.whenReady().then(async () => {
     registerVpnIpc();
   } else {
     console.log('[WinNotch] Module VPN désactivé (WINNOTCH_DISABLE_VPN=1)');
+  }
+  if (process.env.WINNOTCH_DISABLE_TEAMS !== '1') {
+    registerTeamsIpc();
+  } else {
+    console.log('[WinNotch] Module Teams désactivé (WINNOTCH_DISABLE_TEAMS=1)');
   }
   registerUpdaterIpc();
   registerAudioIpc();
@@ -157,6 +163,7 @@ app.on('window-all-closed', () => {
   stopGitLab();
   stopGitLocal();
   stopVpn();
+  stopTeams();
   stopUpdater();
   stopFullscreenDetector();
   unregisterGlobalShortcuts();
@@ -177,6 +184,7 @@ app.on('before-quit', () => {
   stopGitLab();
   stopGitLocal();
   stopVpn();
+  stopTeams();
   stopUpdater();
   stopFullscreenDetector();
   unregisterGlobalShortcuts();

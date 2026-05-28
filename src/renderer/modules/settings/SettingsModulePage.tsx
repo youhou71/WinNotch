@@ -95,6 +95,7 @@ export function SettingsModulePage({ moduleId, onBack }: Props) {
       {moduleId === 'messages' && <MessagesSettings />}
       {moduleId === 'clipboard' && <ClipboardSettings />}
       {moduleId === 'vpn' && <VpnSettings />}
+      {moduleId === 'teams' && <TeamsSettings />}
     </>
   );
 }
@@ -125,6 +126,16 @@ function MusicSettings() {
           void patchModuleConfig('music', { collapsed: next })
         }
       />
+      <SettingsToggleRow
+        icon="fa-solid fa-table-cells-large"
+        iconColor="#f472b6"
+        label="Afficher la card dans le dashboard"
+        description="Décoche pour masquer la card sans désactiver le module (chip + notifications restent actives)."
+        value={cfg.showCard}
+        onChange={(next) =>
+          void patchModuleConfig('music', { showCard: next })
+        }
+      />
     </SettingsSection>
   );
 }
@@ -135,6 +146,18 @@ function TasksSettings() {
   const cfg = settings.moduleConfig.tasks;
   return (
     <>
+      <SettingsSection title="Affichage">
+        <SettingsToggleRow
+          icon="fa-solid fa-table-cells-large"
+          iconColor="#34d399"
+          label="Afficher la card dans le dashboard"
+          description="Décoche pour masquer le compteur dans le dashboard. Le préfixe « - » dans la search bar reste utilisable pour gérer la liste."
+          value={cfg.showCard}
+          onChange={(next) =>
+            void patchModuleConfig('tasks', { showCard: next })
+          }
+        />
+      </SettingsSection>
       <SettingsSection title="Comportement">
         <SettingsRadioRow
           icon="fa-solid fa-arrow-down-wide-short"
@@ -333,6 +356,18 @@ function MeetingsSettings() {
           value={cfg.hideJoinedToday}
           onChange={(next) =>
             void patchModuleConfig('meetings', { hideJoinedToday: next })
+          }
+        />
+      </SettingsSection>
+      <SettingsSection title="Affichage">
+        <SettingsToggleRow
+          icon="fa-solid fa-table-cells-large"
+          iconColor="#60a5fa"
+          label="Afficher la card dans le dashboard"
+          description="Décoche pour masquer la card sans désactiver le module. La chip et les toasts restent actifs."
+          value={cfg.showCard}
+          onChange={(next) =>
+            void patchModuleConfig('meetings', { showCard: next })
           }
         />
       </SettingsSection>
@@ -937,6 +972,16 @@ function GitLabSettings() {
             void patchModuleConfig('gitlab', { collapsed: next })
           }
         />
+        <SettingsToggleRow
+          icon="fa-solid fa-table-cells-large"
+          iconColor="#FC6D26"
+          label="Afficher la card dans le dashboard"
+          description="Décoche pour masquer la card sans désactiver le module. La chip et les toasts restent actifs."
+          value={cfg.showCard}
+          onChange={(next) =>
+            void patchModuleConfig('gitlab', { showCard: next })
+          }
+        />
         <SettingsSliderRow
           icon="fa-solid fa-clock-rotate-left"
           iconColor="#FC6D26"
@@ -1148,6 +1193,16 @@ function GitLocalSettings() {
           value={cfg.collapsed}
           onChange={(next) =>
             void patchModuleConfig('gitlocal', { collapsed: next })
+          }
+        />
+        <SettingsToggleRow
+          icon="fa-solid fa-table-cells-large"
+          iconColor="#f97316"
+          label="Afficher la card dans le dashboard"
+          description="Décoche pour masquer la card sans désactiver le module. La chip reste active."
+          value={cfg.showCard}
+          onChange={(next) =>
+            void patchModuleConfig('gitlocal', { showCard: next })
           }
         />
         <SettingsSliderRow
@@ -1461,6 +1516,16 @@ function VpnSettings() {
             void patchModuleConfig('vpn', { showWhenDisconnected: next })
           }
         />
+        <SettingsToggleRow
+          icon="fa-solid fa-table-cells-large"
+          iconColor="#06b6d4"
+          label="Afficher la card dans le dashboard"
+          description="Décoche pour masquer la card sans désactiver le module. La chip reste active."
+          value={cfg.showCard}
+          onChange={(next) =>
+            void patchModuleConfig('vpn', { showCard: next })
+          }
+        />
       </SettingsSection>
 
       <SettingsSection title="Données">
@@ -1494,6 +1559,116 @@ function VpnSettings() {
           <strong>OpenVPN</strong>, <strong>WireGuard</strong>, et les VPN
           configurés dans Windows (PPTP / L2TP / SSTP / IKEv2). Module
           read-only : aucune action n'est exposée (pas de connect / disconnect).
+        </div>
+      </SettingsSection>
+    </>
+  );
+}
+
+function TeamsSettings() {
+  const { settings, patchModuleConfig } = useSettingsContext();
+  const cfg = settings.moduleConfig.teams;
+  const outlookAccounts = settings.moduleConfig.meetings.accounts.filter(
+    (a) => a.provider === 'outlook',
+  );
+
+  // Bannière d'onboarding si aucun compte Outlook n'est connecté — on
+  // ne propose pas de réglages avant que le module ne soit utile.
+  if (outlookAccounts.length === 0) {
+    return (
+      <SettingsSection title="Compte requis">
+        <div className="settings-empty">
+          Connecte un compte Outlook dans le module{' '}
+          <strong>Prochains rendez-vous</strong> pour activer Teams Presence.
+          Le module Teams réutilise l'authentification Outlook et a besoin du
+          scope <code>Presence.ReadWrite</code> (re-consent à la connexion).
+        </div>
+      </SettingsSection>
+    );
+  }
+
+  // Si plus d'un compte Outlook, on laisse l'utilisateur choisir lequel.
+  const selectedId = cfg.outlookAccountId ?? outlookAccounts[0].id;
+
+  return (
+    <>
+      {outlookAccounts.length > 1 && (
+        <SettingsSection title="Compte Outlook">
+          <SettingsRadioRow
+            icon="fa-regular fa-circle-user"
+            iconColor="#7c3aed"
+            label="Compte utilisé pour Teams"
+            description="Sélectionne le compte Outlook à interroger pour lire et écrire le statut Teams."
+            value={selectedId}
+            options={outlookAccounts.map((a) => ({
+              value: a.id,
+              label: a.email,
+            }))}
+            onChange={(next) =>
+              void patchModuleConfig('teams', { outlookAccountId: next })
+            }
+          />
+        </SettingsSection>
+      )}
+
+      <SettingsSection title="Affichage">
+        <SettingsToggleRow
+          icon="fa-solid fa-minimize"
+          iconColor="#7c3aed"
+          label="Afficher la chip dans le notch rétracté"
+          description="Pastille colorée selon ton statut Teams. Toujours visible, même en mode Ne pas Déranger."
+          value={cfg.collapsed}
+          onChange={(next) =>
+            void patchModuleConfig('teams', { collapsed: next })
+          }
+        />
+        <SettingsToggleRow
+          icon="fa-solid fa-table-cells-large"
+          iconColor="#7c3aed"
+          label="Afficher la card dans le dashboard"
+          description="Décoche pour masquer la card sans désactiver le module. La chip et le couplage DND restent actifs."
+          value={cfg.showCard}
+          onChange={(next) =>
+            void patchModuleConfig('teams', { showCard: next })
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Synchronisation DND">
+        <SettingsToggleRow
+          icon="fa-solid fa-moon"
+          iconColor="#7c3aed"
+          label="Couplage bidirectionnel avec le DND WinNotch"
+          description="Quand activé : Ctrl+Shift+D bascule aussi Teams en DoNotDisturb, et un Teams DoNotDisturb détecté active le DND WinNotch. Décoche pour rendre Teams Presence purement manuel."
+          value={cfg.dndCouplingEnabled}
+          onChange={(next) =>
+            void patchModuleConfig('teams', { dndCouplingEnabled: next })
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Polling">
+        <SettingsSliderRow
+          icon="fa-solid fa-clock-rotate-left"
+          iconColor="#7c3aed"
+          label="Fréquence de check"
+          description="Intervalle entre deux interrogations Graph /me/presence. Microsoft throttle à ~1500 req / 30 s par app — 30 s est largement sous la limite."
+          value={cfg.pollSec}
+          min={15}
+          max={300}
+          step={15}
+          formatValue={(v) => `${v} s`}
+          onChange={(v) => void patchModuleConfig('teams', { pollSec: v })}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="À propos">
+        <div className="settings-empty">
+          Le module utilise les endpoints Microsoft Graph{' '}
+          <code>/me/presence</code> (lecture, polling) et{' '}
+          <code>/me/presence/setUserPreferredPresence</code> (statut manuel,
+          PT8H). Le bouton « Auto » de la card retire le statut manuel via{' '}
+          <code>/me/presence/clearUserPreferredPresence</code>.
         </div>
       </SettingsSection>
     </>

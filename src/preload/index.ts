@@ -31,6 +31,9 @@ import {
   type NotchApi,
   type SearchResult,
   type Settings,
+  type TeamsActivity,
+  type TeamsAvailability,
+  type TeamsState,
   type UpdateState,
   type VpnState,
 } from '../shared/types';
@@ -241,6 +244,32 @@ const api: NotchApi = {
       ipcRenderer.on(IpcChannel.VpnChange, handler);
       return () => {
         ipcRenderer.off(IpcChannel.VpnChange, handler);
+      };
+    },
+  },
+  teams: {
+    getState: () => ipcRenderer.invoke(IpcChannel.TeamsGetState),
+    setPresence: (
+      availability: TeamsAvailability,
+      activity: TeamsActivity,
+    ) =>
+      ipcRenderer.invoke(
+        IpcChannel.TeamsSetPresence,
+        availability,
+        activity,
+      ) as Promise<TeamsState>,
+    clearPresence: () =>
+      ipcRenderer.invoke(IpcChannel.TeamsClearPresence) as Promise<TeamsState>,
+    reconnect: () =>
+      ipcRenderer.invoke(IpcChannel.TeamsReconnect) as Promise<{
+        ok: boolean;
+        error?: string;
+      }>,
+    onChange: (cb: (state: TeamsState) => void) => {
+      const handler = (_: unknown, state: TeamsState) => cb(state);
+      ipcRenderer.on(IpcChannel.TeamsChange, handler);
+      return () => {
+        ipcRenderer.off(IpcChannel.TeamsChange, handler);
       };
     },
   },

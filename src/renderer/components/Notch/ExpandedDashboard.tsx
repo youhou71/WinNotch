@@ -34,6 +34,7 @@ import { GitLabPanel } from '../../modules/gitlab/GitLabPanel';
 import { GitLocalCard } from '../../modules/gitlocal/GitLocalCard';
 import { GitLocalPanel } from '../../modules/gitlocal/GitLocalPanel';
 import { VpnCard } from '../../modules/vpn/VpnCard';
+import { TeamsCard } from '../../modules/teams/TeamsCard';
 import { ClipboardPage } from '../../modules/clipboard/ClipboardPage';
 import { ClipboardDetectionView } from '../../modules/clipboard/ClipboardDetectionView';
 import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
@@ -278,9 +279,16 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
             {settings.dashboardLayout.map((tile) => {
               // Module éteint dans Settings → on n'occupe pas le slot.
               if (!modulesOn[tile.id]) return null;
+              // Skip si la card est désactivée via Settings (showCard=false).
+              // Toutes les tuiles supportent ce toggle ; clipboard et
+              // messages ne sont pas dans DashTileId donc pas concernées.
+              const tileCfg = settings.moduleConfig[tile.id] as
+                | { showCard?: boolean }
+                | undefined;
+              if (tileCfg?.showCard === false) return null;
               // Cas conditionnels d'absence de données :
               //   - music : pas de track en cours
-              //   - claude : pas de session active OU showCard=false
+              //   - claude : pas de session active
               if (tile.id === 'music' && !hasMusic) return null;
               if (tile.id === 'claude' && !hasClaude) return null;
               return (
@@ -303,6 +311,7 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
                     <GitLocalCard onOpen={() => setGitlocalPanelOpen(true)} />
                   )}
                   {tile.id === 'vpn' && <VpnCard />}
+                  {tile.id === 'teams' && <TeamsCard />}
                 </div>
               );
             })}
