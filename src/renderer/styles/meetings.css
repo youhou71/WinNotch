@@ -417,33 +417,37 @@
   margin-right: 8px;
 }
 
-/* Tooltip listant les participants, apparaît au hover du bloc avatars. */
+/* Tooltip listant les participants — rendue via React portal dans
+ * `document.body` pour échapper à `overflow: hidden` du `.notch`. La
+ * position `fixed` (top/right) est calculée côté JS depuis le rect du
+ * wrapper. Mount conditionnel via état React, donc plus de règles
+ * `:hover .mn-people-tooltip` ici. */
 .mn-people-tooltip {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: -4px;
-  z-index: 50;
+  /* Le `.notch` est à z-index: 9999 — il faut passer au-dessus
+   * (auth-overlay à 10001 reste prioritaire). */
+  z-index: 10000;
   min-width: 220px;
   max-width: 320px;
   padding: 10px 12px;
   background: rgba(20, 20, 24, 0.96);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  opacity: 0;
-  transform: translateY(-4px);
-  pointer-events: none;
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
+  pointer-events: auto;
+  animation: mn-people-tooltip-in 140ms ease both;
 }
 
-.meeting-next-people.has-tooltip:hover .mn-people-tooltip,
-.meeting-next-people.has-tooltip:focus-within .mn-people-tooltip {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
+@keyframes mn-people-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .mnpt-header {

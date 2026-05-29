@@ -11,7 +11,8 @@
  *    montre juste un message).
  *  - Comptes connectés mais 0 meeting → "Aucun rendez-vous · vous êtes libre".
  */
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { MeetingAttendee } from '../../../shared/types';
 import { useMeetingsContext } from './MeetingsContext';
 import { useSettingsContext } from '../settings/SettingsContext';
@@ -140,6 +141,13 @@ function MeetingActions({
  * "compact" : bulles plus petites pour les RDV suivants, avec un
  * `title` natif HTML listant les noms (pas de tooltip custom pour
  * éviter les soucis de z-index dans la liste scrollable).
+ *
+ * Tooltip headline rendu via `createPortal(document.body)` pour
+ * échapper à l'`overflow: hidden` du `.notch` et à l'`overflow-y: auto`
+ * du `.dashboard` — sinon elle reste clippée à l'intérieur de la
+ * tuile. Position `fixed` calculée depuis le rect du wrapper, fermeture
+ * différée (100 ms) pour permettre au curseur de traverser le gap vers
+ * la bulle et scroller la liste interne (`max-height: 220px`).
  */
 function AttendeesAvatars({
   attendees,
@@ -167,8 +175,60 @@ function AttendeesAvatars({
         .join('\n')
     : undefined;
 
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+
+  const compute = useCallback(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      top: r.bottom + 8,
+      right: Math.max(8, window.innerWidth - r.right - 4),
+    });
+  }, []);
+
+  const openNow = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    compute();
+    setShow(true);
+  }, [compute]);
+
+  const scheduleClose = useCallback(() => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => setShow(false), 100);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!show) return;
+    const handler = () => compute();
+    window.addEventListener('scroll', handler, true);
+    window.addEventListener('resize', handler);
+    return () => {
+      window.removeEventListener('scroll', handler, true);
+      window.removeEventListener('resize', handler);
+    };
+  }, [show, compute]);
+
   return (
-    <div className={wrapperClass} title={nativeTitle}>
+    <div
+      ref={isCompact ? undefined : wrapperRef}
+      className={wrapperClass}
+      title={nativeTitle}
+      onMouseEnter={isCompact ? undefined : openNow}
+      onMouseLeave={isCompact ? undefined : scheduleClose}
+    >
       {visible.map((a, i) => {
         const hue = hueFromString(a.email || a.name || String(i));
         const bg = `linear-gradient(135deg, hsl(${hue}, 65%, 60%), hsl(${(hue + 40) % 360}, 65%, 55%))`;
@@ -191,37 +251,46 @@ function AttendeesAvatars({
           +{overflow}
         </span>
       )}
-      {!isCompact && (
-        <div className="mn-people-tooltip" role="tooltip">
-          <div className="mnpt-header">
-            {attendees.length} participant{attendees.length > 1 ? 's' : ''}
-          </div>
-          <ul className="mnpt-list">
-            {attendees.map((a, i) => {
-              const hue = hueFromString(a.email || a.name || String(i));
-              const bg = `linear-gradient(135deg, hsl(${hue}, 65%, 60%), hsl(${(hue + 40) % 360}, 65%, 55%))`;
-              return (
-                <li key={(a.email || a.name) + i} className="mnpt-row">
-                  <span className="mnpt-thumb" style={{ background: bg }}>
-                    {a.photoDataUrl ? (
-                      <img src={a.photoDataUrl} alt="" className="mn-avatar-img" />
-                    ) : (
-                      initialsFromAttendee(a)
-                    )}
-                  </span>
-                  {a.isOrganizer && (
-                    <i className="fa-solid fa-crown mnpt-crown" title="Organisateur" />
-                  )}
-                  <span className="mnpt-name">{a.name || a.email || 'Inconnu'}</span>
-                  {a.name && a.email && a.email !== a.name && (
-                    <span className="mnpt-email">{a.email}</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+      {!isCompact && show && pos
+        ? createPortal(
+            <div
+              className="mn-people-tooltip is-open"
+              role="tooltip"
+              style={{ position: 'fixed', top: pos.top, right: pos.right }}
+              onMouseEnter={openNow}
+              onMouseLeave={scheduleClose}
+            >
+              <div className="mnpt-header">
+                {attendees.length} participant{attendees.length > 1 ? 's' : ''}
+              </div>
+              <ul className="mnpt-list">
+                {attendees.map((a, i) => {
+                  const hue = hueFromString(a.email || a.name || String(i));
+                  const bg = `linear-gradient(135deg, hsl(${hue}, 65%, 60%), hsl(${(hue + 40) % 360}, 65%, 55%))`;
+                  return (
+                    <li key={(a.email || a.name) + i} className="mnpt-row">
+                      <span className="mnpt-thumb" style={{ background: bg }}>
+                        {a.photoDataUrl ? (
+                          <img src={a.photoDataUrl} alt="" className="mn-avatar-img" />
+                        ) : (
+                          initialsFromAttendee(a)
+                        )}
+                      </span>
+                      {a.isOrganizer && (
+                        <i className="fa-solid fa-crown mnpt-crown" title="Organisateur" />
+                      )}
+                      <span className="mnpt-name">{a.name || a.email || 'Inconnu'}</span>
+                      {a.name && a.email && a.email !== a.name && (
+                        <span className="mnpt-email">{a.email}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
