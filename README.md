@@ -2,7 +2,7 @@
 
 Widget système flottant pour Windows 11 inspiré du Dynamic Island d'iOS. WinNotch est une "notch" toujours au sommet de l'écran principal qui s'étend en un dashboard riche au clic ou via raccourci global.
 
-> Stack : Electron 32 · electron-vite · React 18 · TypeScript strict.
+> Stack : Electron 41 · electron-vite 5 · React 18 · TypeScript strict.
 
 ---
 
@@ -220,7 +220,7 @@ L'installer généré (`dist/WinNotch-Setup-x.y.z.exe`) est un wizard NSIS class
 
 ## Stack technique
 
-- **Electron 32** (Chromium 128) — supporte les courbes spring CSS natives.
+- **Electron 41** (Chromium M146, Node 22.x) — supporte les courbes spring CSS natives.
 - **electron-vite** — build / dev avec HMR renderer et reload main.
 - **electron-store** — persistance des Settings dans `config.json`.
 - **electron-updater** — mises à jour automatiques via GitHub Releases.

@@ -5,6 +5,38 @@ Toutes les évolutions notables de WinNotch.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versioning [SemVer](https://semver.org/lang/fr/).
 
+## [1.1.0] - 2026-05-29
+
+### Changed
+
+- **Bump majeur Electron 32 → 41.7.1** (10 majeures de retard rattrapées). Chromium M146, Node 22.x. Récupère les correctifs sécurité accumulés depuis fin 2024.
+- **Ecosystème Electron suivi en cohérence** :
+  - `electron-builder` 24 → 26.8.1 (migration interne `rcedit.exe` → paquet npm `resedit`, support pnpm 11).
+  - `electron-vite` 2 → 5.0.0 (nouveau type `BuildEnvironmentOptions`, peer Vite ≥ 7).
+  - `vite` 5 → 7.3.3 (forcé par electron-vite 5).
+  - `@electron-toolkit/utils` 3 → 4.0.0, `@electron-toolkit/preload` 3.0.1 → 3.0.2.
+  - `@types/node` 20 → 22.
+- **CI Node 20 → 22** dans `.github/workflows/release.yml` (Electron 41+ requiert Node 22.x à la compilation).
+
+### Security
+
+- 0 vulnérabilité npm reportée par `npm audit` (vs. 2 moderate en v1.0.1, héritées de la chaîne `vite 5`).
+- Correctifs Chromium / Node accumulés sur 10 majeures Electron récupérés.
+
+### Notes
+
+- **Cible Electron 42 reportée** : `better-sqlite3` 12.10.0 a explicitement retiré ses prebuilds pour Electron 42 (cf. changelog upstream « Temporarily rollback support for Electron v42 prebuilds »). Pin sur 41.7.1 (EOL 25 août 2026) — à rebumper en v42 ou v43 dès que `better-sqlite3` republie ses prebuilds compatibles.
+
+---
+
+## [1.0.1] - 2026-05-29
+
+### Fixed
+
+- **Tooltip participants Meetings (mode étendu)** : la bulle listant tous les participants du « next meeting » restait clippée à l'intérieur de la tuile dans le mode dashboard (double `overflow: hidden` du `.notch` + `overflow-y: auto` du `.dashboard`). Rendue désormais via `createPortal(document.body)` avec position `fixed` calculée depuis le rect du wrapper, fermeture différée 100 ms pour permettre au curseur de traverser le gap et scroller la liste interne (`max-height: 220px`). Z-index relevé à 10000 pour passer au-dessus du `.notch` (z-index 9999).
+
+---
+
 ## [1.0.0] - 2026-05-28
 
 Première version stable. Gel fonctionnel — pas de nouveau module avant la v1.x.
