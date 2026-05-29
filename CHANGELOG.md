@@ -5,7 +5,7 @@ Toutes les évolutions notables de WinNotch.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versioning [SemVer](https://semver.org/lang/fr/).
 
-## [1.1.0] - 2026-05-29
+## [1.0.2] - 2026-05-29
 
 ### Changed
 
