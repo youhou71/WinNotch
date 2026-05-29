@@ -1,0 +1,160 @@
+/* Card claude.usage — 2 jauges horizontales + sparkline 24h. */
+
+.cu-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--d-card-radius);
+  font-size: 11px;
+  color: var(--txt-main);
+}
+
+.cu-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--txt-faint);
+}
+
+.cu-card-title {
+  font-weight: 600;
+}
+
+.cu-card-plan {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(167, 139, 250, 0.18);
+  color: #a78bfa;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.cu-gauge {
+  display: grid;
+  grid-template-columns: 26px 1fr 36px auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--txt-main);
+}
+
+.cu-gauge-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--txt-faint);
+  text-transform: uppercase;
+}
+
+.cu-gauge-track {
+  height: 4px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cu-gauge-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 200ms ease, background-color 200ms ease;
+}
+
+.cu-gauge-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  font-size: 11px;
+}
+
+.cu-gauge-reset {
+  font-size: 10px;
+  color: var(--txt-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cu-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-1);
+  font-size: 10px;
+  color: var(--txt-faint);
+}
+
+/* Quand aucun bandeau d'avertissement n'occupe le côté droit, on étire la
+   sparkline sur toute la largeur disponible. Le viewBox SVG (0 0 120 18)
+   gère naturellement le redimensionnement horizontal — le tracé reste
+   proportionnel et lisible jusqu'aux largeurs de tuile typiques. */
+.cu-card-foot:not(.has-warn) .system-sparkline {
+  flex: 1 1 auto;
+  width: 100% !important;
+  min-width: 0;
+}
+
+.cu-card-foot-label {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.cu-card-foot-warn {
+  margin-left: auto;
+  color: #fbbf24;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* État dégradé : Claude Code non détecté. */
+.cu-card-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--d-card-radius);
+  font-size: 11px;
+  color: var(--txt-faint);
+}
+
+.cu-card-empty-icon {
+  font-size: 14px;
+  color: var(--accent-violet, #a78bfa);
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.cu-card-empty-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cu-card-empty-title {
+  color: var(--txt-main);
+  font-weight: 600;
+}
+
+.cu-card-empty-desc {
+  line-height: 1.4;
+}
+
+.cu-card-empty-desc code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+}

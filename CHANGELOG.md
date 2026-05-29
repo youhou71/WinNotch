@@ -5,6 +5,43 @@ Toutes les évolutions notables de WinNotch.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versioning [SemVer](https://semver.org/lang/fr/).
 
+## [1.1.0] - 2026-05-29
+
+### Added
+
+- **Famille de modules `Claude`** — premier client du nouveau mécanisme générique de regroupement. Settings → Modules affiche désormais une section dédiée « Claude » qui contient deux sous-modules indépendants (toggle + drilldown par sous-module).
+- **Module `claude.usage`** — suivi des limites d'usage Claude Pro / Max (fenêtres 5 h et 7 j) avec :
+  - Card dashboard : 2 jauges horizontales (vert < 70 < orange < 90 < rouge), countdowns vers le prochain reset, mini-sparkline 24 h, badge plan (Pro / Team · Max 5× / Team+ · Max 20× · ?). Les paires perso/équipe partagent une seule valeur car leurs nominaux par seat sont identiques.
+  - Sources : cache statusline `~/.claude/winnotch-usage.json` (autoritaire) avec fallback parsing des `.jsonl` dans `~/.claude/projects/` quand le statusline n'a pas encore tourné.
+  - Wrapper statusline WinNotch installable depuis Settings — patch idempotent de `~/.claude/settings.json`, **mode wrap** si l'utilisateur avait déjà un statusline custom (la commande d'origine est invoquée en suivant via `WINNOTCH_WRAPPED_STATUSLINE`).
+  - Toasts à chaque franchissement de seuil (70 / 85 / 95 % configurables) sur 5 h ou 7 j, dédupliqués jusqu'au reset suivant, filtrés en Ne pas Déranger.
+  - Ring buffer 288 points (5 min × 24 h) persisté dans `electron-store` (store dédié `claude-usage.json` pour ne pas polluer le `config.json` Settings).
+  - Polling configurable [10 s, 5 min], défaut 30 s.
+  - Couvre Claude Code, claude.ai et Claude Design (quota unifié depuis fin mai 2026).
+- **`ModuleId` hiérarchique** (`<groupId>.<subId>`) — convention dot-notation extensible. Helper `parseModuleId` + nouveau fichier `moduleGroupsMeta.ts` qui définit les familles affichables dans Settings. Premier groupe : `claude`. Préparé pour d'autres familles futures (Teams + Slack, GitLab + GitHub, …) sans refactor.
+- **Section `description` optionnelle** dans `<SettingsSection>` (atom partagé) — affichée sous le titre d'une famille pour rappeler son périmètre.
+
+### Changed
+
+- **Module historique `claude` → `claude.live`** (sessions Claude Code détectées via file watcher). Renommage de :
+  - `ModuleId` / `DashTileId` / `VALID_DASH_TILE_IDS`
+  - `ModuleConfig['claude.live']` (ex-`ModuleConfig.claude`)
+  - `DEFAULT_SETTINGS.modules['claude.live']` et `.moduleConfig['claude.live']`
+  - tuile `dashboardLayout` : `{ id: 'claude' }` → `{ id: 'claude.live' }`
+  - libellé dans `modulesMeta` : « Claude Code » → « Sessions live »
+- **Canaux IPC `claude:*` inchangés** (`claude:list`, `claude:change`) — conventions de naming hors typage TS, pas de raison de casser le contrat.
+- **Migration douce v1.0 → v1.1** dans `settingsService.mergeDefaults` : renomme automatiquement les clés persistées (`modules.claude` → `modules['claude.live']`, `moduleConfig.claude` → `moduleConfig['claude.live']`, `{id:'claude'}` → `{id:'claude.live'}` dans `dashboardLayout`). Idempotente : à la 2ᵉ passe les clés legacy n'existent plus, le bloc est no-op. Les préférences utilisateur (toggle, position custom de la tuile, etc.) sont préservées.
+- **Card dashboard `ClaudeCard`** désormais branchée sur `tile.id === 'claude.live'` (au lieu de `'claude'`). Idem `ClaudeChip` côté collapsed.
+- Bump version `1.0.2` → `1.1.0` — premier ajout fonctionnel post-v1 + refacto interne sans casse côté utilisateur.
+
+### Notes
+
+- L'utilisateur n'a rien à faire : la migration est transparente, son toggle / position de tuile / config existante sont préservés au premier boot 1.1.
+- Le wrapper statusline n'est **pas** installé automatiquement — il faut explicitement l'activer via Settings → Claude → Limites d'usage. En attendant, le module bascule sur le fallback `jsonlParser` qui donne une estimation grossière (`source: 'estimated'`) selon le plan saisi.
+- Flag d'arrêt diagnostique : `WINNOTCH_DISABLE_CLAUDE_USAGE=1` saute l'enregistrement du module au boot. Le flag historique `WINNOTCH_DISABLE_CLAUDE` reste effectif pour `claude.live`.
+
+---
+
 ## [1.0.2] - 2026-05-29
 
 ### Changed

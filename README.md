@@ -29,8 +29,23 @@ Pour chaque compte, l'utilisateur peut choisir précisément les calendriers à 
 
 Pour les comptes **Outlook**, le panneau permet aussi de masquer certaines **catégories de couleur** (liste noire). Pratique pour filtrer un tag « Perso » ajouté à des events dans le calendrier pro. Les events sans catégorie sont toujours affichés.
 
-### Claude Code
+### Famille Claude
+
+Regroupe deux sous-modules indépendants (toggles séparés dans Settings) :
+
+#### Claude · Sessions live
 Détecte automatiquement les sessions Claude Code en cours sur la machine (sans configuration) via le file watcher sur `~/.claude/projects/`. Indicateurs visuels d'activité, toast à la fin d'une session, et badge "?" jaune quand Claude attend une réponse utilisateur.
+
+#### Claude · Limites d'usage
+Suivi des **limites d'usage Pro / Max** sur les fenêtres glissantes **5 h** et **7 j** — couvre Claude Code, claude.ai et Claude Design (quota unifié depuis fin mai 2026).
+
+Card dashboard avec 2 jauges horizontales (vert < 70 < orange < 90 < rouge), countdown vers le prochain reset, badge plan (`Pro / Team`, `Max 5× / Team+`, `Max 20×`) et **mini-sparkline 24 h** alimenté par un ring buffer local (288 points × 5 min).
+
+Toasts à chaque franchissement de seuil (par défaut 70 / 85 / 95 %), dédupliqués jusqu'au reset suivant, filtrés en Ne pas Déranger.
+
+**Source de données** : un wrapper statusline WinNotch (`resources/winnotch-statusline.cjs`) installable depuis Settings, qui patche `~/.claude/settings.json` de manière idempotente. À chaque turn de Claude Code, le wrapper écrit les `rate_limits` dans `~/.claude/winnotch-usage.json`. Si l'utilisateur avait déjà un statusline custom, WinNotch passe en **mode wrap** (la commande d'origine est invoquée en suivant — aucune perte de fonctionnalité). Tant que le wrapper n'a pas tourné une première fois, le module retombe sur un fallback de parsing local des `.jsonl` qui donne une estimation grossière selon le plan saisi.
+
+Polling configurable de 10 s à 5 min (défaut 30 s).
 
 ### GitLab
 Suit les **MR à reviewer**, **mes MR ouvertes**, et **issues critiques non assignées** (labels surveillés, ex. `Severity::Critique`). Chip avec badge rouge pulse pour les issues à prendre. Dashboard compact à 3 chiffres, panel plein dashboard au clic, clic sur une ligne ouvre dans le navigateur. Toasts pour les nouvelles MR assignées et les nouvelles issues critiques.

@@ -17,13 +17,18 @@ import type { ReactNode } from 'react';
 
 interface SectionProps {
   title?: string;
+  /** Sous-titre gris affiché sous le titre — typiquement pour décrire une famille de modules. */
+  description?: string;
   children: ReactNode;
 }
 
-export function SettingsSection({ title, children }: SectionProps) {
+export function SettingsSection({ title, description, children }: SectionProps) {
   return (
     <div className="settings-section">
       {title && <div className="settings-section-title">{title}</div>}
+      {description && (
+        <div className="settings-section-desc">{description}</div>
+      )}
       <div className="settings-section-body">{children}</div>
     </div>
   );

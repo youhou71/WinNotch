@@ -60,10 +60,10 @@ export function CollapsedRow() {
     isToday(nextMeeting.start);
 
   // La chip Claude : module activé + au moins 1 session active.
-  const claudeCfg = settings.moduleConfig.claude;
+  const claudeCfg = settings.moduleConfig['claude.live'];
   const claudeEnabled =
     !settings.dnd &&
-    settings.modules.claude &&
+    settings.modules['claude.live'] &&
     claudeCfg.collapsed &&
     activeClaude.length > 0;
 

@@ -28,6 +28,7 @@ import './styles/search.css';
 import './styles/tasks.css';
 import './styles/meetings.css';
 import './styles/claude.css';
+import './styles/claudeUsage.css';
 import './styles/gitlab.css';
 import './styles/gitlocal.css';
 import './styles/vpn.css';

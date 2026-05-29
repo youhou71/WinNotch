@@ -22,8 +22,9 @@
  * `ClaudeContext` et l'accès à `ToastContext`. Pas besoin d'un canal IPC
  * dédié — on compare juste le snapshot précédent au nouveau.
  *
- * Respecte le toggle `moduleConfig.claude.notifyCompletion`. Si le module
- * Claude est désactivé globalement (`modules.claude=false`), aucun toast.
+ * Respecte le toggle `moduleConfig['claude.live'].notifyCompletion`. Si le
+ * module Claude live est désactivé globalement (`modules['claude.live']=false`),
+ * aucun toast.
  *
  * Premier batch reçu = baseline silencieuse pour éviter le flood de
  * notifications au démarrage de l'app pour des sessions historiques.
@@ -116,8 +117,8 @@ export function useClaudeCompletionToasts(): void {
 
     prev.current = next;
 
-    const moduleOn = settings.modules.claude;
-    const notify = settings.moduleConfig.claude.notifyCompletion;
+    const moduleOn = settings.modules['claude.live'];
+    const notify = settings.moduleConfig['claude.live'].notifyCompletion;
     if (!moduleOn || !notify) return;
 
     for (const s of askingForInput) {
@@ -136,5 +137,5 @@ export function useClaudeCompletionToasts(): void {
         message: 'Session terminée',
       });
     }
-  }, [sessions, settings.modules.claude, settings.moduleConfig.claude.notifyCompletion, push]);
+  }, [sessions, settings.modules['claude.live'], settings.moduleConfig['claude.live'].notifyCompletion, push]);
 }

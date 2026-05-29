@@ -18,6 +18,7 @@ import {
   type CalendarProviderId,
   type OutlookCategory,
   type ClaudeSession,
+  type ClaudeUsageState,
   type ClipboardState,
   type DashTile,
   type Density,
@@ -174,6 +175,19 @@ const api: NotchApi = {
       ipcRenderer.on(IpcChannel.ClaudeChange, handler);
       return () => {
         ipcRenderer.off(IpcChannel.ClaudeChange, handler);
+      };
+    },
+  },
+  claudeUsage: {
+    getState: () => ipcRenderer.invoke(IpcChannel.ClaudeUsageGetState),
+    refresh: () => ipcRenderer.invoke(IpcChannel.ClaudeUsageRefresh),
+    installStatusline: (enable: boolean) =>
+      ipcRenderer.invoke(IpcChannel.ClaudeUsageInstallStatusline, enable),
+    onChange: (cb: (state: ClaudeUsageState) => void) => {
+      const handler = (_: unknown, state: ClaudeUsageState) => cb(state);
+      ipcRenderer.on(IpcChannel.ClaudeUsageChange, handler);
+      return () => {
+        ipcRenderer.off(IpcChannel.ClaudeUsageChange, handler);
       };
     },
   },

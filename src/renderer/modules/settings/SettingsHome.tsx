@@ -3,11 +3,13 @@
  *
  * Sections rendues :
  *  - Apparence : choix de densité (dense / normal / airy)
- *  - Modules : 1 row par module, clic ouvre la page module, switch
- *    inline pour activer/désactiver
+ *  - Modules : groupés par famille (cf. `moduleGroupsMeta.ts`). Les
+ *    modules sans famille tombent dans une section virtuelle « Autres
+ *    modules ». Chaque entrée garde son toggle inline et son drilldown.
  *  - Notifications : toggle DND (peut aussi être togglé via Ctrl+Shift+D)
  */
-import type { ModuleId } from '../../../shared/types';
+import type { ModuleGroupId, ModuleId } from '../../../shared/types';
+import { parseModuleId } from '../../../shared/types';
 import {
   SettingsSection,
   SettingsRadioRow,
@@ -16,7 +18,8 @@ import {
   SettingsToggleRow,
 } from './atoms';
 import { useSettingsContext } from './SettingsContext';
-import { SETTINGS_MODULES } from './modulesMeta';
+import { SETTINGS_MODULES, type ModuleMeta } from './modulesMeta';
+import { MODULE_GROUPS } from './moduleGroupsMeta';
 import { UpdaterRow } from '../updater/UpdaterRow';
 
 interface Props {
@@ -26,9 +29,58 @@ interface Props {
   onOpenLayout: () => void;
 }
 
+/**
+ * Regroupe les modules par famille pour l'affichage Settings.
+ * Préserve l'ordre de déclaration dans `SETTINGS_MODULES`.
+ */
+function groupModules(modules: ModuleMeta[]): {
+  groups: Map<ModuleGroupId, ModuleMeta[]>;
+  standalone: ModuleMeta[];
+} {
+  const groups = new Map<ModuleGroupId, ModuleMeta[]>();
+  const standalone: ModuleMeta[] = [];
+  for (const meta of modules) {
+    const { group } = parseModuleId(meta.id);
+    if (group) {
+      const list = groups.get(group) ?? [];
+      list.push(meta);
+      groups.set(group, list);
+    } else {
+      standalone.push(meta);
+    }
+  }
+  return { groups, standalone };
+}
+
 export function SettingsHome({ onSelectModule, onOpenLayout }: Props) {
   const { settings, setDensity, setModule, toggleDnd, setAutoStart } =
     useSettingsContext();
+
+  const { groups, standalone } = groupModules(SETTINGS_MODULES);
+
+  function renderModuleRow(m: ModuleMeta) {
+    const enabled = settings.modules[m.id];
+    return (
+      <SettingsRow
+        key={m.id}
+        icon={m.icon}
+        iconColor={m.color}
+        label={m.label}
+        description={m.description}
+        onClick={() => onSelectModule(m.id)}
+        right={
+          <>
+            <SettingsToggle
+              value={enabled}
+              onChange={(next) => void setModule(m.id, next)}
+              ariaLabel={`Activer ${m.label}`}
+            />
+            <i className="fa-solid fa-chevron-right settings-chevron" />
+          </>
+        }
+      />
+    );
+  }
 
   return (
     <>
@@ -89,30 +141,23 @@ export function SettingsHome({ onSelectModule, onOpenLayout }: Props) {
         <UpdaterRow />
       </SettingsSection>
 
-      <SettingsSection title="Modules">
-        {SETTINGS_MODULES.map((m) => {
-          const enabled = settings.modules[m.id];
-          return (
-            <SettingsRow
-              key={m.id}
-              icon={m.icon}
-              iconColor={m.color}
-              label={m.label}
-              description={m.description}
-              onClick={() => onSelectModule(m.id)}
-              right={
-                <>
-                  <SettingsToggle
-                    value={enabled}
-                    onChange={(next) => void setModule(m.id, next)}
-                    ariaLabel={`Activer ${m.label}`}
-                  />
-                  <i className="fa-solid fa-chevron-right settings-chevron" />
-                </>
-              }
-            />
-          );
-        })}
+      {/* Sections de modules groupés par famille (Claude, …). */}
+      {[...groups.entries()].map(([groupId, members]) => {
+        const groupMeta = MODULE_GROUPS[groupId];
+        return (
+          <SettingsSection
+            key={`group-${groupId}`}
+            title={groupMeta.label}
+            description={groupMeta.description}
+          >
+            {members.map(renderModuleRow)}
+          </SettingsSection>
+        );
+      })}
+
+      {/* Modules autonomes (sans `.` dans leur ID). */}
+      <SettingsSection title="Autres modules">
+        {standalone.map(renderModuleRow)}
       </SettingsSection>
     </>
   );

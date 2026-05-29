@@ -25,6 +25,7 @@ import type {
 import { useSettingsContext } from './SettingsContext';
 import { useMeetingsContext } from '../meetings/MeetingsContext';
 import { SystemSettings } from '../system/SystemSettings';
+import { ClaudeUsageSettings } from '../claudeUsage/ClaudeUsageSettings';
 import { useToast } from '../toast/ToastContext';
 import { MODULE_META_BY_ID } from './modulesMeta';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
@@ -89,7 +90,8 @@ export function SettingsModulePage({ moduleId, onBack }: Props) {
       {moduleId === 'meetings' && <MeetingsSettings />}
       {moduleId === 'gitlab' && <GitLabSettings />}
       {moduleId === 'gitlocal' && <GitLocalSettings />}
-      {moduleId === 'claude' && <ClaudeSettings />}
+      {moduleId === 'claude.live' && <ClaudeSettings />}
+      {moduleId === 'claude.usage' && <ClaudeUsageSettings />}
       {moduleId === 'clipboard' && <ClipboardSettings />}
       {moduleId === 'vpn' && <VpnSettings />}
       {moduleId === 'teams' && <TeamsSettings />}
@@ -1073,7 +1075,7 @@ function WatchedLabelsField() {
 function ClaudeSettings() {
   const { settings, patchModuleConfig } = useSettingsContext();
   const { push: pushToast } = useToast();
-  const cfg = settings.moduleConfig.claude;
+  const cfg = settings.moduleConfig['claude.live'];
   return (
     <>
       <SettingsSection title="Affichage">
@@ -1084,7 +1086,7 @@ function ClaudeSettings() {
           description="La card avec les sessions actives apparaît dans le dashboard étendu. Désactive pour un mode « notifications seulement » : les toasts continuent à être émis."
           value={cfg.showCard}
           onChange={(next) =>
-            void patchModuleConfig('claude', { showCard: next })
+            void patchModuleConfig('claude.live', { showCard: next })
           }
         />
         <SettingsToggleRow
@@ -1094,7 +1096,7 @@ function ClaudeSettings() {
           description="Badge + spark coloré indiquant les sessions actives. Si désactivé, les sessions Claude sont invisibles dans le notch fermé."
           value={cfg.collapsed}
           onChange={(next) =>
-            void patchModuleConfig('claude', { collapsed: next })
+            void patchModuleConfig('claude.live', { collapsed: next })
           }
         />
       </SettingsSection>
@@ -1107,7 +1109,7 @@ function ClaudeSettings() {
           description="Toast quand une session Claude se termine."
           value={cfg.notifyCompletion}
           onChange={(next) =>
-            void patchModuleConfig('claude', { notifyCompletion: next })
+            void patchModuleConfig('claude.live', { notifyCompletion: next })
           }
         />
         <SettingsToggleRow
@@ -1116,7 +1118,7 @@ function ClaudeSettings() {
           label="Erreurs"
           value={cfg.notifyError}
           onChange={(next) =>
-            void patchModuleConfig('claude', { notifyError: next })
+            void patchModuleConfig('claude.live', { notifyError: next })
           }
         />
       </SettingsSection>

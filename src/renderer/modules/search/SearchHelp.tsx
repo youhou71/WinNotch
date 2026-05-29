@@ -58,7 +58,7 @@ const PREFIX_ITEMS: DocItem[] = [
     label: 'Lance Claude',
     description:
       'Ouvre un nouveau terminal Windows et exécute `claude "<prompt>"` avec le texte saisi.',
-    enabled: (s) => s.modules.claude,
+    enabled: (s) => s.modules['claude.live'],
   },
   {
     symbol: '/',

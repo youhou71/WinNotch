@@ -91,18 +91,53 @@ export interface Task {
  * Identifiants des modules que l'utilisateur peut activer/désactiver
  * depuis les réglages. Note : `audio` n'est pas dans la liste car il est
  * implicite (toujours actif — le footer audio est toujours rendu).
+ *
+ * **Convention dot-notation** : un identifiant peut être plat (`'audio'`,
+ * `'music'`…) ou hiérarchique `'<groupId>.<subId>'` (ex. `'claude.live'`,
+ * `'claude.usage'`). La partie avant le point désigne une **famille** de
+ * modules regroupés visuellement dans Settings → Modules. Voir
+ * `parseModuleId` ci-dessous et `moduleGroupsMeta.ts` côté renderer.
  */
 export type ModuleId =
   | 'music'
   | 'meetings'
   | 'gitlab'
   | 'gitlocal'
-  | 'claude'
+  | 'claude.live'
+  | 'claude.usage'
   | 'tasks'
   | 'clipboard'
   | 'vpn'
   | 'teams'
   | 'system';
+
+/**
+ * Identifiant d'une famille (groupe) de modules. Une famille regroupe
+ * dans Settings plusieurs sous-modules logiquement liés, chacun avec son
+ * propre toggle et sa propre config. Le rendu visuel est piloté par
+ * `MODULE_GROUPS` côté renderer.
+ */
+export type ModuleGroupId = 'claude';
+
+/** Décomposition d'un `ModuleId` éventuellement hiérarchique. */
+export interface ParsedModuleId {
+  group: ModuleGroupId | null;
+  sub: string;
+}
+
+/**
+ * Décompose un `ModuleId` en `{ group, sub }`. Les IDs plats (ex. `'audio'`)
+ * sortent avec `group: null` et `sub` égal à l'ID complet. Les IDs en
+ * `'<group>.<sub>'` sont scindés sur le premier `.`.
+ */
+export function parseModuleId(id: ModuleId): ParsedModuleId {
+  const dot = id.indexOf('.');
+  if (dot === -1) return { group: null, sub: id };
+  return {
+    group: id.slice(0, dot) as ModuleGroupId,
+    sub: id.slice(dot + 1),
+  };
+}
 
 /** Densité visuelle du dashboard étendu. */
 export type Density = 'dense' | 'normal' | 'airy';
@@ -117,7 +152,8 @@ export type DashTileId =
   | 'meetings'
   | 'gitlab'
   | 'gitlocal'
-  | 'claude'
+  | 'claude.live'
+  | 'claude.usage'
   | 'tasks'
   | 'vpn'
   | 'teams'
@@ -240,7 +276,7 @@ export interface ModuleConfig {
     /** Afficher la card dans le dashboard étendu. */
     showCard: boolean;
   };
-  claude: {
+  'claude.live': {
     /** Notifier la fin d'une session Claude qui était en cours. */
     notifyCompletion: boolean;
     /** Notifier les erreurs des sessions Claude. */
@@ -255,6 +291,31 @@ export interface ModuleConfig {
      */
     showCard: boolean;
     collapsed: boolean;
+  };
+  'claude.usage': {
+    /**
+     * Fréquence de polling en millisecondes. Le statusline et le fichier
+     * cache `~/.claude/winnotch-usage.json` sont relus à chaque tick.
+     * Borne [10 000, 300 000] ms, défaut 30 000 ms.
+     */
+    pollMs: number;
+    /**
+     * Tier d'abonnement Claude saisi manuellement par l'utilisateur. Sert
+     * uniquement à afficher les valeurs absolues (messages restants) à
+     * partir du `%` retourné par le statusline. `unknown` → seuls les
+     * pourcentages sont montrés.
+     */
+    plan: ClaudeUsagePlan;
+    /**
+     * Pourcentages déclencheurs des toasts d'alerte. Toast émis à chaque
+     * transition `% < seuil → % ≥ seuil`, indépendamment pour la fenêtre
+     * 5 h et la fenêtre hebdomadaire.
+     */
+    thresholdsPct: number[];
+    /** Active l'émission des toasts de seuil. */
+    notifyThresholds: boolean;
+    /** Affiche la card dans le dashboard étendu. */
+    showCard: boolean;
   };
   tasks: {
     /** Auto-supprime les tâches done plus vieilles que N jours. 0 = jamais. */
@@ -409,7 +470,8 @@ export const DEFAULT_SETTINGS: Settings = {
     meetings: true,
     gitlab: true,
     gitlocal: true,
-    claude: true,
+    'claude.live': true,
+    'claude.usage': true,
     tasks: true,
     clipboard: true,
     vpn: true,
@@ -450,12 +512,19 @@ export const DEFAULT_SETTINGS: Settings = {
       collapsed: true,
       showCard: true,
     },
-    claude: {
+    'claude.live': {
       notifyCompletion: true,
       notifyError: true,
       workspaces: [],
       showCard: true,
       collapsed: true,
+    },
+    'claude.usage': {
+      pollMs: 30_000,
+      plan: 'unknown',
+      thresholdsPct: [70, 85, 95],
+      notifyThresholds: true,
+      showCard: true,
     },
     tasks: {
       autoClearDays: 0,
@@ -494,16 +563,19 @@ export const DEFAULT_SETTINGS: Settings = {
   // Layout par défaut — reproduit l'agencement historique :
   //   ┌── tasks (4) ─┬─── meetings (8) ───┐
   //   ├──────── music (12) ────────────────┤
-  //   ├── gitlab (6) ─┬───── claude (6) ───┤
-  //   └──────── gitlocal (12) ──────────────┘
+  //   ├── gitlab (6) ─┬── claude.live (6) ─┤
+  //   ├── gitlocal (8) ─┬─ claude.usage(4)─┤
+  //   └──── vpn (4) ─┬── teams (4) ───────┤
+  //   └──────── system (12) ──────────────┘
   // L'utilisateur peut réordonner et redimensionner via Settings → Disposition.
   dashboardLayout: [
     { id: 'tasks', cols: 4 },
     { id: 'meetings', cols: 8 },
     { id: 'music', cols: 12 },
     { id: 'gitlab', cols: 6 },
-    { id: 'claude', cols: 6 },
+    { id: 'claude.live', cols: 6 },
     { id: 'gitlocal', cols: 8 },
+    { id: 'claude.usage', cols: 4 },
     { id: 'vpn', cols: 4 },
     { id: 'teams', cols: 4 },
     { id: 'system', cols: 12 },
@@ -617,6 +689,67 @@ export interface ClaudeSession {
    * `end_turn`.
    */
   lastTurnHadWork: boolean;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  CLAUDE USAGE (quotas Pro / Max)
+ * ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * Tier d'abonnement Claude saisi manuellement par l'utilisateur.
+ * Sert à dériver les valeurs absolues (messages restants) à partir des
+ * pourcentages remontés par le statusline. `unknown` masque les valeurs
+ * absolues et n'affiche que les pourcentages.
+ *
+ * Les plans équipe sont fusionnés avec les plans perso de même niveau
+ * (mêmes nominaux par seat) :
+ *  - `pro`    couvre **Pro** (perso) ET **Team** (Standard, ≈ Pro par seat)
+ *  - `max5x`  couvre **Max 5×** ET **Team+** (Premium, ≈ Max 5× par seat)
+ *  - `max20x` reste perso (pas d'équivalent équipe)
+ */
+export type ClaudeUsagePlan = 'pro' | 'max5x' | 'max20x' | 'unknown';
+
+/**
+ * Source d'une mesure d'usage. `statusline` est la source autoritaire
+ * (lue depuis `~/.claude/winnotch-usage.json` alimenté par le statusline
+ * WinNotch). `estimated` est le fallback calculé localement par parsing
+ * des `.jsonl` dans `~/.claude/projects/`.
+ */
+export type ClaudeUsageSource = 'statusline' | 'estimated';
+
+/** Une fenêtre d'usage (5h glissante OU 7j glissante). */
+export interface ClaudeUsageWindow {
+  /** Pourcentage consommé sur la fenêtre, dans [0, 100]. */
+  percent: number;
+  /** Timestamp Unix (ms) auquel la fenêtre se reset (rolling window). */
+  resetsAt: number;
+  source: ClaudeUsageSource;
+}
+
+/**
+ * État courant du module `claude.usage`. Émis par le service main à chaque
+ * tick de polling. Le ring buffer `sparkline` est persisté en local pour
+ * survivre aux redémarrages.
+ */
+export interface ClaudeUsageState {
+  fiveH: ClaudeUsageWindow;
+  weekly: ClaudeUsageWindow;
+  /**
+   * Ring buffer de 288 points (1 toutes les 5 min × 24 h). Chaque point
+   * est le `percent` 5h enregistré à ce tick. Utilisé pour la mini-spark
+   * dans la card étendue.
+   */
+  sparkline: number[];
+  /** Tier saisi par l'utilisateur dans Settings → Claude → Limites d'usage. */
+  plan: ClaudeUsagePlan;
+  /** True si le wrapper statusline WinNotch est installé dans `~/.claude/settings.json`. */
+  statuslineInstalled: boolean;
+  /** True si `~/.claude/` est détecté (Claude Code installé). */
+  claudeInstalled: boolean;
+  /** Timestamp Unix (ms) du dernier tick réussi. */
+  lastSyncAt: number;
+  /** Dernier message d'erreur rencontré (null = OK). */
+  lastError: string | null;
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -1472,6 +1605,22 @@ export const IpcChannel = {
   /** Main → renderer : push de la nouvelle liste de sessions (file watcher). */
   ClaudeChange: 'claude:change',
 
+  /** Renderer → main (invoke) : retourne l'état courant des limites Claude. */
+  ClaudeUsageGetState: 'claude-usage:getState',
+  /**
+   * Renderer → main (invoke) : force une relecture immédiate du cache
+   * statusline et du fallback `.jsonl`. Retourne le nouvel état.
+   */
+  ClaudeUsageRefresh: 'claude-usage:refresh',
+  /**
+   * Renderer → main (invoke) : installe (ou désinstalle si `enable=false`)
+   * le wrapper statusline WinNotch dans `~/.claude/settings.json`. Retourne
+   * `{ ok, installed, path? , error? }`.
+   */
+  ClaudeUsageInstallStatusline: 'claude-usage:installStatusline',
+  /** Main → renderer : push d'un nouveau ClaudeUsageState (polling). */
+  ClaudeUsageChange: 'claude-usage:change',
+
   /** Renderer → main (invoke) : retourne le GitLabState courant. */
   GitLabGetState: 'gitlab:getState',
   /**
@@ -1672,6 +1821,21 @@ export interface NotchApi {
     list: () => Promise<ClaudeSession[]>;
     /** S'abonne au push de la liste de sessions (file watcher). */
     onChange: (cb: (sessions: ClaudeSession[]) => void) => () => void;
+  };
+  claudeUsage: {
+    /** Snapshot courant des limites + ring buffer sparkline. */
+    getState: () => Promise<ClaudeUsageState>;
+    /** Force un refresh immédiat (skip l'attente du tick). */
+    refresh: () => Promise<ClaudeUsageState>;
+    /**
+     * Installe (`enable: true`) ou désinstalle (`enable: false`) le wrapper
+     * statusline WinNotch dans `~/.claude/settings.json`. Idempotent.
+     */
+    installStatusline: (
+      enable: boolean,
+    ) => Promise<{ ok: boolean; installed: boolean; path?: string; error?: string }>;
+    /** S'abonne au push d'un nouvel état (polling). */
+    onChange: (cb: (state: ClaudeUsageState) => void) => () => void;
   };
   updater: {
     /** Snapshot complet de l'état d'update (status, versions, progression). */

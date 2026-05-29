@@ -55,7 +55,8 @@ const DASH_TILE_ID_TABLE = {
   meetings: true,
   gitlab: true,
   gitlocal: true,
-  claude: true,
+  'claude.live': true,
+  'claude.usage': true,
   tasks: true,
   vpn: true,
   teams: true,
@@ -96,6 +97,14 @@ export interface DndChangedPayload {
  * Merge à 2 niveaux : top-level Settings + chaque section moduleConfig.
  */
 function mergeDefaults(): void {
+  // Migration v1.1 — refonte ModuleId hiérarchique. Le module historique
+  // `claude` devient `claude.live` (groupe Claude regroupant aussi le
+  // nouveau `claude.usage`). On renomme les clés persistées AVANT le
+  // merge normal pour que les préférences utilisateur survivent au bump.
+  // Idempotente : à la seconde passe, plus aucune clé `claude` n'est
+  // présente, le bloc est no-op.
+  migrateClaudeLiveRename();
+
   const current: Partial<Settings> = {
     dnd: store.get('dnd'),
     tasks: store.get('tasks'),
@@ -155,6 +164,68 @@ function clampModuleConfigBounds(config: ModuleConfig): void {
       10,
       Math.min(500, Math.round(config.clipboard.maxItems)),
     );
+  }
+}
+
+/**
+ * Migration v1.1 : renomme `claude` (legacy moduleId plat) en `claude.live`
+ * (nouveau moduleId hiérarchique de la famille « Claude »).
+ *
+ * Touche trois emplacements persistés dans `config.json` :
+ *  - `modules.claude` (boolean) → `modules['claude.live']`
+ *  - `moduleConfig.claude` (object) → `moduleConfig['claude.live']`
+ *  - `dashboardLayout[].id === 'claude'` → `'claude.live'`
+ *
+ * Idempotente : à la seconde passe les clés `claude` n'existent plus, le
+ * bloc est no-op. Aucun risque de perte si l'utilisateur a déjà la
+ * nouvelle clé renseignée — on ne renomme que si elle est absente.
+ */
+function migrateClaudeLiveRename(): void {
+  let mutated = false;
+
+  // 1. modules.claude → modules['claude.live']
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const modules = store.get('modules') as any;
+  if (modules && typeof modules === 'object' && 'claude' in modules) {
+    if (!('claude.live' in modules)) {
+      modules['claude.live'] = modules.claude;
+    }
+    delete modules.claude;
+    store.set('modules', modules);
+    mutated = true;
+  }
+
+  // 2. moduleConfig.claude → moduleConfig['claude.live']
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const moduleConfig = store.get('moduleConfig') as any;
+  if (moduleConfig && typeof moduleConfig === 'object' && 'claude' in moduleConfig) {
+    if (!('claude.live' in moduleConfig)) {
+      moduleConfig['claude.live'] = moduleConfig.claude;
+    }
+    delete moduleConfig.claude;
+    store.set('moduleConfig', moduleConfig);
+    mutated = true;
+  }
+
+  // 3. dashboardLayout : remplace { id: 'claude' } par { id: 'claude.live' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const layout = store.get('dashboardLayout') as any;
+  if (Array.isArray(layout)) {
+    let layoutMutated = false;
+    for (const tile of layout) {
+      if (tile && tile.id === 'claude') {
+        tile.id = 'claude.live';
+        layoutMutated = true;
+      }
+    }
+    if (layoutMutated) {
+      store.set('dashboardLayout', layout);
+      mutated = true;
+    }
+  }
+
+  if (mutated) {
+    console.log('[settings] migration v1.1: claude → claude.live (modules / moduleConfig / dashboardLayout)');
   }
 }
 

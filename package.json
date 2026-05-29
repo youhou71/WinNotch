@@ -1,6 +1,6 @@
 {
   "name": "winnotch",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Notch — widget système flottant pour Windows 11 (équivalent Dynamic Island)",
   "main": "./out/main/index.js",
   "author": "Jeremy Bolzonella",

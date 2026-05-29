@@ -205,10 +205,10 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
     settings.modules.meetings &&
     meetingsCfg.collapsed &&
     !!nextMeeting;
-  const claudeCfg = settings.moduleConfig.claude;
+  const claudeCfg = settings.moduleConfig['claude.live'];
   const hasClaudeChip =
     !settings.dnd &&
-    settings.modules.claude &&
+    settings.modules['claude.live'] &&
     claudeCfg.collapsed &&
     activeClaude.length > 0;
   const gitlabCfg = settings.moduleConfig.gitlab;
@@ -244,7 +244,8 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
     meetings: 150,
     music: 130,
     gitlab: 140,
-    claude: 200,
+    'claude.live': 200,
+    'claude.usage': 140,
     gitlocal: 122,
     vpn: 122,
     teams: 160,
@@ -252,7 +253,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
   };
   const hasMusicCard = settings.modules.music && !!music.title;
   const hasClaudeCard =
-    settings.modules.claude &&
+    settings.modules['claude.live'] &&
     claudeCfg.showCard &&
     activeClaude.length > 0;
   let layoutH = 0;
@@ -266,7 +267,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
       | undefined;
     if (tileCfg?.showCard === false) continue;
     if (tile.id === 'music' && !hasMusicCard) continue;
-    if (tile.id === 'claude' && !hasClaudeCard) continue;
+    if (tile.id === 'claude.live' && !hasClaudeCard) continue;
     const cols = Math.max(1, Math.min(12, tile.cols));
     if (rowCols + cols > 12) {
       layoutH += rowMax;

@@ -82,6 +82,13 @@
   padding: 0 4px;
 }
 
+.settings-section-desc {
+  font-size: 11px;
+  color: var(--txt-faint);
+  padding: 0 4px 2px;
+  line-height: 1.4;
+}
+
 .settings-section-body {
   display: flex;
   flex-direction: column;
@@ -244,6 +251,8 @@
 /* ───────────── Radio pills ───────────── */
 .settings-radio-pills {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   background: var(--surface-1);
   border: 1px solid var(--border-1);
   border-radius: 8px;

@@ -35,6 +35,8 @@ import { MusicProvider } from './modules/music/MusicContext';
 import { MeetingsProvider } from './modules/meetings/MeetingsContext';
 import { ClaudeProvider } from './modules/claude/ClaudeContext';
 import { useClaudeCompletionToasts } from './modules/claude/useClaudeCompletionToasts';
+import { ClaudeUsageProvider } from './modules/claudeUsage/ClaudeUsageContext';
+import { useClaudeUsageThresholdToasts } from './modules/claudeUsage/useClaudeUsageThresholdToasts';
 import { GitLabProvider } from './modules/gitlab/GitLabContext';
 import { useGitLabReviewToasts } from './modules/gitlab/useGitLabReviewToasts';
 import { useGitLabIssueToasts } from './modules/gitlab/useGitLabIssueToasts';
@@ -98,6 +100,8 @@ function AppInner() {
   // Détecte les transitions de sessions Claude working/waiting → idle/done
   // et émet un toast (sous réserve du toggle notifyCompletion).
   useClaudeCompletionToasts();
+  // Toasts à chaque franchissement de seuil 5h / 7d sur les limites Claude.
+  useClaudeUsageThresholdToasts();
   // Détecte les nouvelles MR assignées en review et émet un toast par
   // nouvelle assignation (sous réserve du toggle moduleConfig.gitlab.notify.mr).
   useGitLabReviewToasts();
@@ -153,6 +157,7 @@ export function App() {
         <MusicProvider>
           <MeetingsProvider>
             <ClaudeProvider>
+              <ClaudeUsageProvider>
               <GitLabProvider>
                 <GitLocalProvider>
                   <VpnProvider>
@@ -168,6 +173,7 @@ export function App() {
                   </VpnProvider>
                 </GitLocalProvider>
               </GitLabProvider>
+              </ClaudeUsageProvider>
             </ClaudeProvider>
           </MeetingsProvider>
         </MusicProvider>

@@ -38,6 +38,10 @@ import {
   stopMeetingsPolling,
 } from './modules/meetings/meetingsService';
 import { registerClaudeIpc, stopClaude } from './modules/claude/claudeService';
+import {
+  registerClaudeUsageIpc,
+  stopClaudeUsage,
+} from './modules/claudeUsage/claudeUsageService';
 import { registerGitLabIpc, stopGitLab } from './modules/gitlab/gitlabService';
 import {
   registerGitLocalIpc,
@@ -119,6 +123,13 @@ app.whenReady().then(async () => {
       '[WinNotch] Module Système live désactivé (WINNOTCH_DISABLE_SYSTEM=1)',
     );
   }
+  if (process.env.WINNOTCH_DISABLE_CLAUDE_USAGE !== '1') {
+    registerClaudeUsageIpc();
+  } else {
+    console.log(
+      '[WinNotch] Module Claude usage désactivé (WINNOTCH_DISABLE_CLAUDE_USAGE=1)',
+    );
+  }
   registerUpdaterIpc();
   registerAudioIpc();
   if (process.env.WINNOTCH_DISABLE_MUSIC !== '1') {
@@ -176,6 +187,7 @@ app.on('window-all-closed', () => {
   stopClipboard();
   stopMeetingsPolling();
   stopClaude();
+  stopClaudeUsage();
   stopGitLab();
   stopGitLocal();
   stopVpn();
@@ -199,6 +211,7 @@ app.on('before-quit', () => {
   stopClipboard();
   stopMeetingsPolling();
   stopClaude();
+  stopClaudeUsage();
   stopGitLab();
   stopGitLocal();
   stopVpn();

@@ -38,6 +38,7 @@ import { TasksList } from '../../modules/tasks/TasksList';
 import { MeetingsCard } from '../../modules/meetings/MeetingsCard';
 import { ClaudeCard } from '../../modules/claude/ClaudeCard';
 import { useClaudeContext } from '../../modules/claude/ClaudeContext';
+import { ClaudeUsageCard } from '../../modules/claudeUsage/ClaudeUsageCard';
 import { GitLabCard } from '../../modules/gitlab/GitLabCard';
 import { GitLocalCard } from '../../modules/gitlocal/GitLocalCard';
 import { GitLocalPanel } from '../../modules/gitlocal/GitLocalPanel';
@@ -122,10 +123,10 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
   const hasMusic = !!music.title;
   // Card masquée s'il n'y a aucune session active — les sessions
   // idle/done n'intéressent pas l'utilisateur (cf. ClaudeCard). Le toggle
-  // `moduleConfig.claude.showCard` permet aussi de la masquer en gardant
+  // `moduleConfig['claude.live'].showCard` permet aussi de la masquer en gardant
   // les toasts (mode "notifications seulement").
   const hasClaude =
-    claudeActive.length > 0 && settings.moduleConfig.claude.showCard;
+    claudeActive.length > 0 && settings.moduleConfig['claude.live'].showCard;
   const detected = detectMode(query);
   const inSearch = !!detected;
   const inTaskMode = detected?.mode === 'task';
@@ -337,7 +338,7 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
               //   - music : pas de track en cours
               //   - claude : pas de session active
               if (tile.id === 'music' && !hasMusic) return null;
-              if (tile.id === 'claude' && !hasClaude) return null;
+              if (tile.id === 'claude.live' && !hasClaude) return null;
               return (
                 <div
                   key={tile.id}
@@ -353,7 +354,8 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
                   {tile.id === 'gitlab' && (
                     <GitLabCard onOpen={() => setGitlabPanelOpen(true)} />
                   )}
-                  {tile.id === 'claude' && <ClaudeCard />}
+                  {tile.id === 'claude.live' && <ClaudeCard />}
+                  {tile.id === 'claude.usage' && <ClaudeUsageCard />}
                   {tile.id === 'gitlocal' && (
                     <GitLocalCard onOpen={() => setGitlocalPanelOpen(true)} />
                   )}

@@ -21,6 +21,14 @@ interface Props {
   width?: number;
   /** Hauteur du SVG en pixels. */
   height?: number;
+  /**
+   * Si `true`, le SVG est rendu avec `preserveAspectRatio="none"` : il
+   * peut être étiré horizontalement via CSS sans conserver le ratio
+   * largeur/hauteur. Utile pour les sparklines élastiques qui doivent
+   * remplir un conteneur en flex. Par défaut `false` (ratio préservé,
+   * comportement historique du module Système live).
+   */
+  stretch?: boolean;
 }
 
 export function Sparkline({
@@ -29,6 +37,7 @@ export function Sparkline({
   color,
   width = 38,
   height = 12,
+  stretch = false,
 }: Props) {
   // Calcul des coordonnées : pas d'allocation hors render et calcul léger
   // (60 points = 60 itérations).
@@ -49,10 +58,9 @@ export function Sparkline({
     return coords.join(' ');
   }, [points, max, width, height]);
 
-  const style: CSSProperties = {
-    overflow: 'visible',
-    flexShrink: 0,
-  };
+  const style: CSSProperties = stretch
+    ? { overflow: 'hidden' }
+    : { overflow: 'visible', flexShrink: 0 };
 
   return (
     <svg
@@ -60,6 +68,7 @@ export function Sparkline({
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio={stretch ? 'none' : 'xMidYMid meet'}
       style={style}
       aria-hidden="true"
     >

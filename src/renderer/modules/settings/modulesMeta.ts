@@ -45,11 +45,19 @@ export const SETTINGS_MODULES: ModuleMeta[] = [
     description: 'Suivi de tes repos locaux (branche, uncommitted, ahead/behind).',
   },
   {
-    id: 'claude',
-    label: 'Claude Code',
+    id: 'claude.live',
+    label: 'Sessions live',
     icon: 'fa-solid fa-sparkles',
     color: '#a78bfa',
-    description: 'Sessions actives multi-projets (à venir).',
+    description: 'Sessions Claude Code actives multi-projets (file watcher).',
+  },
+  {
+    id: 'claude.usage',
+    label: "Limites d'usage",
+    icon: 'fa-solid fa-gauge',
+    color: '#a78bfa',
+    description:
+      'Suivi des fenêtres 5 h et 7 j Pro / Max, avec date de reset et alertes.',
   },
   {
     id: 'tasks',
