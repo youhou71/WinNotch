@@ -49,6 +49,7 @@ import {
 } from './modules/gitlocal/gitlocalService';
 import { registerVpnIpc, stopVpn } from './modules/vpn/vpnService';
 import { registerTeamsIpc, stopTeams } from './modules/teams/teamsService';
+import { registerBambuIpc, stopBambu } from './modules/bambu/bambuService';
 import {
   registerSystemIpc,
   stopSystem,
@@ -123,6 +124,11 @@ app.whenReady().then(async () => {
       '[WinNotch] Module Système live désactivé (WINNOTCH_DISABLE_SYSTEM=1)',
     );
   }
+  if (process.env.WINNOTCH_DISABLE_BAMBU !== '1') {
+    registerBambuIpc();
+  } else {
+    console.log('[WinNotch] Module Bambu désactivé (WINNOTCH_DISABLE_BAMBU=1)');
+  }
   if (process.env.WINNOTCH_DISABLE_CLAUDE_USAGE !== '1') {
     registerClaudeUsageIpc();
   } else {
@@ -193,6 +199,7 @@ app.on('window-all-closed', () => {
   stopVpn();
   stopTeams();
   stopSystem();
+  stopBambu();
   stopTasks();
   stopUpdater();
   stopFullscreenDetector();
@@ -217,6 +224,7 @@ app.on('before-quit', () => {
   stopVpn();
   stopTeams();
   stopSystem();
+  stopBambu();
   stopTasks();
   stopUpdater();
   stopFullscreenDetector();

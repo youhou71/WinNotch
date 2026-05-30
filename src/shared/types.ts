@@ -87,6 +87,98 @@ export interface Task {
   createdAt: number;
 }
 
+/* ───────────── Bambu (imprimante 3D, MQTT LAN) ───────────── */
+
+/**
+ * État de la connexion MQTT à l'imprimante.
+ *  - `idle`       : module activé mais pas (encore) configuré.
+ *  - `connecting` : tentative de connexion / reconnexion en cours.
+ *  - `connected`  : abonné au topic report, on reçoit (ou attend) des données.
+ *  - `offline`    : connexion perdue (imprimante éteinte / hors réseau).
+ *  - `error`      : échec persistant (auth refusée, host injoignable…).
+ */
+export type BambuConnection =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'offline'
+  | 'error';
+
+/**
+ * État du gcode tel que rapporté par l'imprimante (`print.gcode_state`).
+ * `Unknown` couvre l'absence de donnée (avant le premier rapport complet).
+ */
+export type BambuGcodeState =
+  | 'IDLE'
+  | 'PREPARE'
+  | 'RUNNING'
+  | 'PAUSE'
+  | 'FINISH'
+  | 'FAILED'
+  | 'Unknown';
+
+/** Une bobine (tray) d'un AMS, dérivée de `print.ams.ams[].tray[]`. */
+export interface BambuAmsTray {
+  /** Index 0-based du slot dans l'AMS. */
+  slot: number;
+  /** Couleur du filament au format CSS `#RRGGBB` (alpha tronqué). */
+  colorHex: string;
+  /** Type de filament (`PLA`, `PETG`, `ABS`…). Vide si inconnu. */
+  type: string;
+  /** Pourcentage restant estimé [0..100], ou `null` si l'AMS ne le sait pas. */
+  remainPercent: number | null;
+  /** `true` si c'est le tray actuellement chargé (`ams.tray_now`). */
+  active: boolean;
+}
+
+/** Une entrée du Health Management System (`print.hms[]`). */
+export interface BambuHmsEntry {
+  /** Code humain formaté (ex. `0300_0100_0002_0001`). */
+  code: string;
+  /** Sévérité décodée depuis les bits de poids fort de `attr`/`code`. */
+  level: 'fatal' | 'serious' | 'common' | 'info' | 'unknown';
+  /** URL de la page wiki Bambu correspondant au code. */
+  wikiUrl: string;
+}
+
+/** Snapshot complet de l'état imprimante exposé au renderer. */
+export interface BambuState {
+  /** État de la connexion MQTT. */
+  connection: BambuConnection;
+  /** Message d'erreur lisible (null si pas d'erreur). */
+  error: string | null;
+  /** `true` dès qu'un host est configuré (sinon : prompt d'onboarding). */
+  configured: boolean;
+  /** Nom convivial de l'imprimante (saisi par l'utilisateur). Vide sinon. */
+  printerName: string;
+  /** État du gcode courant. */
+  gcodeState: BambuGcodeState;
+  /** `true` si un print est en cours (RUNNING / PAUSE / PREPARE). */
+  isPrinting: boolean;
+  /** Progression [0..100]. */
+  progressPercent: number;
+  /** Temps restant estimé en minutes (null si inconnu). */
+  remainingMin: number | null;
+  /** Layer courant / total (null si inconnu). */
+  layerCur: number | null;
+  layerTotal: number | null;
+  /** Nom du fichier en cours d'impression. */
+  fileName: string;
+  /** Niveau de vitesse : 1 silent / 2 standard / 3 sport / 4 ludicrous. */
+  speedLevel: number | null;
+  /** Températures buse / lit (courante + cible) en °C. */
+  nozzleTemp: number | null;
+  nozzleTarget: number | null;
+  bedTemp: number | null;
+  bedTarget: number | null;
+  /** Trays AMS (vide si pas d'AMS). */
+  amsTrays: BambuAmsTray[];
+  /** Erreurs HMS actives. */
+  hms: BambuHmsEntry[];
+  /** Timestamp (ms) du dernier rapport reçu, ou 0. */
+  lastUpdateAt: number;
+}
+
 /**
  * Identifiants des modules que l'utilisateur peut activer/désactiver
  * depuis les réglages. Note : `audio` n'est pas dans la liste car il est
@@ -109,7 +201,8 @@ export type ModuleId =
   | 'clipboard'
   | 'vpn'
   | 'teams'
-  | 'system';
+  | 'system'
+  | 'bambu';
 
 /**
  * Identifiant d'une famille (groupe) de modules. Une famille regroupe
@@ -157,7 +250,8 @@ export type DashTileId =
   | 'tasks'
   | 'vpn'
   | 'teams'
-  | 'system';
+  | 'system'
+  | 'bambu';
 
 /**
  * Une tuile du dashboard. `cols` est la largeur en colonnes sur une
@@ -421,6 +515,32 @@ export interface ModuleConfig {
     /** Afficher la card dans le dashboard étendu. */
     showCard: boolean;
   };
+  bambu: {
+    /** IP (ou hostname) de l'imprimante sur le LAN. Vide tant que non configuré. */
+    host: string;
+    /**
+     * Numéro de série de l'imprimante — compose le topic MQTT
+     * `device/<serial>/report`. Indispensable, vide tant que non configuré.
+     */
+    serial: string;
+    /**
+     * Code d'accès LAN (8 chiffres) chiffré via Electron `safeStorage`
+     * (DPAPI sous Windows) puis encodé en base64. `null` tant qu'aucun
+     * code valide n'a été enregistré. Le code brut ne quitte jamais le main.
+     */
+    encryptedAccessCode: string | null;
+    /** Nom convivial affiché dans la card (ex. « P1S atelier »). */
+    printerName: string;
+    /** Afficher la chip dans le notch rétracté pendant un print. */
+    collapsed: boolean;
+    /**
+     * Garder la chip visible hors impression (état connexion). Par défaut
+     * la chip n'apparaît que pendant un print pour rester discrète.
+     */
+    showWhenIdle: boolean;
+    /** Afficher la card dans le dashboard étendu. */
+    showCard: boolean;
+  };
 }
 
 /**
@@ -477,6 +597,10 @@ export const DEFAULT_SETTINGS: Settings = {
     vpn: true,
     teams: true,
     system: true,
+    // Désactivé par défaut : requiert une configuration (IP + serial + code
+    // d'accès LAN) avant de pouvoir se connecter. On n'active pas un module
+    // qui afficherait un état « non configuré » d'office.
+    bambu: false,
   },
   moduleConfig: {
     music: {
@@ -559,6 +683,15 @@ export const DEFAULT_SETTINGS: Settings = {
       collapsed: true,
       showCard: true,
     },
+    bambu: {
+      host: '',
+      serial: '',
+      encryptedAccessCode: null,
+      printerName: '',
+      collapsed: true,
+      showWhenIdle: false,
+      showCard: true,
+    },
   },
   // Layout par défaut — reproduit l'agencement historique :
   //   ┌── tasks (4) ─┬─── meetings (8) ───┐
@@ -579,6 +712,7 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: 'vpn', cols: 4 },
     { id: 'teams', cols: 4 },
     { id: 'system', cols: 12 },
+    { id: 'bambu', cols: 6 },
   ],
 };
 
@@ -1739,6 +1873,17 @@ export const IpcChannel = {
   /** Main → renderer : push d'un nouveau SystemState à chaque tick de polling. */
   SystemChange: 'system:change',
 
+  /** Renderer → main (invoke) : retourne le BambuState courant. */
+  BambuGetState: 'bambu:getState',
+  /** Renderer → main (invoke) : teste une connexion MQTT (host+serial+code). */
+  BambuTestConnection: 'bambu:testConnection',
+  /** Renderer → main (invoke) : enregistre les identifiants + (re)connecte. */
+  BambuSaveCredentials: 'bambu:saveCredentials',
+  /** Renderer → main (invoke) : efface les identifiants + déconnecte. */
+  BambuDisconnect: 'bambu:disconnect',
+  /** Main → renderer : push d'un nouveau BambuState (rapport MQTT ou état conn). */
+  BambuChange: 'bambu:change',
+
   /** Renderer → main (invoke) : retourne l'UpdateState courant. */
   UpdaterGetState: 'updater:getState',
   /** Renderer → main (invoke) : déclenche un check immédiat auprès du provider. */
@@ -1934,6 +2079,33 @@ export interface NotchApi {
     getState: () => Promise<SystemState>;
     /** S'abonne au push de SystemState à chaque tick de polling. */
     onChange: (cb: (state: SystemState) => void) => () => void;
+  };
+  bambu: {
+    /** Snapshot complet de l'état imprimante (connexion + print + AMS + HMS). */
+    getState: () => Promise<BambuState>;
+    /**
+     * Teste une connexion MQTT avec les identifiants fournis (sans persister).
+     * Résout `{ ok }` après connexion + abonnement réussis, sinon `{ ok:false }`.
+     */
+    testConnection: (
+      host: string,
+      serial: string,
+      accessCode: string,
+    ) => Promise<{ ok: boolean; error?: string }>;
+    /**
+     * Enregistre les identifiants (code chiffré côté main) et (re)connecte.
+     * `accessCode` vide ⇒ conserve le code déjà stocké (mise à jour host/serial).
+     */
+    saveCredentials: (
+      host: string,
+      serial: string,
+      accessCode: string,
+      printerName: string,
+    ) => Promise<{ ok: boolean; error?: string }>;
+    /** Efface les identifiants stockés et coupe la connexion. */
+    disconnect: () => Promise<{ ok: boolean }>;
+    /** S'abonne au push de BambuState (rapport MQTT ou changement d'état). */
+    onChange: (cb: (state: BambuState) => void) => () => void;
   };
   meetings: {
     /**

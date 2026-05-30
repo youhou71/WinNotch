@@ -45,6 +45,7 @@ import { VpnProvider } from './modules/vpn/VpnContext';
 import { useVpnToasts } from './modules/vpn/useVpnToasts';
 import { TeamsProvider } from './modules/teams/TeamsContext';
 import { SystemProvider } from './modules/system/SystemContext';
+import { BambuProvider } from './modules/bambu/BambuContext';
 import { AudioProvider } from './modules/audio/AudioContext';
 import { SearchProvider, useSearchContext } from './modules/search/SearchContext';
 import { TasksProvider } from './modules/tasks/TasksContext';
@@ -163,11 +164,13 @@ export function App() {
                   <VpnProvider>
                     <TeamsProvider>
                       <SystemProvider>
+                        <BambuProvider>
                         <UpdaterProvider>
                           <ClipboardProvider>
                             <AppInner />
                           </ClipboardProvider>
                         </UpdaterProvider>
+                        </BambuProvider>
                       </SystemProvider>
                     </TeamsProvider>
                   </VpnProvider>

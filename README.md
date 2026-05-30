@@ -95,6 +95,13 @@ Réutilise l'authentification du module **Prochains rendez-vous** (mêmes tokens
 
 **Couplage DND bidirectionnel** (activé par défaut, désactivable dans Settings → Teams) : `Ctrl+Shift+D` bascule aussi ton statut Teams en DoNotDisturb (et inversement, un Teams DoNotDisturb détecté par le polling active le DND WinNotch). Un filtre anti-écho de 30 s évite les boucles entre l'écriture locale et la lecture du tick suivant.
 
+### Imprimante 3D (Bambu)
+Suivi d'un print Bambu Lab **série P1** (P1P / P1S) en local, **lecture seule**. Chip imprimante dans le notch rétracté pendant une impression (`42 %` + ETA), qui vire au rouge si une erreur HMS est active. Card dans le dashboard : barre de progression + temps restant + couche X/Y + nom du fichier, températures buse / lit, bobines AMS (couleur + type + % restant, slot actif surligné), et erreurs HMS en rouge avec lien direct vers le wiki Bambu.
+
+Connexion **MQTT directe** au broker local de l'imprimante (`mqtts://<ip>:8883`, auth `bblp` + code d'accès LAN, certificat auto-signé). Prérequis : activer le **mode LAN** sur l'écran de l'imprimante, puis renseigner dans Settings → Imprimante 3D l'**IP**, le **numéro de série** (compose le topic MQTT) et le **code d'accès** (chiffré localement via DPAPI, jamais stocké en clair). La série P1 envoie des rapports en *deltas* (champs modifiés uniquement) : ils sont fusionnés dans un état accumulé, amorcé par un `pushall` à la connexion. Reconnexion automatique en cas de coupure. Chip non masquée en Ne pas Déranger (état d'impression — un print de plusieurs heures prime sur le DND).
+
+> Caméra, contrôle (pause/stop) et série X1 hors périmètre de cette première version.
+
 ### Updater
 Mises à jour automatiques via GitHub Releases. Check au boot + toutes les heures. Notifications utilisateur à chaque étape (disponible → téléchargée → installée). Aucun téléchargement ni install sans confirmation explicite.
 
@@ -217,6 +224,7 @@ Masque les chips de **notifications** et bloque les toasts. Indicateur visuel : 
 | VPN | **visible** | état système — l'utilisateur veut savoir en permanence si son tunnel est actif |
 | Teams (présence) | **visible** | état système — la pastille reste pertinente même en DND, surtout avec le couplage bidirectionnel `Ctrl+Shift+D ↔ Teams DoNotDisturb` |
 | Système (CPU/RAM/Net) | **visible** | état système — la jauge est utile même pendant une démo |
+| Imprimante 3D (Bambu) | **visible** | état d'impression — surveiller un print de plusieurs heures prime sur le DND |
 | Music | non affectée | la chip est dans `cr-left`, pas une notification |
 | Clipboard | non affectée | rappel passif d'historique, pas une notification |
 

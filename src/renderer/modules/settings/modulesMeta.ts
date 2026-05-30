@@ -98,6 +98,14 @@ export const SETTINGS_MODULES: ModuleMeta[] = [
     description:
       'Utilisation CPU, RAM et réseau en temps réel avec sparkline.',
   },
+  {
+    id: 'bambu',
+    label: 'Imprimante 3D (Bambu)',
+    icon: 'fa-solid fa-print',
+    color: '#00ae42',
+    description:
+      "Statut d'impression Bambu Lab P1 en LAN (MQTT) : progression, températures, AMS, erreurs HMS.",
+  },
 ];
 
 export const MODULE_META_BY_ID: Record<ModuleId, ModuleMeta> =

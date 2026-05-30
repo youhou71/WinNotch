@@ -61,6 +61,7 @@ const DASH_TILE_ID_TABLE = {
   vpn: true,
   teams: true,
   system: true,
+  bambu: true,
 } satisfies Record<DashTileId, true>;
 
 const VALID_DASH_TILE_IDS = Object.keys(DASH_TILE_ID_TABLE) as DashTileId[];
