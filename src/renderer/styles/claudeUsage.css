@@ -46,6 +46,18 @@
   color: var(--txt-main);
 }
 
+/* Tuile étroite : la colonne « reset » (date de réinitialisation) déborde →
+ * on la masque et on resserre la grille à label / jauge / valeur. */
+@container dashtile (max-width: 220px) {
+  .cu-gauge {
+    grid-template-columns: 26px 1fr auto;
+  }
+
+  .cu-gauge-reset {
+    display: none;
+  }
+}
+
 .cu-gauge-label {
   font-size: 9.5px;
   font-weight: 600;

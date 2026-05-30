@@ -236,6 +236,13 @@
 .dash-tile {
   grid-column: span var(--cols, 12);
   min-width: 0;
+  /* Conteneur de requête (CSS container queries) : le contenu des cards peut
+   * s'adapter à la LARGEUR réelle de la tuile (N colonnes) via
+   * `@container dashtile (...)` dans les CSS de chaque module. `inline-size`
+   * ne contraint que l'axe horizontal (la hauteur reste pilotée par le
+   * contenu, indispensable pour la mesure de hauteur du notch). S'applique
+   * aussi aux tuiles de l'éditeur de disposition → aperçu réactif fidèle. */
+  container: dashtile / inline-size;
 }
 
 /* Les enfants directs des tuiles doivent eux aussi accepter de rétrécir

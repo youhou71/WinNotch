@@ -168,6 +168,20 @@
   margin-top: 2px;
 }
 
+/* Tuile étroite : 5 boutons d'action côte à côte deviennent illisibles → on
+ * réduit le nombre de colonnes (3 puis 2), les boutons passent sur 2-3 rangées. */
+@container dashtile (max-width: 300px) {
+  .teams-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container dashtile (max-width: 180px) {
+  .teams-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .teams-btn {
   appearance: none;
   border: 1px solid rgba(255, 255, 255, 0.08);

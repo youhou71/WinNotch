@@ -142,3 +142,24 @@
   border-radius: 50%;
   background: var(--accent-red);
 }
+
+/* Tuile étroite (≈ moins de 10 colonnes) : 3 cellules CPU/RAM/NET + uptime ne
+ * tiennent plus lisiblement sur une ligne → on empile verticalement. Les
+ * barres prennent alors toute la largeur. Au-delà (tuile large/pleine
+ * longueur), on garde la rangée unique. */
+@container dashtile (max-width: 360px) {
+  .system-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 9px;
+  }
+
+  /* En colonne, les cellules ne doivent pas grandir verticalement. */
+  .system-cell {
+    flex: 0 0 auto;
+  }
+
+  .system-uptime {
+    padding-left: 0;
+  }
+}

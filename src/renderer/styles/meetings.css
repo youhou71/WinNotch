@@ -218,6 +218,38 @@
   color: rgba(52, 211, 153, 0.85);
 }
 
+/* ── Réactif (largeur de la tuile) ──
+ * Tuile étroite : le headline (heure + titre + participants + actions) ne tient
+ * plus sur une ligne → on empile. L'heure et le countdown passent côte à côte
+ * pour ne pas gaspiller de hauteur. */
+@container dashtile (max-width: 280px) {
+  .meeting-next {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .meeting-next-time {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .mn-hour {
+    font-size: 20px;
+  }
+  .mn-until {
+    margin-top: 0;
+  }
+}
+
+/* Très étroite : dans la liste des suivants, les avatars (secondaires)
+ * laissent la place au titre et à l'heure. */
+@container dashtile (max-width: 220px) {
+  .meeting-row-people {
+    display: none;
+  }
+}
+
 .meeting-next-body {
   flex: 1;
   min-width: 0;

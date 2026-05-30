@@ -370,6 +370,37 @@
   opacity: 0.65;
 }
 
+/* ── Réactif (largeur de la tuile) ──
+ * Tuile moyenne : on rétrécit la pochette pour laisser respirer méta +
+ * contrôles. Tuile étroite : on empile (pochette au-dessus du corps), et les
+ * contrôles peuvent passer sous la méta si la ligne est trop courte. */
+@container dashtile (max-width: 320px) {
+  .card-music.is-compact .mc-compact-cover {
+    width: 64px;
+    height: 64px;
+  }
+  .card-music.is-compact .mc-compact-body {
+    min-height: 64px;
+  }
+}
+
+@container dashtile (max-width: 210px) {
+  .card-music.is-compact {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .card-music.is-compact .mc-compact-cover {
+    width: 56px;
+    height: 56px;
+  }
+  .card-music.is-compact .mc-compact-body {
+    min-height: 0;
+  }
+  .card-music.is-compact .mc-row {
+    flex-wrap: wrap;
+  }
+}
+
 /* Le `.card` de base (utilisé par la card music) reprend les variables de
    densité. Si la classe `.card` n'est pas déjà définie ailleurs, on la
    pose ici pour servir de fondation à toutes les futures cards. */

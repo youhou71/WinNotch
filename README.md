@@ -173,6 +173,8 @@ La page **Disposition** est un éditeur en mode WYSIWYG : on y voit les vraies t
 - **Redimensionner** : tirer le bord droit d'une tuile pour ajuster sa largeur (1 à 12 colonnes), avec un badge `N/12` qui suit le geste. Au clavier : flèches ←/→ sur la poignée de resize.
 - Seules les tuiles **actuellement visibles** sont éditables (les modules désactivés ou sans données conservent leur place mais n'apparaissent pas). Bouton "Réinitialiser" pour revenir au layout d'origine.
 
+**Contenu adaptatif** : le contenu de chaque tuile s'ajuste à sa largeur. Par exemple la card **Système** affiche CPU / RAM / NET sur une seule ligne quand la tuile est large, et les empile verticalement quand elle est étroite. Les autres cards multi-colonnes se réagencent de la même manière : stats GitLab, jauge d'usage Claude, actions Teams, lecteur **Musique** (pochette réduite puis empilée) et **rendez-vous** (heure + titre + participants empilés).
+
 Les réglages sont persistés dans `%APPDATA%/WinNotch/config.json` (build installé) ou `%APPDATA%/WinNotch-dev/config.json` (mode `npm run dev`) — les deux ne se mélangent pas.
 
 ---

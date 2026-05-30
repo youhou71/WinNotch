@@ -91,6 +91,20 @@
   margin-top: 2px;
 }
 
+/* Tuile étroite : 3 colonnes de stats deviennent illisibles → on empile.
+ * Étape intermédiaire à 2 colonnes avant de passer à 1. */
+@container dashtile (max-width: 230px) {
+  .gl-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@container dashtile (max-width: 150px) {
+  .gl-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
 .gl-stat {
   display: flex;
   flex-direction: column;
