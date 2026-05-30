@@ -29,23 +29,14 @@ import {
   type CSSProperties,
 } from 'react';
 import { AudioFooter } from '../../modules/audio/AudioFooter';
-import { MusicCard } from '../../modules/music/MusicCard';
 import { useMusicContext } from '../../modules/music/MusicContext';
 import { useSettingsContext } from '../../modules/settings/SettingsContext';
 import { useSearchContext } from '../../modules/search/SearchContext';
-import { TasksCounterCard } from '../../modules/tasks/TasksCounterCard';
 import { TasksList } from '../../modules/tasks/TasksList';
-import { MeetingsCard } from '../../modules/meetings/MeetingsCard';
-import { ClaudeCard } from '../../modules/claude/ClaudeCard';
 import { useClaudeContext } from '../../modules/claude/ClaudeContext';
-import { ClaudeUsageCard } from '../../modules/claudeUsage/ClaudeUsageCard';
-import { GitLabCard } from '../../modules/gitlab/GitLabCard';
-import { GitLocalCard } from '../../modules/gitlocal/GitLocalCard';
 import { GitLocalPanel } from '../../modules/gitlocal/GitLocalPanel';
-import { VpnCard } from '../../modules/vpn/VpnCard';
-import { TeamsCard } from '../../modules/teams/TeamsCard';
-import { SystemCard } from '../../modules/system/SystemCard';
 import { ClipboardDetectionView } from '../../modules/clipboard/ClipboardDetectionView';
+import { renderTileCard, isTileVisible } from './dashTiles';
 import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
 import { NotchSearch } from '../../modules/search/NotchSearch';
 import { detectMode } from '../../modules/search/detectMode';
@@ -235,6 +226,16 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
   // CollapsedRow et Notch.tsx recalcule la largeur).
   const modulesOn = settings.modules;
 
+  // Contexte de visibilité partagé avec l'éditeur de disposition
+  // (`SettingsLayoutPage`) via `isTileVisible` — garantit que les deux
+  // affichent exactement les mêmes tuiles.
+  const visCtx = {
+    modules: modulesOn,
+    moduleConfig: settings.moduleConfig,
+    hasMusic,
+    hasClaude,
+  };
+
   return (
     <div className="expanded-shell">
       <div className="dashboard">
@@ -325,20 +326,9 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
         {!inSearch && !settingsOpen && !gitlabPanelOpen && !gitlocalPanelOpen && !clipboardOpen && (
           <div className="dash-grid">
             {settings.dashboardLayout.map((tile) => {
-              // Module éteint dans Settings → on n'occupe pas le slot.
-              if (!modulesOn[tile.id]) return null;
-              // Skip si la card est désactivée via Settings (showCard=false).
-              // Toutes les tuiles supportent ce toggle ; clipboard n'est pas
-              // dans DashTileId (page plein dashboard à la place) donc pas concerné.
-              const tileCfg = settings.moduleConfig[tile.id] as
-                | { showCard?: boolean }
-                | undefined;
-              if (tileCfg?.showCard === false) return null;
-              // Cas conditionnels d'absence de données :
-              //   - music : pas de track en cours
-              //   - claude : pas de session active
-              if (tile.id === 'music' && !hasMusic) return null;
-              if (tile.id === 'claude.live' && !hasClaude) return null;
+              // Filtre de visibilité partagé (module éteint, showCard=false,
+              // music sans piste, claude.live sans session) — cf. dashTiles.
+              if (!isTileVisible(tile, visCtx)) return null;
               return (
                 <div
                   key={tile.id}
@@ -346,22 +336,11 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
                   style={{ '--cols': tile.cols } as CSSProperties}
                   data-tile={tile.id}
                 >
-                  {tile.id === 'tasks' && (
-                    <TasksCounterCard onOpen={() => setQuery('-')} />
-                  )}
-                  {tile.id === 'meetings' && <MeetingsCard />}
-                  {tile.id === 'music' && <MusicCard />}
-                  {tile.id === 'gitlab' && (
-                    <GitLabCard onOpen={() => setGitlabPanelOpen(true)} />
-                  )}
-                  {tile.id === 'claude.live' && <ClaudeCard />}
-                  {tile.id === 'claude.usage' && <ClaudeUsageCard />}
-                  {tile.id === 'gitlocal' && (
-                    <GitLocalCard onOpen={() => setGitlocalPanelOpen(true)} />
-                  )}
-                  {tile.id === 'vpn' && <VpnCard />}
-                  {tile.id === 'teams' && <TeamsCard />}
-                  {tile.id === 'system' && <SystemCard />}
+                  {renderTileCard(tile.id, {
+                    onOpenTasks: () => setQuery('-'),
+                    onOpenGitlab: () => setGitlabPanelOpen(true),
+                    onOpenGitlocal: () => setGitlocalPanelOpen(true),
+                  })}
                 </div>
               );
             })}

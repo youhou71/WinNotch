@@ -157,7 +157,7 @@ Le comportement s'adapte au contexte :
 
 Drilldown accessible via l'icône engrenage de la search bar :
 
-- **Apparence** : densité du dashboard (dense / normal / aéré) et **disposition** (ordre + largeur des tuiles via drag-and-drop sur une grille de 12 colonnes).
+- **Apparence** : densité du dashboard (dense / normal / aéré) et **disposition** (éditeur WYSIWYG : déplacer et redimensionner les tuiles directement sur le vrai dashboard).
 - **Système** : démarrage automatique avec Windows, bouton « Quitter WinNotch » pour fermer l'application.
 - **Notifications** : toggle Ne pas Déranger.
 - **À propos** : version installée, état des mises à jour, bouton "Vérifier".
@@ -165,7 +165,13 @@ Drilldown accessible via l'icône engrenage de la search bar :
 
 ### Disposition du dashboard
 
-Chaque tuile (Tasks, Meetings, Music, GitLab, Claude, Git local) occupe N colonnes sur 12. Tant que la somme d'une rangée tient sous 12, les tuiles restent côte à côte ; sinon elles passent automatiquement à la rangée suivante. Réorganisation par glisser-déposer (poignée ⋮⋮), bouton "Réinitialiser" pour revenir au layout d'origine.
+Chaque tuile (Tasks, Meetings, Music, GitLab, Claude, Git local…) occupe N colonnes sur 12. Tant que la somme d'une rangée tient sous 12, les tuiles restent côte à côte ; sinon elles passent automatiquement à la rangée suivante.
+
+La page **Disposition** est un éditeur en mode WYSIWYG : on y voit les vraies tuiles, telles qu'elles s'affichent dans le dashboard, et on les édite directement —
+
+- **Déplacer** : glisser une tuile par sa poignée (coin haut-gauche).
+- **Redimensionner** : tirer le bord droit d'une tuile pour ajuster sa largeur (1 à 12 colonnes), avec un badge `N/12` qui suit le geste. Au clavier : flèches ←/→ sur la poignée de resize.
+- Seules les tuiles **actuellement visibles** sont éditables (les modules désactivés ou sans données conservent leur place mais n'apparaissent pas). Bouton "Réinitialiser" pour revenir au layout d'origine.
 
 Les réglages sont persistés dans `%APPDATA%/WinNotch/config.json` (build installé) ou `%APPDATA%/WinNotch-dev/config.json` (mode `npm run dev`) — les deux ne se mélangent pas.
 

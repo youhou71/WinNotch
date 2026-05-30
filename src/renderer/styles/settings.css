@@ -431,79 +431,219 @@
   padding: 0 2px 6px;
 }
 
-/* Liste verticale des tuiles configurables. Gap réduit car chaque row
- * est déjà large (icône + label + slider). */
-.layout-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* ───────────── Éditeur de disposition WYSIWYG ─────────────
+ * La page Disposition rend la VRAIE grille du dashboard (`.dash-grid`,
+ * partagée avec ExpandedDashboard) avec chaque tuile en mode édition :
+ * poignée de déplacement, poignée de resize, badge largeur, card inerte. */
+
+/* Marge basse pour que la dernière rangée ne colle pas au bord du dashboard. */
+.layout-edit-grid {
+  margin-bottom: 4px;
 }
 
-/* Une row tuile dans l'éditeur de layout. Mêmes tokens visuels qu'une
- * settings-row mais structure différente (poignée à gauche, slider à
- * droite, badge tabular tout au bout). */
-.layout-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: var(--surface-1);
-  border: 1px solid var(--border-1);
-  border-radius: 8px;
+/* Une tuile en cours d'édition. `position: relative` ancre les poignées ;
+ * `touch-action: none` autorise le drag/resize au pointeur tactile. Le
+ * `::after` dessine la bordure pointillée SANS décaler le layout (overlay).
+ *
+ * Drag « discret » volontaire : on n'applique AUCUN `transform` aux tuiles
+ * pendant le drag. Les fenêtres Electron `transparent: true` laissent des
+ * traînées fantômes dès qu'un élément est animé en continu via transform
+ * (bug electron#26147). On se contente donc de styliser la tuile saisie et le
+ * slot cible ; le réordonnancement a lieu au lâcher. */
+.dash-tile.is-editing {
+  position: relative;
   touch-action: none;
 }
 
-/* Poignée drag — curseur grab/grabbing géré par @dnd-kit via listeners.
- * On garde un hit-target large (24×28) pour faciliter la prise au pointeur. */
-.layout-row-handle {
-  width: 24px;
-  height: 28px;
+.dash-tile.is-editing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--d-card-radius, 14px);
+  pointer-events: none;
+  z-index: 1;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+/* Tuile saisie : curseur grabbing (l'opacité réduite est posée en inline). */
+.dash-tile.is-dragging-source {
+  cursor: grabbing;
+}
+
+/* Slot cible survolé pendant le drag : bordure pleine + voile accent pour
+ * indiquer la tuile de référence du point d'insertion. */
+.dash-tile.is-drop-target::after {
+  border-style: solid;
+  border-color: var(--accent);
+  background: rgba(96, 165, 250, 0.1);
+}
+
+/* Barre d'insertion : trait net (accent + glow) dans le gap, indiquant où la
+ * tuile saisie viendra se placer. Orientation verticale (gauche/droite) entre
+ * deux tuiles d'une rangée, ou horizontale (haut/bas) quand la cible occupe
+ * toute la largeur. Centrée dans le gap via `--d-gap`. `pointer-events:none`
+ * pour ne pas gêner la détection du droppable dnd-kit. */
+.tile-drop-bar {
+  position: absolute;
+  z-index: 4;
+  border-radius: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 10px 1px rgba(96, 165, 250, 0.7);
+  pointer-events: none;
+  animation: tile-drop-bar-in 120ms ease;
+}
+
+/* Verticales (entre deux tuiles d'une même rangée). */
+.tile-drop-bar[data-pos='left'],
+.tile-drop-bar[data-pos='right'] {
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.tile-drop-bar[data-pos='left'] {
+  left: calc(var(--d-gap, 10px) / -2);
+  transform: translateX(-50%);
+}
+
+.tile-drop-bar[data-pos='right'] {
+  right: calc(var(--d-gap, 10px) / -2);
+  transform: translateX(50%);
+}
+
+/* Horizontales (cible pleine largeur → insertion sur une autre rangée). */
+.tile-drop-bar[data-pos='top'],
+.tile-drop-bar[data-pos='bottom'] {
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+.tile-drop-bar[data-pos='top'] {
+  top: calc(var(--d-gap, 10px) / -2);
+  transform: translateY(-50%);
+}
+
+.tile-drop-bar[data-pos='bottom'] {
+  bottom: calc(var(--d-gap, 10px) / -2);
+  transform: translateY(50%);
+}
+
+@keyframes tile-drop-bar-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* La card réelle est rendue inerte : aucun pointeur ne l'atteint (le tab
+ * order est retiré via l'attribut HTML `inert` côté JSX). */
+.tile-card-inert {
+  pointer-events: none;
+}
+
+/* Poignée de déplacement (coin haut-gauche). Curseur grab/grabbing géré ici ;
+ * @dnd-kit attache ses listeners au bouton. */
+.tile-drag-handle {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: var(--txt-faint);
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  border-radius: 7px;
+  color: var(--txt-dim);
+  font-size: 12px;
   cursor: grab;
+  touch-action: none;
   transition:
     background 140ms ease,
     color 140ms ease;
 }
 
-.layout-row-handle:hover {
-  background: var(--surface-2);
-  color: var(--txt-dim);
+.tile-drag-handle:hover {
+  background: var(--surface-3);
+  color: var(--txt);
 }
 
-.layout-row-handle:active {
+.tile-drag-handle:active {
   cursor: grabbing;
 }
 
-/* Zone label : flex-1 pour pousser le slider à droite. */
-.layout-row-label {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Bloc slider + badge "N/12". Largeur figée pour aligner verticalement
- * les badges entre les rows. */
-.layout-row-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.layout-row-control .settings-slider {
-  width: 140px;
-}
-
-.layout-row-cols {
-  font-size: 11px;
+/* Badge largeur "N/12" (coin haut-droit, décalé pour libérer la poignée
+ * de resize). Purement indicatif → pas d'interaction. */
+.tile-cols-badge {
+  position: absolute;
+  top: 6px;
+  right: 14px;
+  z-index: 3;
+  padding: 1px 6px;
+  font-size: 10.5px;
   font-variant-numeric: tabular-nums;
   color: var(--txt-dim);
-  min-width: 38px;
-  text-align: right;
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* Poignée de resize (bord droit). Bande large invisible pour la prise ;
+ * le trait visuel est dessiné par `::before`. */
+.tile-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  z-index: 3;
+  width: 12px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.tile-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 28px;
+  border-radius: 2px;
+  background: var(--border-2);
+  transition: background 140ms ease;
+}
+
+.tile-resize-handle:hover::before,
+.tile-resize-handle:focus-visible::before {
+  background: var(--accent);
+}
+
+.tile-resize-handle:focus-visible {
+  outline: none;
+}
+
+/* État vide : aucun module visible à éditer. */
+.layout-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--txt-dim);
+  text-align: center;
+  background: var(--surface-0);
+  border: 1px dashed var(--border-1);
+  border-radius: 10px;
 }
 
 /* ───────────── Meetings — Section calendriers dépliable ───────────── */
