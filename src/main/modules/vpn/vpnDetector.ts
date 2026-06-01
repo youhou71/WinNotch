@@ -18,6 +18,7 @@
  */
 import { spawn } from 'child_process';
 import type { VpnClient, VpnConnection } from '../../../shared/types';
+import { powershellExe } from '../shell/powershellPath';
 
 const POWERSHELL_TIMEOUT_MS = 8000;
 
@@ -153,7 +154,7 @@ export function runDetectScript(): Promise<{ snapshot: VpnRawSnapshot | null; er
     // d'échappement.
     const encoded = Buffer.from(DETECT_SCRIPT, 'utf16le').toString('base64');
     const child = spawn(
-      'powershell.exe',
+      powershellExe(),
       [
         '-NoProfile',
         '-NoLogo',

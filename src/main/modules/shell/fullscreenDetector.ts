@@ -23,6 +23,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { screen } from 'electron';
 import { IpcChannel } from '../../../shared/types';
+import { powershellExe } from './powershellPath';
 import { getNotchWindow } from '../../window/notchWindow';
 
 const POLL_INTERVAL_MS = 750;
@@ -122,7 +123,7 @@ export function startFullscreenDetector(): void {
   if (psProcess) return;
   try {
     psProcess = spawn(
-      'powershell.exe',
+      powershellExe(),
       ['-NoProfile', '-NonInteractive', '-Command', PS_SCRIPT],
       { windowsHide: true },
     );
@@ -130,6 +131,16 @@ export function startFullscreenDetector(): void {
     console.warn('[fullscreen] spawn PowerShell échoué — détection désactivée:', err);
     return;
   }
+
+  // `spawn` n'échoue PAS de façon synchrone sur un ENOENT (binaire
+  // introuvable) : l'erreur arrive en asynchrone via l'événement 'error'.
+  // Sans ce handler, l'ENOENT devient une exception non catchée qui crashe
+  // tout le main process. On dégrade donc proprement (détection désactivée).
+  psProcess.on('error', (err) => {
+    console.warn('[fullscreen] PowerShell indisponible — détection désactivée:', err.message);
+    psProcess = null;
+    lastEmitted = null;
+  });
 
   let buffer = '';
   psProcess.stdout.on('data', (chunk: Buffer) => {

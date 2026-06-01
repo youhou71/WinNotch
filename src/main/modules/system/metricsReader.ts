@@ -18,6 +18,7 @@
  */
 import { spawn } from 'child_process';
 import * as os from 'os';
+import { powershellExe } from '../shell/powershellPath';
 
 const POWERSHELL_TIMEOUT_MS = 4000;
 
@@ -154,7 +155,7 @@ export function readNetSnapshot(): Promise<{
 
     const encoded = Buffer.from(NET_SCRIPT, 'utf16le').toString('base64');
     const child = spawn(
-      'powershell.exe',
+      powershellExe(),
       [
         '-NoProfile',
         '-NoLogo',

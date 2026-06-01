@@ -13,6 +13,7 @@
  */
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { powershellExe } from '../shell/powershellPath';
 
 const execFileAsync = promisify(execFile);
 
@@ -47,7 +48,7 @@ function buildScript(vkCode: number): string {
 async function sendKey(vk: number): Promise<void> {
   try {
     await execFileAsync(
-      'powershell.exe',
+      powershellExe(),
       ['-NoProfile', '-NonInteractive', '-Command', buildScript(vk)],
       { windowsHide: true, timeout: 5000 },
     );
