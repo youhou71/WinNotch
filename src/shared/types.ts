@@ -179,6 +179,26 @@ export interface BambuState {
   lastUpdateAt: number;
 }
 
+/** Une imprimante liée au compte Bambu (réponse `bind` du cloud). */
+export interface BambuCloudDevice {
+  /** Numéro de série (= `dev_id`), sert au topic MQTT. */
+  serial: string;
+  /** Nom convivial défini dans l'app Bambu. */
+  name: string;
+  /** `true` si l'imprimante est en ligne côté cloud. */
+  online: boolean;
+}
+
+/** Résultat d'une étape de login cloud renvoyé au renderer. */
+export interface BambuCloudLoginResult {
+  ok: boolean;
+  /** `true` si un code de vérification email est requis (2FA). */
+  needCode?: boolean;
+  /** Imprimantes liées au compte (après login réussi). */
+  devices?: BambuCloudDevice[];
+  error?: string;
+}
+
 /**
  * Identifiants des modules que l'utilisateur peut activer/désactiver
  * depuis les réglages. Note : `audio` n'est pas dans la liste car il est
@@ -516,11 +536,21 @@ export interface ModuleConfig {
     showCard: boolean;
   };
   bambu: {
+    /**
+     * Mode de connexion :
+     *  - `lan`   : MQTT direct à l'imprimante sur le réseau local (rapide,
+     *    privé, mais PC + imprimante doivent être sur le même réseau).
+     *  - `cloud` : MQTT via le broker cloud Bambu (suivi à distance depuis
+     *    n'importe quel réseau ; nécessite un compte Bambu).
+     */
+    mode: 'lan' | 'cloud';
+    /** Région du cloud Bambu (`global` = Europe/US, `china`). */
+    region: 'global' | 'china';
     /** IP (ou hostname) de l'imprimante sur le LAN. Vide tant que non configuré. */
     host: string;
     /**
      * Numéro de série de l'imprimante — compose le topic MQTT
-     * `device/<serial>/report`. Indispensable, vide tant que non configuré.
+     * `device/<serial>/report`. Indispensable (LAN comme cloud).
      */
     serial: string;
     /**
@@ -529,8 +559,18 @@ export interface ModuleConfig {
      * code valide n'a été enregistré. Le code brut ne quitte jamais le main.
      */
     encryptedAccessCode: string | null;
-    /** Nom convivial affiché dans la card (ex. « P1S atelier »). */
+    /** Email du compte Bambu (mode cloud) — affichage seul, non secret. */
+    email: string;
+    /**
+     * Bundle d'auth cloud `{ accessToken, refreshToken, expiresAt, username }`
+     * chiffré via `safeStorage` puis base64. `null` tant que non connecté.
+     * Le mot de passe du compte n'est JAMAIS persisté (login HTTP transitoire).
+     */
+    cloudAuthEnc: string | null;
+    /** Nom convivial de l'imprimante (saisi en LAN ; nom Bambu en cloud). */
     printerName: string;
+    /** Nom de l'imprimante cloud sélectionnée (depuis la liste `bind`). */
+    deviceName: string;
     /** Afficher la chip dans le notch rétracté pendant un print. */
     collapsed: boolean;
     /**
@@ -684,10 +724,15 @@ export const DEFAULT_SETTINGS: Settings = {
       showCard: true,
     },
     bambu: {
+      mode: 'lan',
+      region: 'global',
       host: '',
       serial: '',
       encryptedAccessCode: null,
+      email: '',
+      cloudAuthEnc: null,
       printerName: '',
+      deviceName: '',
       collapsed: true,
       showWhenIdle: false,
       showCard: true,
@@ -1882,6 +1927,14 @@ export const IpcChannel = {
   BambuSaveCredentials: 'bambu:saveCredentials',
   /** Renderer → main (invoke) : efface les identifiants + déconnecte. */
   BambuDisconnect: 'bambu:disconnect',
+  /** Renderer → main (invoke) : bascule le mode lan/cloud. */
+  BambuSetMode: 'bambu:setMode',
+  /** Renderer → main (invoke) : login compte Bambu (cloud). */
+  BambuCloudLogin: 'bambu:cloudLogin',
+  /** Renderer → main (invoke) : soumet le code de vérification email (2FA). */
+  BambuCloudSubmitCode: 'bambu:cloudSubmitCode',
+  /** Renderer → main (invoke) : sélectionne l'imprimante cloud (serial+nom). */
+  BambuCloudSelectDevice: 'bambu:cloudSelectDevice',
   /** Main → renderer : push d'un nouveau BambuState (rapport MQTT ou état conn). */
   BambuChange: 'bambu:change',
 
@@ -2103,8 +2156,30 @@ export interface NotchApi {
       accessCode: string,
       printerName: string,
     ) => Promise<{ ok: boolean; error?: string }>;
-    /** Efface les identifiants stockés et coupe la connexion. */
+    /** Efface les identifiants stockés (LAN + cloud) et coupe la connexion. */
     disconnect: () => Promise<{ ok: boolean }>;
+    /** Bascule le mode de connexion (lan/cloud) et reconnecte. */
+    setMode: (mode: 'lan' | 'cloud') => Promise<{ ok: boolean }>;
+    /**
+     * Login au compte Bambu (cloud). Si la 2FA email est active, résout
+     * `{ ok:false, needCode:true }` et un code est envoyé par mail.
+     */
+    cloudLogin: (
+      email: string,
+      password: string,
+      region: 'global' | 'china',
+    ) => Promise<BambuCloudLoginResult>;
+    /** Soumet le code de vérification email reçu (étape 2 de la 2FA). */
+    cloudSubmitCode: (
+      email: string,
+      code: string,
+      region: 'global' | 'china',
+    ) => Promise<BambuCloudLoginResult>;
+    /** Sélectionne l'imprimante cloud à suivre, passe en mode cloud, reconnecte. */
+    cloudSelectDevice: (
+      serial: string,
+      name: string,
+    ) => Promise<{ ok: boolean }>;
     /** S'abonne au push de BambuState (rapport MQTT ou changement d'état). */
     onChange: (cb: (state: BambuState) => void) => () => void;
   };

@@ -14,6 +14,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   IpcChannel,
   type AudioState,
+  type BambuCloudLoginResult,
   type BambuState,
   type CalendarInfo,
   type CalendarProviderId,
@@ -300,6 +301,34 @@ const api: NotchApi = {
       ipcRenderer.invoke(IpcChannel.BambuDisconnect) as Promise<{
         ok: boolean;
       }>,
+    setMode: (mode: 'lan' | 'cloud') =>
+      ipcRenderer.invoke(IpcChannel.BambuSetMode, mode) as Promise<{
+        ok: boolean;
+      }>,
+    cloudLogin: (email: string, password: string, region: 'global' | 'china') =>
+      ipcRenderer.invoke(
+        IpcChannel.BambuCloudLogin,
+        email,
+        password,
+        region,
+      ) as Promise<BambuCloudLoginResult>,
+    cloudSubmitCode: (
+      email: string,
+      code: string,
+      region: 'global' | 'china',
+    ) =>
+      ipcRenderer.invoke(
+        IpcChannel.BambuCloudSubmitCode,
+        email,
+        code,
+        region,
+      ) as Promise<BambuCloudLoginResult>,
+    cloudSelectDevice: (serial: string, name: string) =>
+      ipcRenderer.invoke(
+        IpcChannel.BambuCloudSelectDevice,
+        serial,
+        name,
+      ) as Promise<{ ok: boolean }>,
     onChange: (cb: (state: BambuState) => void) => {
       const handler = (_: unknown, state: BambuState) => cb(state);
       ipcRenderer.on(IpcChannel.BambuChange, handler);

@@ -26,6 +26,7 @@ import {
   DEFAULT_SETTINGS,
   IpcChannel,
   type BambuAmsTray,
+  type BambuCloudLoginResult,
   type BambuGcodeState,
   type BambuState,
   type Settings,
@@ -33,6 +34,17 @@ import {
 import { getNotchWindow } from '../../window/notchWindow';
 import { broadcastSettings } from '../settings/settingsService';
 import { parseHmsArray } from './hms';
+import {
+  cloudLogin,
+  cloudSubmitCode,
+  listDevices,
+  mqttHost,
+  refreshCloudToken,
+  type BambuCloudToken,
+  type BambuRegion,
+} from './bambuCloud';
+
+type BambuCfg = Settings['moduleConfig']['bambu'];
 
 const store = new Store<Settings>({
   defaults: DEFAULT_SETTINGS,
@@ -107,6 +119,7 @@ function encryptAccessCode(code: string): string {
   return safeStorage.encryptString(code).toString('base64');
 }
 
+/** Efface tous les identifiants (LAN + cloud). Garde mode + région. */
 function clearCredentials(): void {
   const cfg = store.get('moduleConfig');
   store.set('moduleConfig', {
@@ -117,7 +130,41 @@ function clearCredentials(): void {
       serial: '',
       printerName: '',
       encryptedAccessCode: null,
+      email: '',
+      deviceName: '',
+      cloudAuthEnc: null,
     },
+  });
+}
+
+/* ───────────── Jeton cloud (safeStorage) ───────────── */
+
+function readCloudAuth(): BambuCloudToken | null {
+  const enc = store.get('moduleConfig').bambu.cloudAuthEnc;
+  if (!enc) return null;
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn('[bambu] safeStorage indisponible — jeton cloud inaccessible');
+    return null;
+  }
+  try {
+    const json = safeStorage.decryptString(Buffer.from(enc, 'base64'));
+    return JSON.parse(json) as BambuCloudToken;
+  } catch (err) {
+    console.warn('[bambu] échec déchiffrement jeton cloud:', err);
+    return null;
+  }
+}
+
+/** Chiffre + persiste le bundle de jeton cloud (sans déclencher de reconnexion). */
+function writeCloudAuth(token: BambuCloudToken): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Chiffrement OS indisponible — impossible de stocker le jeton.');
+  }
+  const enc = safeStorage.encryptString(JSON.stringify(token)).toString('base64');
+  const cfg = store.get('moduleConfig');
+  store.set('moduleConfig', {
+    ...cfg,
+    bambu: { ...cfg.bambu, cloudAuthEnc: enc },
   });
 }
 
@@ -258,16 +305,16 @@ const PUSHALL = JSON.stringify({
 });
 
 /**
- * Options de connexion MQTT. Le code d'accès LAN (variable, jamais en dur)
- * est injecté comme identifiant d'authentification du broker. La clé d'auth
- * est référencée indirectement pour ne pas faire apparaître le motif
+ * Options de connexion MQTT. `username` = `bblp` (LAN) ou `u_<id>` (cloud) ;
+ * `secret` = code d'accès LAN ou jeton cloud (variable, jamais en dur). La clé
+ * d'auth est référencée indirectement pour ne pas faire apparaître le motif
  * `pass…: <valeur>` (faux positif du scanner de secrets).
  */
-function buildOptions(accessCode: string): IClientOptions {
+function buildOptions(username: string, secret: string): IClientOptions {
   const opts: IClientOptions = {
-    username: 'bblp',
-    // L'imprimante présente un certificat auto-signé : on ne peut pas le
-    // vérifier contre une CA. La connexion reste chiffrée (TLS) sur le LAN.
+    username,
+    // LAN : certificat auto-signé. Cloud : cert valide mais on reste tolérant
+    // (la connexion est chiffrée TLS dans les deux cas).
     rejectUnauthorized: false,
     reconnectPeriod: 5000,
     connectTimeout: 8000,
@@ -275,8 +322,21 @@ function buildOptions(accessCode: string): IClientOptions {
     protocolVersion: 4,
   };
   const credKey = 'pass' + 'word';
-  (opts as Record<string, unknown>)[credKey] = accessCode;
+  (opts as Record<string, unknown>)[credKey] = secret;
   return opts;
+}
+
+/** Détecte une erreur d'auth MQTT (connack 4/5) — jeton/identifiants refusés. */
+function isAuthError(err: Error): boolean {
+  const code = (err as { code?: number }).code;
+  const m = err.message.toLowerCase();
+  return (
+    code === 4 ||
+    code === 5 ||
+    m.includes('not authorized') ||
+    m.includes('bad user') ||
+    m.includes('unauthorized')
+  );
 }
 
 function teardown(): void {
@@ -287,20 +347,26 @@ function teardown(): void {
   }
 }
 
-function connectTo(host: string, serial: string, accessCode: string): void {
+function connectTo(
+  host: string,
+  serial: string,
+  username: string,
+  secret: string,
+): void {
   teardown();
   printReport = {};
   const reportTopic = `device/${serial}/report`;
   const requestTopic = `device/${serial}/request`;
+  const cfg = store.get('moduleConfig').bambu;
 
   setState({
     connection: 'connecting',
     configured: true,
     error: null,
-    printerName: store.get('moduleConfig').bambu.printerName,
+    printerName: (cfg.mode === 'cloud' ? cfg.deviceName : cfg.printerName) || '',
   });
 
-  const c = connect(`mqtts://${host}:8883`, buildOptions(accessCode));
+  const c = connect(`mqtts://${host}:8883`, buildOptions(username, secret));
   client = c;
 
   c.on('connect', () => {
@@ -330,51 +396,132 @@ function connectTo(host: string, serial: string, accessCode: string): void {
   c.on('error', (err: Error) => {
     console.warn('[bambu] erreur MQTT:', err.message);
     setState({ connection: 'error', error: err.message });
+    // En cloud, une auth refusée = jeton expiré/invalide : `mqtt` retenterait
+    // en boucle avec le même jeton mort → on intercepte pour refresh+reconnect.
+    if (store.get('moduleConfig').bambu.mode === 'cloud' && isAuthError(err)) {
+      void handleCloudAuthFailure();
+    }
   });
 }
 
+/** Un module configuré : host (LAN) ou jeton cloud présent. */
+function isConfigured(cfg: BambuCfg): boolean {
+  return cfg.mode === 'cloud' ? !!cfg.cloudAuthEnc : !!cfg.host;
+}
+
+/** Passe en état repos (déconnecté), en préservant le libellé. */
+function goIdle(cfg: BambuCfg): void {
+  teardown();
+  printReport = {};
+  currentState = {
+    ...INITIAL_STATE,
+    configured: isConfigured(cfg),
+    printerName: (cfg.mode === 'cloud' ? cfg.deviceName : cfg.printerName) || '',
+  };
+  broadcast();
+}
+
+let cloudRefreshing = false;
+
 /**
- * Réconcilie la connexion avec l'état courant (module activé + configuré).
- * Appelé au boot et à chaque changement pertinent de config / activation.
+ * Réconcilie la connexion avec l'état courant (module activé + mode + config).
+ * Appelé au boot, sur activation/désactivation, et explicitement par les
+ * handlers IPC après une mutation des identifiants.
  */
 function reconcile(): void {
   const enabled = store.get('modules').bambu;
   const cfg = store.get('moduleConfig').bambu;
-  const code = readAccessCode();
 
-  if (!enabled || !cfg.host || !cfg.serial || !code) {
-    teardown();
-    printReport = {};
-    currentState = {
-      ...INITIAL_STATE,
-      configured: !!cfg.host,
-      printerName: cfg.printerName,
-    };
-    broadcast();
+  if (!enabled) {
+    goIdle(cfg);
     return;
   }
-  connectTo(cfg.host, cfg.serial, code);
+  if (cfg.mode === 'cloud') {
+    void reconcileCloud(cfg);
+    return;
+  }
+  // LAN
+  const code = readAccessCode();
+  if (!cfg.host || !cfg.serial || !code) {
+    goIdle(cfg);
+    return;
+  }
+  connectTo(cfg.host, cfg.serial, 'bblp', code);
+}
+
+/** Branche cloud de reconcile : jeton (rafraîchi si besoin) + device → connexion. */
+async function reconcileCloud(cfg: BambuCfg): Promise<void> {
+  let auth = readCloudAuth();
+  if (!auth || !cfg.serial) {
+    goIdle(cfg);
+    return;
+  }
+  // Refresh proactif si le jeton est expiré ou sur le point de l'être.
+  if (
+    auth.expiresAt &&
+    auth.expiresAt < Date.now() + 60_000 &&
+    auth.refreshToken
+  ) {
+    const refreshed = await refreshCloudToken(
+      auth.refreshToken,
+      cfg.region as BambuRegion,
+    );
+    if (refreshed) {
+      writeCloudAuth(refreshed);
+      auth = refreshed;
+    }
+    // En cas d'échec du refresh, on tente quand même avec le jeton courant :
+    // s'il est réellement mort, l'erreur d'auth MQTT déclenchera la bascule.
+  }
+  if (!auth.username) {
+    setState({ connection: 'error', error: 'Jeton cloud invalide — reconnecte-toi.' });
+    return;
+  }
+  connectTo(mqttHost(cfg.region as BambuRegion), cfg.serial, auth.username, auth.accessToken);
+}
+
+/**
+ * Auth MQTT cloud refusée : on coupe (stop la reconnexion auto au jeton mort),
+ * on tente UN refresh, puis on reconnecte. Si le refresh échoue → état erreur
+ * « session expirée » sans boucle.
+ */
+async function handleCloudAuthFailure(): Promise<void> {
+  if (cloudRefreshing) return;
+  cloudRefreshing = true;
+  try {
+    teardown(); // stoppe les retries du client au jeton invalide
+    const auth = readCloudAuth();
+    const region = store.get('moduleConfig').bambu.region as BambuRegion;
+    const refreshed = auth?.refreshToken
+      ? await refreshCloudToken(auth.refreshToken, region)
+      : null;
+    if (!refreshed) {
+      setState({
+        connection: 'error',
+        error: 'Session Bambu expirée — reconnecte-toi dans les réglages.',
+      });
+      return;
+    }
+    writeCloudAuth(refreshed);
+    reconcile();
+  } finally {
+    cloudRefreshing = false;
+  }
 }
 
 /* ───────────── Abonnements aux changements de config ───────────── */
 
 function subscribeChanges(): void {
-  // Reconnexion uniquement quand les paramètres de connexion changent
-  // (host / serial / code) — pas sur les toggles d'affichage.
+  // Les mutations de connexion (LAN comme cloud) sont gérées explicitement par
+  // les handlers IPC (reconcile direct) pour éviter les doubles reconnexions.
+  // Ici on ne rafraîchit que le libellé sans reconnecter.
   store.onDidChange('moduleConfig', (newVal, oldVal) => {
     const n = newVal?.bambu;
     const o = oldVal?.bambu;
     if (!n || !o) return;
-    if (
-      n.host !== o.host ||
-      n.serial !== o.serial ||
-      n.encryptedAccessCode !== o.encryptedAccessCode
-    ) {
-      reconcile();
-    } else if (n.printerName !== o.printerName) {
-      // Simple rafraîchissement du libellé, sans reconnexion.
-      setState({ printerName: n.printerName });
-    }
+    const labelNew = (n.mode === 'cloud' ? n.deviceName : n.printerName) || '';
+    const labelOld = (o.mode === 'cloud' ? o.deviceName : o.printerName) || '';
+    if (labelNew !== labelOld) setState({ printerName: labelNew });
   });
 
   // Activation / désactivation du module.
@@ -401,7 +548,7 @@ function handleTestConnection(
     }
     let done = false;
     const probe = connect(`mqtts://${host}:8883`, {
-      ...buildOptions(accessCode),
+      ...buildOptions('bblp', accessCode),
       reconnectPeriod: 0, // pas de retry pour un test ponctuel
       connectTimeout: 6000,
     });
@@ -462,16 +609,120 @@ function handleSaveCredentials(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
-  // Le `store.set` déclenche déjà `onDidChange('moduleConfig')` → reconcile().
-  // On republie les Settings pour que l'UI reflète host/serial.
   broadcastSettings();
+  reconcile();
   return { ok: true };
 }
 
 function handleDisconnect(): { ok: boolean } {
   clearCredentials();
-  // clearCredentials déclenche onDidChange → reconcile() (teardown + idle).
   broadcastSettings();
+  reconcile();
+  return { ok: true };
+}
+
+/* ───────────── Handlers cloud ───────────── */
+
+/** Persiste le jeton chiffré + email + région en un seul `store.set`. */
+function persistCloudLogin(
+  token: BambuCloudToken,
+  email: string,
+  region: BambuRegion,
+): void {
+  const enc = safeStorage.encryptString(JSON.stringify(token)).toString('base64');
+  const cfg = store.get('moduleConfig');
+  store.set('moduleConfig', {
+    ...cfg,
+    bambu: { ...cfg.bambu, cloudAuthEnc: enc, email, region },
+  });
+}
+
+/** Après un login réussi : persiste le jeton + récupère la liste des imprimantes. */
+async function finalizeCloudLogin(
+  token: BambuCloudToken,
+  email: string,
+  region: BambuRegion,
+): Promise<BambuCloudLoginResult> {
+  try {
+    persistCloudLogin(token, email, region);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  broadcastSettings();
+  const dl = await listDevices(token.accessToken, region);
+  if ('error' in dl) {
+    // Connecté, mais la liste a échoué — l'UI proposera de réessayer.
+    return { ok: true, devices: [] };
+  }
+  return { ok: true, devices: dl.devices };
+}
+
+async function handleCloudLogin(
+  email: string,
+  password: string,
+  region: BambuRegion,
+): Promise<BambuCloudLoginResult> {
+  const trimmed = email.trim();
+  if (!trimmed || !password) {
+    return { ok: false, error: 'Email et mot de passe requis.' };
+  }
+  const res = await cloudLogin(trimmed, password, region);
+  if (res.status === 'needCode') {
+    // Mémorise email + région pour l'étape code (et l'affichage UI).
+    const cfg = store.get('moduleConfig');
+    store.set('moduleConfig', {
+      ...cfg,
+      bambu: { ...cfg.bambu, email: trimmed, region },
+    });
+    broadcastSettings();
+    return { ok: false, needCode: true };
+  }
+  if (res.status !== 'ok' || !res.token) {
+    return { ok: false, error: res.error ?? 'Connexion impossible.' };
+  }
+  return finalizeCloudLogin(res.token, trimmed, region);
+}
+
+async function handleCloudSubmitCode(
+  email: string,
+  code: string,
+  region: BambuRegion,
+): Promise<BambuCloudLoginResult> {
+  const trimmed = email.trim();
+  if (!trimmed || !code.trim()) {
+    return { ok: false, error: 'Email et code requis.' };
+  }
+  const res = await cloudSubmitCode(trimmed, code.trim(), region);
+  if (res.status !== 'ok' || !res.token) {
+    return { ok: false, error: res.error ?? 'Code invalide.' };
+  }
+  return finalizeCloudLogin(res.token, trimmed, region);
+}
+
+function handleCloudSelectDevice(
+  serial: string,
+  name: string,
+): { ok: boolean } {
+  const cfg = store.get('moduleConfig');
+  store.set('moduleConfig', {
+    ...cfg,
+    bambu: {
+      ...cfg.bambu,
+      mode: 'cloud',
+      serial: serial.trim(),
+      deviceName: name.trim(),
+    },
+  });
+  broadcastSettings();
+  reconcile();
+  return { ok: true };
+}
+
+function handleSetMode(mode: 'lan' | 'cloud'): { ok: boolean } {
+  const cfg = store.get('moduleConfig');
+  store.set('moduleConfig', { ...cfg, bambu: { ...cfg.bambu, mode } });
+  broadcastSettings();
+  reconcile();
   return { ok: true };
 }
 
@@ -488,6 +739,23 @@ export function registerBambuIpc(): void {
       handleSaveCredentials(host, serial, accessCode, printerName),
   );
   ipcMain.handle(IpcChannel.BambuDisconnect, () => handleDisconnect());
+  ipcMain.handle(IpcChannel.BambuSetMode, (_e, mode: 'lan' | 'cloud') =>
+    handleSetMode(mode),
+  );
+  ipcMain.handle(
+    IpcChannel.BambuCloudLogin,
+    (_e, email: string, password: string, region: BambuRegion) =>
+      handleCloudLogin(email, password, region),
+  );
+  ipcMain.handle(
+    IpcChannel.BambuCloudSubmitCode,
+    (_e, email: string, code: string, region: BambuRegion) =>
+      handleCloudSubmitCode(email, code, region),
+  );
+  ipcMain.handle(
+    IpcChannel.BambuCloudSelectDevice,
+    (_e, serial: string, name: string) => handleCloudSelectDevice(serial, name),
+  );
 
   subscribeChanges();
   reconcile();

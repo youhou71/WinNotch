@@ -1,24 +1,81 @@
 /**
  * Page de réglages du module Bambu.
  *
- * Saisie des identifiants de connexion LAN (IP + numéro de série + code
- * d'accès) avec test/enregistrement, puis toggles d'affichage. Le code
- * d'accès n'est jamais relu depuis le main (chiffré via DPAPI) : s'il est
- * déjà enregistré, laisser le champ vide le conserve.
+ * Deux modes de connexion (sélecteur en tête) :
+ *  - **Réseau local (LAN)** : IP + numéro de série + code d'accès, MQTT direct.
+ *  - **Cloud Bambu** : login compte Bambu (avec 2FA email), choix de l'imprimante
+ *    dans la liste liée au compte, MQTT via le broker cloud (suivi à distance).
  *
- * Calqué sur GitLabSettings (`SettingsModulePage.tsx`).
+ * Aucun secret n'est relu depuis le main : code d'accès LAN et jeton cloud sont
+ * chiffrés (DPAPI). Le mot de passe du compte Bambu n'est jamais stocké.
  */
 import { useEffect, useState } from 'react';
+import type { BambuCloudDevice } from '../../../shared/types';
 import { useSettingsContext } from '../settings/SettingsContext';
 import { useToast } from '../toast/ToastContext';
 import {
   SettingsRow,
   SettingsSection,
   SettingsToggleRow,
+  SettingsRadioRow,
 } from '../settings/atoms';
 
 export function BambuSettings() {
   const { settings, patchModuleConfig } = useSettingsContext();
+  const cfg = settings.moduleConfig.bambu;
+
+  return (
+    <>
+      <SettingsSection title="Connexion">
+        <SettingsRadioRow
+          icon="fa-solid fa-network-wired"
+          iconColor="#00ae42"
+          label="Mode"
+          description="Local : même réseau que l'imprimante. Cloud : suivi à distance via le compte Bambu."
+          value={cfg.mode}
+          options={[
+            { value: 'lan', label: 'Réseau local' },
+            { value: 'cloud', label: 'Cloud Bambu' },
+          ]}
+          onChange={(next) => void window.notch.bambu.setMode(next)}
+        />
+      </SettingsSection>
+
+      {cfg.mode === 'lan' ? <BambuLanSettings /> : <BambuCloudSettings />}
+
+      <SettingsSection title="Affichage">
+        <SettingsToggleRow
+          icon="fa-solid fa-print"
+          iconColor="#00ae42"
+          label="Afficher la chip pendant un print"
+          description="Pastille de progression dans le notch rétracté pendant l'impression."
+          value={cfg.collapsed}
+          onChange={(next) => void patchModuleConfig('bambu', { collapsed: next })}
+        />
+        <SettingsToggleRow
+          icon="fa-solid fa-eye"
+          label="Garder la chip hors impression"
+          description="Affiche aussi la chip (état connexion) quand aucun print n'est en cours."
+          value={cfg.showWhenIdle}
+          onChange={(next) =>
+            void patchModuleConfig('bambu', { showWhenIdle: next })
+          }
+        />
+        <SettingsToggleRow
+          icon="fa-solid fa-table-cells-large"
+          label="Afficher la card dans le dashboard"
+          value={cfg.showCard}
+          onChange={(next) => void patchModuleConfig('bambu', { showCard: next })}
+        />
+      </SettingsSection>
+    </>
+  );
+}
+
+/* ───────────── Mode LAN ───────────── */
+
+function BambuLanSettings() {
+  const { settings } = useSettingsContext();
   const { push: pushToast } = useToast();
   const cfg = settings.moduleConfig.bambu;
 
@@ -28,7 +85,6 @@ export function BambuSettings() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState<'test' | 'save' | 'clear' | null>(null);
 
-  // Re-sync depuis le store si la config change ailleurs (clear, reload…).
   useEffect(() => {
     setHost(cfg.host);
     setSerial(cfg.serial);
@@ -58,12 +114,7 @@ export function BambuSettings() {
   const handleSave = async () => {
     setBusy('save');
     try {
-      const res = await window.notch.bambu.saveCredentials(
-        host,
-        serial,
-        code,
-        name,
-      );
+      const res = await window.notch.bambu.saveCredentials(host, serial, code, name);
       if (res.ok) {
         setCode('');
         notify(true, 'Imprimante enregistrée');
@@ -86,13 +137,11 @@ export function BambuSettings() {
     }
   };
 
-  // Pour enregistrer : IP + serial requis, et un code (nouveau OU déjà stocké).
   const canSave =
     !!host.trim() &&
     !!serial.trim() &&
     (!!code.trim() || !!cfg.encryptedAccessCode) &&
     !busy;
-  // Pour tester : il faut un code en clair (le code stocké n'est pas relisible).
   const canTest = !!host.trim() && !!serial.trim() && !!code.trim() && !busy;
 
   return (
@@ -204,38 +253,252 @@ export function BambuSettings() {
           </div>
           <div className="settings-credentials-hint">
             Le code d'accès est chiffré localement via le keystore Windows
-            (DPAPI) avant d'être stocké. Active <strong>Réglages → Général →
-            Mode LAN</strong> sur l'imprimante pour autoriser la connexion
-            MQTT locale. Module en lecture seule (aucune commande envoyée).
+            (DPAPI). Active <strong>Réglages → Général → Mode LAN</strong> sur
+            l'imprimante. Module en lecture seule (aucune commande envoyée).
+          </div>
+        </div>
+      </SettingsSection>
+    </>
+  );
+}
+
+/* ───────────── Mode Cloud ───────────── */
+
+function BambuCloudSettings() {
+  const { settings } = useSettingsContext();
+  const { push: pushToast } = useToast();
+  const cfg = settings.moduleConfig.bambu;
+
+  const [region, setRegion] = useState<'global' | 'china'>(cfg.region);
+  const [email, setEmail] = useState(cfg.email);
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [phase, setPhase] = useState<'idle' | 'code' | 'devices'>('idle');
+  const [devices, setDevices] = useState<BambuCloudDevice[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setEmail(cfg.email);
+    setRegion(cfg.region);
+  }, [cfg.email, cfg.region]);
+
+  const connected = !!cfg.cloudAuthEnc && !!cfg.serial;
+
+  const notify = (ok: boolean, message: string) =>
+    pushToast({
+      icon: ok ? 'fa-solid fa-cloud' : 'fa-solid fa-triangle-exclamation',
+      iconColor: ok ? '#00ae42' : '#ef4444',
+      name: 'Bambu',
+      message,
+    });
+
+  const handleLogin = async () => {
+    setBusy(true);
+    try {
+      const res = await window.notch.bambu.cloudLogin(email, password, region);
+      if (res.needCode) {
+        setPhase('code');
+        notify(true, 'Code de vérification envoyé par email');
+      } else if (res.ok) {
+        setPassword('');
+        setDevices(res.devices ?? []);
+        setPhase('devices');
+      } else {
+        notify(false, res.error ?? 'Connexion impossible');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSubmitCode = async () => {
+    setBusy(true);
+    try {
+      const res = await window.notch.bambu.cloudSubmitCode(email, code, region);
+      if (res.ok) {
+        setCode('');
+        setPassword('');
+        setDevices(res.devices ?? []);
+        setPhase('devices');
+      } else {
+        notify(false, res.error ?? 'Code invalide');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSelectDevice = async (d: BambuCloudDevice) => {
+    setBusy(true);
+    try {
+      await window.notch.bambu.cloudSelectDevice(d.serial, d.name);
+      notify(true, `Imprimante « ${d.name} » sélectionnée`);
+      setPhase('idle');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setBusy(true);
+    try {
+      await window.notch.bambu.disconnect();
+      setPhase('idle');
+      setDevices([]);
+      setPassword('');
+      setCode('');
+      notify(true, 'Compte Bambu déconnecté');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Déjà connecté à une imprimante cloud.
+  if (connected) {
+    return (
+      <SettingsSection title="Compte Bambu (cloud)">
+        <SettingsRow
+          icon="fa-solid fa-cloud"
+          iconColor="#00ae42"
+          label={cfg.deviceName || 'Imprimante cloud'}
+          description={`${cfg.email} · ${region === 'china' ? 'Chine' : 'Global'}`}
+          right={
+            <button
+              type="button"
+              className="settings-link-btn"
+              disabled={busy}
+              onClick={() => void handleLogout()}
+            >
+              {busy ? 'En cours…' : 'Se déconnecter'}
+            </button>
+          }
+        />
+      </SettingsSection>
+    );
+  }
+
+  return (
+    <>
+      <SettingsSection title="Compte Bambu (cloud)">
+        <SettingsRadioRow
+          icon="fa-solid fa-globe"
+          label="Région"
+          value={region}
+          options={[
+            { value: 'global', label: 'Global / Europe' },
+            { value: 'china', label: 'Chine' },
+          ]}
+          onChange={(next) => setRegion(next)}
+        />
+        <div className="settings-credentials">
+          <label className="settings-field">
+            <span className="settings-field-label">Email du compte Bambu</span>
+            <input
+              type="email"
+              className="settings-field-input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="toi@exemple.com"
+              spellCheck={false}
+              autoComplete="off"
+              disabled={phase === 'code'}
+            />
+          </label>
+
+          {phase !== 'code' && (
+            <label className="settings-field">
+              <span className="settings-field-label">Mot de passe</span>
+              <input
+                type="password"
+                className="settings-field-input"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="mot de passe Bambu"
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </label>
+          )}
+
+          {phase === 'code' && (
+            <label className="settings-field">
+              <span className="settings-field-label">Code de vérification</span>
+              <input
+                type="text"
+                className="settings-field-input"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="code reçu par email"
+                spellCheck={false}
+                autoComplete="off"
+                inputMode="numeric"
+              />
+            </label>
+          )}
+
+          <div className="gl-settings-actions">
+            {phase === 'code' ? (
+              <button
+                type="button"
+                className="settings-link-btn primary"
+                disabled={busy || !code.trim()}
+                onClick={() => void handleSubmitCode()}
+              >
+                {busy ? 'Validation…' : 'Valider le code'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="settings-link-btn primary"
+                disabled={busy || !email.trim() || !password.trim()}
+                onClick={() => void handleLogin()}
+              >
+                {busy ? 'Connexion…' : 'Se connecter'}
+              </button>
+            )}
+          </div>
+
+          <div className="settings-credentials-hint">
+            Le mot de passe sert <strong>uniquement</strong> à la connexion et
+            n'est <strong>jamais stocké</strong> ; seul un jeton chiffré
+            localement (DPAPI) est conservé. L'imprimante doit rester{' '}
+            <strong>connectée au cloud Bambu</strong> (le mode « LAN Only »
+            strict de l'imprimante coupe le cloud).
           </div>
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Affichage">
-        <SettingsToggleRow
-          icon="fa-solid fa-print"
-          iconColor="#00ae42"
-          label="Afficher la chip pendant un print"
-          description="Pastille de progression dans le notch rétracté pendant l'impression."
-          value={cfg.collapsed}
-          onChange={(next) => void patchModuleConfig('bambu', { collapsed: next })}
-        />
-        <SettingsToggleRow
-          icon="fa-solid fa-eye"
-          label="Garder la chip hors impression"
-          description="Affiche aussi la chip (état connexion) quand aucun print n'est en cours."
-          value={cfg.showWhenIdle}
-          onChange={(next) =>
-            void patchModuleConfig('bambu', { showWhenIdle: next })
-          }
-        />
-        <SettingsToggleRow
-          icon="fa-solid fa-table-cells-large"
-          label="Afficher la card dans le dashboard"
-          value={cfg.showCard}
-          onChange={(next) => void patchModuleConfig('bambu', { showCard: next })}
-        />
-      </SettingsSection>
+      {phase === 'devices' && (
+        <SettingsSection title="Choisis ton imprimante">
+          {devices.length === 0 ? (
+            <div className="settings-empty">
+              Aucune imprimante trouvée sur ce compte. Vérifie qu'elle est
+              allumée et <strong>connectée au cloud</strong> (pas en mode LAN
+              Only).
+            </div>
+          ) : (
+            devices.map((d) => (
+              <SettingsRow
+                key={d.serial}
+                icon="fa-solid fa-print"
+                iconColor={d.online ? '#00ae42' : '#94a3b8'}
+                label={d.name}
+                description={`${d.serial} · ${d.online ? 'en ligne' : 'hors ligne'}`}
+                right={
+                  <button
+                    type="button"
+                    className="settings-link-btn primary"
+                    disabled={busy}
+                    onClick={() => void handleSelectDevice(d)}
+                  >
+                    Choisir
+                  </button>
+                }
+              />
+            ))
+          )}
+        </SettingsSection>
+      )}
     </>
   );
 }

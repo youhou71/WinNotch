@@ -98,9 +98,14 @@ Réutilise l'authentification du module **Prochains rendez-vous** (mêmes tokens
 ### Imprimante 3D (Bambu)
 Suivi d'un print Bambu Lab **série P1** (P1P / P1S) en local, **lecture seule**. Chip imprimante dans le notch rétracté pendant une impression (`42 %` + ETA), qui vire au rouge si une erreur HMS est active. Card dans le dashboard : barre de progression + temps restant + couche X/Y + nom du fichier, températures buse / lit, bobines AMS (couleur + type + % restant, slot actif surligné), et erreurs HMS en rouge avec lien direct vers le wiki Bambu.
 
-Connexion **MQTT directe** au broker local de l'imprimante (`mqtts://<ip>:8883`, auth `bblp` + code d'accès LAN, certificat auto-signé). Prérequis : activer le **mode LAN** sur l'écran de l'imprimante, puis renseigner dans Settings → Imprimante 3D l'**IP**, le **numéro de série** (compose le topic MQTT) et le **code d'accès** (chiffré localement via DPAPI, jamais stocké en clair). La série P1 envoie des rapports en *deltas* (champs modifiés uniquement) : ils sont fusionnés dans un état accumulé, amorcé par un `pushall` à la connexion. Reconnexion automatique en cas de coupure. Chip non masquée en Ne pas Déranger (état d'impression — un print de plusieurs heures prime sur le DND).
+Deux **modes de connexion** (au choix dans Settings → Imprimante 3D) :
 
-> Caméra, contrôle (pause/stop) et série X1 hors périmètre de cette première version.
+- **Réseau local (LAN)** — MQTT direct au broker de l'imprimante (`mqtts://<ip>:8883`, auth `bblp` + code d'accès LAN, certificat auto-signé). Rapide, privé, sans dépendance Internet. Prérequis : **mode LAN** activé sur l'imprimante + **IP** + **numéro de série** + **code d'accès** (chiffré localement via DPAPI). PC et imprimante doivent être sur le **même réseau**.
+- **Cloud Bambu** — pour suivre ses impressions **à distance** (ex. depuis le PC du boulot, imprimante à la maison). Connexion au broker cloud Bambu (`us.mqtt.bambulab.com`, ou `cn.` pour la Chine) via le **compte Bambu** : login email + mot de passe avec **2FA par code email**, puis choix de l'imprimante dans la liste liée au compte. Le mot de passe n'est **jamais stocké** — seul un **jeton chiffré** (DPAPI) est conservé, rafraîchi automatiquement. Prérequis : l'imprimante doit rester **connectée au cloud** (le mode « LAN Only » strict la coupe du cloud).
+
+Dans les deux modes : la série P1 envoie des rapports en *deltas* (champs modifiés uniquement) fusionnés dans un état accumulé, amorcé par un `pushall` à la connexion ; reconnexion automatique ; chip non masquée en Ne pas Déranger (un print de plusieurs heures prime sur le DND).
+
+> Caméra, contrôle (pause/stop) et série X1 hors périmètre de cette version.
 
 ### Updater
 Mises à jour automatiques via GitHub Releases. Check au boot + toutes les heures. Notifications utilisateur à chaque étape (disponible → téléchargée → installée). Aucun téléchargement ni install sans confirmation explicite.
