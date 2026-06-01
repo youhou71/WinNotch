@@ -31,6 +31,7 @@ import { BrowserWindow, screen } from 'electron';
 import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
 import { IpcChannel } from '../../shared/types';
+import { isMouseOverNotch } from '../ipc/mouse';
 
 /**
  * Chemin vers l'icône de fenêtre.
@@ -139,8 +140,15 @@ export function createNotchWindow(): BrowserWindow {
   // demande au renderer de rétracter. Le renderer décide selon son
   // état actuel : si mode='collapsed', no-op ; si mode='expanded', il
   // bascule à 'collapsed'. Le main n'a pas accès à ce state.
+  //
+  // Exception : si le curseur survole le notch au moment du blur, c'est que
+  // l'utilisateur interagit avec lui — un clic sur un bouton/champ (ex. les
+  // formulaires de connexion multi-étapes) peut provoquer un blur transitoire
+  // de la fenêtre. On ne rétracte alors PAS : seul un vrai clic en dehors
+  // (curseur hors du notch) doit fermer.
   notchWindow.on('blur', () => {
     if (!notchWindow || notchWindow.isDestroyed()) return;
+    if (isMouseOverNotch()) return;
     notchWindow.webContents.send(IpcChannel.ShellRequestCollapse);
   });
 

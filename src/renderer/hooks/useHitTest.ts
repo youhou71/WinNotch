@@ -54,12 +54,25 @@ export function useHitTest(): void {
       }
     };
 
+    // Re-test périodique à la DERNIÈRE position connue du curseur.
+    //
+    // `mousemove` ne suffit pas : le contenu peut se décaler SOUS un curseur
+    // immobile (formulaire qui grandit, champ/toast qui apparaît, changement
+    // de page) → l'élément réellement sous le curseur change sans qu'aucun
+    // `mousemove` ne soit émis, donc la capture reste périmée et le clic
+    // « traverse » la fenêtre (cas aléatoire des formulaires de réglages).
+    // Un re-test léger (elementFromPoint ~µs) referme cette fenêtre de course.
+    const poll = window.setInterval(() => {
+      if (lastX >= 0) test();
+    }, 120);
+
     window.addEventListener('mousemove', onMove);
     document.addEventListener('mouseleave', onLeave);
 
     return () => {
       window.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseleave', onLeave);
+      window.clearInterval(poll);
       if (raf) cancelAnimationFrame(raf);
     };
   }, []);
