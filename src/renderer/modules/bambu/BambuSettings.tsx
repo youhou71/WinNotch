@@ -276,6 +276,9 @@ function BambuCloudSettings() {
   const [phase, setPhase] = useState<'idle' | 'code' | 'devices'>('idle');
   const [devices, setDevices] = useState<BambuCloudDevice[]>([]);
   const [busy, setBusy] = useState(false);
+  // Méthode de connexion : code email (par défaut — compatible Google/Apple)
+  // ou mot de passe (option secondaire, pour les comptes qui en ont un).
+  const [usePassword, setUsePassword] = useState(false);
 
   useEffect(() => {
     setEmail(cfg.email);
@@ -292,6 +295,25 @@ function BambuCloudSettings() {
       message,
     });
 
+  // Flux principal : envoi d'un code par email (sans mot de passe).
+  const handleRequestCode = async () => {
+    setBusy(true);
+    try {
+      const res = await window.notch.bambu.cloudRequestCode(email, region);
+      if (res.ok) {
+        setPhase('code');
+        notify(true, 'Code de connexion envoyé par email');
+      } else {
+        notify(false, res.error ?? 'Envoi du code impossible');
+      }
+    } catch (err) {
+      notify(false, err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Flux secondaire : connexion par mot de passe (comptes qui en ont un).
   const handleLogin = async () => {
     setBusy(true);
     try {
@@ -306,6 +328,8 @@ function BambuCloudSettings() {
       } else {
         notify(false, res.error ?? 'Connexion impossible');
       }
+    } catch (err) {
+      notify(false, err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -323,6 +347,8 @@ function BambuCloudSettings() {
       } else {
         notify(false, res.error ?? 'Code invalide');
       }
+    } catch (err) {
+      notify(false, err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -405,7 +431,8 @@ function BambuCloudSettings() {
             />
           </label>
 
-          {phase !== 'code' && (
+          {/* Flux secondaire : mot de passe (si l'utilisateur en a un). */}
+          {phase !== 'code' && usePassword && (
             <label className="settings-field">
               <span className="settings-field-label">Mot de passe</span>
               <input
@@ -422,7 +449,7 @@ function BambuCloudSettings() {
 
           {phase === 'code' && (
             <label className="settings-field">
-              <span className="settings-field-label">Code de vérification</span>
+              <span className="settings-field-label">Code de connexion</span>
               <input
                 type="text"
                 className="settings-field-input"
@@ -438,15 +465,25 @@ function BambuCloudSettings() {
 
           <div className="gl-settings-actions">
             {phase === 'code' ? (
-              <button
-                type="button"
-                className="settings-link-btn primary"
-                disabled={busy || !code.trim()}
-                onClick={() => void handleSubmitCode()}
-              >
-                {busy ? 'Validation…' : 'Valider le code'}
-              </button>
-            ) : (
+              <>
+                <button
+                  type="button"
+                  className="settings-link-btn"
+                  disabled={busy || !email.trim()}
+                  onClick={() => void handleRequestCode()}
+                >
+                  Renvoyer le code
+                </button>
+                <button
+                  type="button"
+                  className="settings-link-btn primary"
+                  disabled={busy || !code.trim()}
+                  onClick={() => void handleSubmitCode()}
+                >
+                  {busy ? 'Validation…' : 'Valider le code'}
+                </button>
+              </>
+            ) : usePassword ? (
               <button
                 type="button"
                 className="settings-link-btn primary"
@@ -455,13 +492,40 @@ function BambuCloudSettings() {
               >
                 {busy ? 'Connexion…' : 'Se connecter'}
               </button>
+            ) : (
+              <button
+                type="button"
+                className="settings-link-btn primary"
+                disabled={busy || !email.trim()}
+                onClick={() => void handleRequestCode()}
+              >
+                {busy ? 'Envoi…' : 'Recevoir un code par email'}
+              </button>
             )}
           </div>
 
+          {/* Bascule entre les deux méthodes (hors étape code). */}
+          {phase !== 'code' && (
+            <button
+              type="button"
+              className="settings-link-btn bambu-method-toggle"
+              disabled={busy}
+              onClick={() => setUsePassword((v) => !v)}
+            >
+              {usePassword
+                ? '← Recevoir un code par email à la place'
+                : "J'ai un mot de passe Bambu →"}
+            </button>
+          )}
+
           <div className="settings-credentials-hint">
-            Le mot de passe sert <strong>uniquement</strong> à la connexion et
-            n'est <strong>jamais stocké</strong> ; seul un jeton chiffré
-            localement (DPAPI) est conservé. L'imprimante doit rester{' '}
+            La <strong>connexion par code email</strong> marche pour la plupart
+            des comptes (pense à vérifier tes spams). <strong>Compte Google /
+            Apple</strong> : si aucun code n'arrive, ajoute un{' '}
+            <strong>mot de passe</strong> à ton compte sur bambulab.com, puis
+            utilise « J'ai un mot de passe Bambu ». Rien de sensible n'est
+            stocké (ni mot de passe, ni code) — seul un jeton chiffré localement
+            (DPAPI). L'imprimante doit rester{' '}
             <strong>connectée au cloud Bambu</strong> (le mode « LAN Only »
             strict de l'imprimante coupe le cloud).
           </div>

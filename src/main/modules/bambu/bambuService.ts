@@ -37,9 +37,11 @@ import { parseHmsArray } from './hms';
 import {
   cloudLogin,
   cloudSubmitCode,
+  fetchMqttUsername,
   listDevices,
   mqttHost,
   refreshCloudToken,
+  requestCode,
   type BambuCloudToken,
   type BambuRegion,
 } from './bambuCloud';
@@ -473,11 +475,26 @@ async function reconcileCloud(cfg: BambuCfg): Promise<void> {
     // En cas d'échec du refresh, on tente quand même avec le jeton courant :
     // s'il est réellement mort, l'erreur d'auth MQTT déclenchera la bascule.
   }
-  if (!auth.username) {
-    setState({ connection: 'error', error: 'Jeton cloud invalide — reconnecte-toi.' });
+  // Le jeton Bambu est opaque : le username MQTT (u_<uid>) vient de l'API.
+  // S'il n'est pas encore mémorisé (1er boot après login, ou ancien jeton),
+  // on le récupère puis on le persiste pour les prochains démarrages.
+  let username = auth.username;
+  if (!username) {
+    username = await fetchMqttUsername(auth.accessToken, cfg.region as BambuRegion);
+    if (username) {
+      writeCloudAuth({ ...auth, username });
+      auth = { ...auth, username };
+    }
+  }
+  if (!username) {
+    setState({
+      connection: 'error',
+      configured: true,
+      error: 'Identifiant cloud introuvable — reconnecte-toi dans les réglages.',
+    });
     return;
   }
-  connectTo(mqttHost(cfg.region as BambuRegion), cfg.serial, auth.username, auth.accessToken);
+  connectTo(mqttHost(cfg.region as BambuRegion), cfg.serial, username, auth.accessToken);
 }
 
 /**
@@ -528,6 +545,25 @@ function subscribeChanges(): void {
   store.onDidChange('modules', (newVal, oldVal) => {
     if (newVal?.bambu !== oldVal?.bambu) reconcile();
   });
+}
+
+/**
+ * Garantit que le module est activé, puis (re)connecte. Configurer une
+ * imprimante (LAN ou cloud) implique de vouloir l'afficher — sinon la card
+ * resterait masquée (`isTileVisible`) et le service ne se connecterait pas.
+ *  - si le module était désactivé → on l'active : `onDidChange('modules')`
+ *    déclenche reconcile().
+ *  - s'il était déjà activé → on reconcile directement (nouveaux paramètres).
+ */
+function ensureModuleEnabledAndReconcile(): void {
+  const modules = store.get('modules');
+  if (!modules.bambu) {
+    store.set('modules', { ...modules, bambu: true });
+  }
+  // reconcile() explicite (ne pas dépendre seulement de onDidChange) : lit le
+  // store frais (bambu activé) et connecte. Un éventuel double reconcile via
+  // onDidChange est inoffensif (teardown + reconnect).
+  reconcile();
 }
 
 /* ───────────── Handlers IPC ───────────── */
@@ -609,8 +645,8 @@ function handleSaveCredentials(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+  ensureModuleEnabledAndReconcile();
   broadcastSettings();
-  reconcile();
   return { ok: true };
 }
 
@@ -643,8 +679,12 @@ async function finalizeCloudLogin(
   email: string,
   region: BambuRegion,
 ): Promise<BambuCloudLoginResult> {
+  // Récupère le username MQTT (u_<uid>) via l'API et le stocke avec le jeton
+  // (le jeton Bambu étant opaque, on ne peut pas le déduire du jeton lui-même).
+  const username = await fetchMqttUsername(token.accessToken, region);
+  const withUser: BambuCloudToken = { ...token, username };
   try {
-    persistCloudLogin(token, email, region);
+    persistCloudLogin(withUser, email, region);
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -683,6 +723,25 @@ async function handleCloudLogin(
   return finalizeCloudLogin(res.token, trimmed, region);
 }
 
+async function handleCloudRequestCode(
+  email: string,
+  region: BambuRegion,
+): Promise<{ ok: boolean; error?: string }> {
+  const trimmed = email.trim();
+  if (!trimmed) return { ok: false, error: 'Email requis.' };
+  const res = await requestCode(trimmed, region);
+  if (res.ok) {
+    // Mémorise email + région pour l'étape de soumission du code + l'affichage.
+    const cfg = store.get('moduleConfig');
+    store.set('moduleConfig', {
+      ...cfg,
+      bambu: { ...cfg.bambu, email: trimmed, region },
+    });
+    broadcastSettings();
+  }
+  return res;
+}
+
 async function handleCloudSubmitCode(
   email: string,
   code: string,
@@ -713,8 +772,8 @@ function handleCloudSelectDevice(
       deviceName: name.trim(),
     },
   });
+  ensureModuleEnabledAndReconcile();
   broadcastSettings();
-  reconcile();
   return { ok: true };
 }
 
@@ -746,6 +805,11 @@ export function registerBambuIpc(): void {
     IpcChannel.BambuCloudLogin,
     (_e, email: string, password: string, region: BambuRegion) =>
       handleCloudLogin(email, password, region),
+  );
+  ipcMain.handle(
+    IpcChannel.BambuCloudRequestCode,
+    (_e, email: string, region: BambuRegion) =>
+      handleCloudRequestCode(email, region),
   );
   ipcMain.handle(
     IpcChannel.BambuCloudSubmitCode,

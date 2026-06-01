@@ -312,6 +312,12 @@ const api: NotchApi = {
         password,
         region,
       ) as Promise<BambuCloudLoginResult>,
+    cloudRequestCode: (email: string, region: 'global' | 'china') =>
+      ipcRenderer.invoke(
+        IpcChannel.BambuCloudRequestCode,
+        email,
+        region,
+      ) as Promise<{ ok: boolean; error?: string }>,
     cloudSubmitCode: (
       email: string,
       code: string,

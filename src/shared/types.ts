@@ -1929,8 +1929,10 @@ export const IpcChannel = {
   BambuDisconnect: 'bambu:disconnect',
   /** Renderer → main (invoke) : bascule le mode lan/cloud. */
   BambuSetMode: 'bambu:setMode',
-  /** Renderer → main (invoke) : login compte Bambu (cloud). */
+  /** Renderer → main (invoke) : login compte Bambu (cloud, mot de passe). */
   BambuCloudLogin: 'bambu:cloudLogin',
+  /** Renderer → main (invoke) : demande un code de connexion par email (SSO). */
+  BambuCloudRequestCode: 'bambu:cloudRequestCode',
   /** Renderer → main (invoke) : soumet le code de vérification email (2FA). */
   BambuCloudSubmitCode: 'bambu:cloudSubmitCode',
   /** Renderer → main (invoke) : sélectionne l'imprimante cloud (serial+nom). */
@@ -2169,6 +2171,14 @@ export interface NotchApi {
       password: string,
       region: 'global' | 'china',
     ) => Promise<BambuCloudLoginResult>;
+    /**
+     * Demande l'envoi d'un code de connexion par email (login sans mot de
+     * passe — compatible comptes Google / Apple).
+     */
+    cloudRequestCode: (
+      email: string,
+      region: 'global' | 'china',
+    ) => Promise<{ ok: boolean; error?: string }>;
     /** Soumet le code de vérification email reçu (étape 2 de la 2FA). */
     cloudSubmitCode: (
       email: string,

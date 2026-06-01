@@ -41,6 +41,34 @@ export function mqttHost(region: BambuRegion): string {
   return MQTT_HOST[region] ?? MQTT_HOST.global;
 }
 
+/** Timeout dur pour les appels HTTP cloud (sinon un réseau bloqué fait pendre). */
+const HTTP_TIMEOUT_MS = 15_000;
+
+/**
+ * `fetch` avec timeout (AbortController). Lève une erreur explicite si le
+ * serveur ne répond pas dans le délai — évite que l'UI reste bloquée sur
+ * « Connexion… » sans rien afficher.
+ */
+async function timedFetch(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), HTTP_TIMEOUT_MS);
+  try {
+    return await globalThis.fetch(url, { ...init, signal: ac.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(
+        `Bambu ne répond pas (délai dépassé). Réseau/proxy d'entreprise ?`,
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Bundle de jeton persisté (chiffré) + utilisé pour la connexion MQTT. */
 export interface BambuCloudToken {
   accessToken: string;
@@ -51,16 +79,33 @@ export interface BambuCloudToken {
   username: string;
 }
 
-/** Décode le payload d'un JWT (base64url) sans vérifier la signature. */
-function parseJwt(token: string): { username: string; exp: number } {
+/**
+ * Récupère le username MQTT (`u_<uid>`) via l'API compte.
+ *
+ * Le jeton d'accès Bambu est **opaque** (pas un JWT) : on ne peut donc pas en
+ * extraire l'identifiant. On interroge `GET /v1/design-user-service/my/preference`
+ * (Bearer) qui renvoie `{ uid }`. Le username MQTT est `u_<uid>`. Vide si échec.
+ */
+export async function fetchMqttUsername(
+  accessToken: string,
+  region: BambuRegion,
+): Promise<string> {
   try {
-    const part = token.split('.')[1] ?? '';
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-    const json = Buffer.from(b64, 'base64').toString('utf8');
-    const obj = JSON.parse(json) as { username?: string; exp?: number };
-    return { username: String(obj.username ?? ''), exp: Number(obj.exp ?? 0) };
-  } catch {
-    return { username: '', exp: 0 };
+    const res = await timedFetch(
+      `${apiBase(region)}/v1/design-user-service/my/preference`,
+      { headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!res.ok) {
+      console.warn(`[bambu] preference HTTP ${res.status}`);
+      return '';
+    }
+    const data = (await res.json().catch(() => ({}))) as { uid?: number | string };
+    const uid = data.uid;
+    if (uid === undefined || uid === null || String(uid) === '') return '';
+    return `u_${uid}`;
+  } catch (err) {
+    console.warn('[bambu] fetchMqttUsername échec:', err instanceof Error ? err.message : err);
+    return '';
   }
 }
 
@@ -70,17 +115,16 @@ function toToken(data: {
   expiresIn?: number;
 }): BambuCloudToken | null {
   if (!data.accessToken) return null;
-  const { username, exp } = parseJwt(data.accessToken);
-  const expiresAt = exp
-    ? exp * 1000
-    : data.expiresIn
-      ? Date.now() + data.expiresIn * 1000
-      : Date.now() + 23 * 3600 * 1000;
+  // Jeton opaque : l'expiration vient du champ `expiresIn` de la réponse login.
+  const expiresAt = data.expiresIn
+    ? Date.now() + data.expiresIn * 1000
+    : Date.now() + 23 * 3600 * 1000;
   return {
     accessToken: data.accessToken,
     refreshToken: data.refreshToken ?? '',
     expiresAt,
-    username,
+    // `username` (u_<uid>) rempli séparément via fetchMqttUsername (API).
+    username: '',
   };
 }
 
@@ -112,7 +156,7 @@ export async function cloudLogin(
     // scanner de secrets) — la valeur reste une variable, jamais en dur.
     const body: Record<string, unknown> = { account: email, apiError: '' };
     body['pass' + 'word'] = password;
-    const res = await fetch(`${apiBase(region)}/v1/user-service/user/login`, {
+    const res = await timedFetch(`${apiBase(region)}/v1/user-service/user/login`, {
       method: 'POST',
       headers: HEADERS,
       body: JSON.stringify(body),
@@ -122,7 +166,7 @@ export async function cloudLogin(
     if (token) return { status: 'ok', token };
     if (data.loginType === 'verifyCode') {
       // Déclenche l'envoi du code par mail.
-      await fetch(`${apiBase(region)}/v1/user-service/user/sendemail/code`, {
+      await timedFetch(`${apiBase(region)}/v1/user-service/user/sendemail/code`, {
         method: 'POST',
         headers: HEADERS,
         body: JSON.stringify({ email, type: 'codeLogin' }),
@@ -148,6 +192,37 @@ export async function cloudLogin(
   }
 }
 
+/**
+ * Demande l'envoi d'un code de connexion par email (login passwordless).
+ *
+ * Fonctionne pour **tous** les comptes — y compris ceux créés via Google /
+ * Apple (SSO) qui n'ont pas de mot de passe Bambu. C'est le chemin recommandé.
+ * Le code est ensuite soumis via `cloudSubmitCode`.
+ */
+export async function requestCode(
+  email: string,
+  region: BambuRegion,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await timedFetch(
+      `${apiBase(region)}/v1/user-service/user/sendemail/code`,
+      {
+        method: 'POST',
+        headers: HEADERS,
+        body: JSON.stringify({ email, type: 'codeLogin' }),
+      },
+    );
+    if (res.ok) return { ok: true };
+    const data = (await res.json().catch(() => ({}))) as LoginResponse;
+    return {
+      ok: false,
+      error: data.error ?? data.message ?? `Envoi du code impossible (HTTP ${res.status}).`,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /** Étape 2 : soumission du code de vérification email. */
 export async function cloudSubmitCode(
   email: string,
@@ -155,7 +230,7 @@ export async function cloudSubmitCode(
   region: BambuRegion,
 ): Promise<CloudAuthResult> {
   try {
-    const res = await fetch(`${apiBase(region)}/v1/user-service/user/login`, {
+    const res = await timedFetch(`${apiBase(region)}/v1/user-service/user/login`, {
       method: 'POST',
       headers: HEADERS,
       body: JSON.stringify({ account: email, code }),
@@ -179,7 +254,7 @@ export async function refreshCloudToken(
 ): Promise<BambuCloudToken | null> {
   if (!refreshToken) return null;
   try {
-    const res = await fetch(
+    const res = await timedFetch(
       `${apiBase(region)}/v1/user-service/user/refreshtoken`,
       {
         method: 'POST',
@@ -200,7 +275,7 @@ export async function listDevices(
   region: BambuRegion,
 ): Promise<{ devices: BambuCloudDevice[] } | { error: string }> {
   try {
-    const res = await fetch(
+    const res = await timedFetch(
       `${apiBase(region)}/v1/iot-service/api/user/bind`,
       { headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` } },
     );
