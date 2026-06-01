@@ -1059,6 +1059,7 @@ export type VpnClient =
   | 'nordvpn'
   | 'openvpn'
   | 'wireguard'
+  | 'fortinet'
   | 'windows-native'
   | 'unknown';
 

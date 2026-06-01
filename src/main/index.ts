@@ -69,6 +69,7 @@ import {
   startFullscreenDetector,
   stopFullscreenDetector,
 } from './modules/shell/fullscreenDetector';
+import { stopPersistentPowershell } from './modules/shell/persistentPowershell';
 import { startAltPeekListener, stopAltPeekListener } from './shortcuts/altPeek';
 import {
   registerGlobalShortcuts,
@@ -203,6 +204,7 @@ app.on('window-all-closed', () => {
   stopTasks();
   stopUpdater();
   stopFullscreenDetector();
+  stopPersistentPowershell();
   unregisterGlobalShortcuts();
   // Convention Electron : sur macOS l'app reste vivante sans fenêtre,
   // sur Windows/Linux on quitte.
@@ -228,5 +230,6 @@ app.on('before-quit', () => {
   stopTasks();
   stopUpdater();
   stopFullscreenDetector();
+  stopPersistentPowershell();
   unregisterGlobalShortcuts();
 });

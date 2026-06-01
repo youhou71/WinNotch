@@ -16,11 +16,13 @@
  * Timeout dur de 5 s : si PowerShell rame ou pend, on tue le child et on
  * remonte une erreur dans `VpnState.lastError`.
  */
-import { spawn } from 'child_process';
 import type { VpnClient, VpnConnection } from '../../../shared/types';
-import { powershellExe } from '../shell/powershellPath';
+import { runPersistentPowershell } from '../shell/persistentPowershell';
 
-const POWERSHELL_TIMEOUT_MS = 8000;
+// Généreux : le tout premier appel paie l'autoload des modules CDXML
+// (NetAdapter, VpnClient) + l'init CIM dans le process persistant (~plusieurs
+// secondes sur une machine corporate). Les appels suivants sont quasi instantanés.
+const POWERSHELL_TIMEOUT_MS = 20000;
 
 interface AdapterInfo {
   name: string;
@@ -64,6 +66,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $vpnDescriptorPatterns = @(
   'TAP-', 'Wintun', 'WireGuard', 'OpenVPN', 'ProtonVPN', 'Proton VPN',
   'NordLynx', 'NordVPN', 'Mullvad', 'ExpressVPN',
+  'Fortinet', 'FortiClient', 'Forti SSL', 'Cisco AnyConnect', 'GlobalProtect',
   'WAN Miniport (PPTP)', 'WAN Miniport (L2TP)',
   'WAN Miniport (SSTP)', 'WAN Miniport (IKEv2)', 'WAN Miniport (IP)'
 )
@@ -143,86 +146,38 @@ try {
  * null si PowerShell ne répond pas ou si le JSON est invalide — l'appelant
  * traduit ça en `lastError`.
  */
-export function runDetectScript(): Promise<{ snapshot: VpnRawSnapshot | null; error: string | null }> {
-  return new Promise((resolve) => {
-    let resolved = false;
-    let stdout = '';
-    let stderr = '';
-
-    // -EncodedCommand attend une string base64 UTF-16LE — c'est la façon
-    // recommandée par Microsoft pour passer un script complexe sans risque
-    // d'échappement.
-    const encoded = Buffer.from(DETECT_SCRIPT, 'utf16le').toString('base64');
-    const child = spawn(
-      powershellExe(),
-      [
-        '-NoProfile',
-        '-NoLogo',
-        '-NonInteractive',
-        '-ExecutionPolicy', 'Bypass',
-        '-EncodedCommand', encoded,
-      ],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true,
-      },
-    );
-
-    const finish = (result: { snapshot: VpnRawSnapshot | null; error: string | null }): void => {
-      if (resolved) return;
-      resolved = true;
-      try { child.kill(); } catch {}
-      resolve(result);
+export async function runDetectScript(): Promise<{ snapshot: VpnRawSnapshot | null; error: string | null }> {
+  // Exécuté dans le powershell.exe persistant partagé (cf. persistentPowershell)
+  // : pas de spawn par tick, les modules CDXML restent chauds entre les appels.
+  const { stdout, error } = await runPersistentPowershell(
+    DETECT_SCRIPT,
+    POWERSHELL_TIMEOUT_MS,
+  );
+  if (error) {
+    console.warn('[vpn] détection échouée:', error);
+    return { snapshot: null, error: `Détection VPN : ${error}` };
+  }
+  const trimmed = stdout.trim();
+  if (!trimmed) {
+    // Sortie vide quand toutes les listes sont vides — aucun VPN détecté.
+    return {
+      snapshot: { adapters: [], processes: [], windowsVpn: [] },
+      error: null,
     };
-
-    const timeout = setTimeout(() => {
-      finish({ snapshot: null, error: `Détection VPN : timeout PowerShell (${POWERSHELL_TIMEOUT_MS} ms)` });
-    }, POWERSHELL_TIMEOUT_MS);
-
-    child.on('error', (err) => {
-      clearTimeout(timeout);
-      finish({ snapshot: null, error: `Détection VPN : ${err.message}` });
-    });
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timeout);
-      if (code !== 0) {
-        const msg = stderr.trim() || `PowerShell exit ${code}`;
-        // Log brut uniquement en cas d'erreur — utile pour diagnostiquer
-        // un échec sans polluer la console en marche nominale.
-        console.warn('[vpn] PS error', { code, stderr: stderr.slice(0, 500) });
-        finish({ snapshot: null, error: msg });
-        return;
-      }
-      const trimmed = stdout.trim();
-      if (!trimmed) {
-        // PS renvoie une chaîne vide quand toutes les listes sont vides — aucun VPN détecté.
-        finish({ snapshot: { adapters: [], processes: [], windowsVpn: [] }, error: null });
-        return;
-      }
-      try {
-        const parsed = JSON.parse(trimmed) as Partial<VpnRawSnapshot>;
-        const snapshot: VpnRawSnapshot = {
-          adapters: Array.isArray(parsed.adapters) ? parsed.adapters : [],
-          processes: Array.isArray(parsed.processes) ? parsed.processes : [],
-          windowsVpn: Array.isArray(parsed.windowsVpn) ? parsed.windowsVpn : [],
-        };
-        finish({ snapshot, error: null });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn('[vpn] PS JSON parse failed', { stdout: stdout.slice(0, 500) });
-        finish({ snapshot: null, error: `Détection VPN : JSON invalide (${msg})` });
-      }
-    });
-
-  });
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as Partial<VpnRawSnapshot>;
+    const snapshot: VpnRawSnapshot = {
+      adapters: Array.isArray(parsed.adapters) ? parsed.adapters : [],
+      processes: Array.isArray(parsed.processes) ? parsed.processes : [],
+      windowsVpn: Array.isArray(parsed.windowsVpn) ? parsed.windowsVpn : [],
+    };
+    return { snapshot, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[vpn] PS JSON parse failed', { stdout: stdout.slice(0, 500) });
+    return { snapshot: null, error: `Détection VPN : JSON invalide (${msg})` };
+  }
 }
 
 /**
@@ -246,6 +201,14 @@ function classifyAdapter(adapter: AdapterInfo, processes: ProcessInfo[]): VpnCli
     name.includes('nordlynx')
   ) {
     return 'nordvpn';
+  }
+  if (
+    desc.includes('fortinet') ||
+    desc.includes('forticlient') ||
+    desc.includes('forti ssl') ||
+    name.includes('fortinet')
+  ) {
+    return 'fortinet';
   }
   if (desc.includes('wireguard') || name.startsWith('wg')) return 'wireguard';
   if (desc.includes('openvpn')) return 'openvpn';

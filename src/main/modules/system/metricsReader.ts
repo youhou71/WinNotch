@@ -16,11 +16,13 @@
  * comme dans `vpnDetector.ts` — c'est la façon recommandée par Microsoft
  * pour éviter les pièges d'échappement de quotes dans un script multi-ligne.
  */
-import { spawn } from 'child_process';
 import * as os from 'os';
-import { powershellExe } from '../shell/powershellPath';
+import { runPersistentPowershell } from '../shell/persistentPowershell';
 
-const POWERSHELL_TIMEOUT_MS = 4000;
+// Généreux : le premier appel (dans le process persistant partagé) paie
+// l'autoload des modules + l'init CIM ; les suivants sont quasi instantanés.
+// Sert aussi de filet pour un cmdlet réellement bloqué.
+const POWERSHELL_TIMEOUT_MS = 20000;
 
 /**
  * Filtres d'exclusion par défaut pour les interfaces réseau. Match
@@ -144,104 +146,49 @@ if ($stats) {
  * compteurs cumulés. Retourne `null` en cas d'erreur PowerShell (le caller
  * remonte ça dans `SystemState.lastError`).
  */
-export function readNetSnapshot(): Promise<{
+export async function readNetSnapshot(): Promise<{
   snapshot: NetSnapshot | null;
   error: string | null;
 }> {
-  return new Promise((resolve) => {
-    let resolved = false;
-    let stdout = '';
-    let stderr = '';
-
-    const encoded = Buffer.from(NET_SCRIPT, 'utf16le').toString('base64');
-    const child = spawn(
-      powershellExe(),
-      [
-        '-NoProfile',
-        '-NoLogo',
-        '-NonInteractive',
-        '-ExecutionPolicy', 'Bypass',
-        '-EncodedCommand', encoded,
-      ],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true,
-      },
-    );
-
-    const finish = (result: {
-      snapshot: NetSnapshot | null;
-      error: string | null;
-    }): void => {
-      if (resolved) return;
-      resolved = true;
-      try { child.kill(); } catch {
-        // Le child est peut-être déjà mort (close handler), ignore.
-      }
-      resolve(result);
-    };
-
-    const timeout = setTimeout(() => {
-      finish({
-        snapshot: null,
-        error: `Lecture réseau : timeout PowerShell (${POWERSHELL_TIMEOUT_MS} ms)`,
+  // Exécuté dans le powershell.exe persistant partagé (cf. persistentPowershell)
+  // : pas de spawn par tick (le module Système poll jusqu'à 1 Hz), les modules
+  // CDXML et la session CIM restent chauds entre les appels.
+  const { stdout, error } = await runPersistentPowershell(
+    NET_SCRIPT,
+    POWERSHELL_TIMEOUT_MS,
+  );
+  if (error) {
+    return { snapshot: null, error: `Lecture réseau : ${error}` };
+  }
+  try {
+    // ConvertTo-Json renvoie `null` (ou une chaîne vide) si la collection est
+    // vide — on tolère.
+    const text = stdout.trim();
+    if (!text || text === 'null') {
+      return { snapshot: { at: Date.now(), adapters: [] }, error: null };
+    }
+    const parsed = JSON.parse(text) as { adapters?: unknown };
+    const adapters: NetAdapterSample[] = [];
+    const list = Array.isArray(parsed?.adapters)
+      ? parsed.adapters
+      : parsed?.adapters
+        ? [parsed.adapters]
+        : [];
+    for (const row of list) {
+      if (!row || typeof row !== 'object') continue;
+      const r = row as Record<string, unknown>;
+      adapters.push({
+        name: String(r.name ?? ''),
+        description: String(r.description ?? ''),
+        bytesReceived: Number(r.bytesReceived ?? 0),
+        bytesSent: Number(r.bytesSent ?? 0),
       });
-    }, POWERSHELL_TIMEOUT_MS);
-
-    child.on('error', (err) => {
-      clearTimeout(timeout);
-      finish({ snapshot: null, error: `Lecture réseau : ${err.message}` });
-    });
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timeout);
-      if (code !== 0) {
-        const msg = stderr.trim() || `PowerShell exit ${code}`;
-        finish({ snapshot: null, error: msg });
-        return;
-      }
-      try {
-        // ConvertTo-Json renvoie `null` si la collection est vide — on
-        // tolère.
-        const text = stdout.trim();
-        if (!text || text === 'null') {
-          finish({
-            snapshot: { at: Date.now(), adapters: [] },
-            error: null,
-          });
-          return;
-        }
-        const parsed = JSON.parse(text) as { adapters?: unknown };
-        const adapters: NetAdapterSample[] = [];
-        const list = Array.isArray(parsed?.adapters)
-          ? parsed.adapters
-          : parsed?.adapters
-          ? [parsed.adapters]
-          : [];
-        for (const row of list) {
-          if (!row || typeof row !== 'object') continue;
-          const r = row as Record<string, unknown>;
-          adapters.push({
-            name: String(r.name ?? ''),
-            description: String(r.description ?? ''),
-            bytesReceived: Number(r.bytesReceived ?? 0),
-            bytesSent: Number(r.bytesSent ?? 0),
-          });
-        }
-        finish({ snapshot: { at: Date.now(), adapters }, error: null });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        finish({ snapshot: null, error: `JSON parse: ${msg}` });
-      }
-    });
-  });
+    }
+    return { snapshot: { at: Date.now(), adapters }, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { snapshot: null, error: `JSON parse: ${msg}` };
+  }
 }
 
 /**
