@@ -149,6 +149,13 @@ export interface BambuState {
   error: string | null;
   /** `true` dès qu'un host est configuré (sinon : prompt d'onboarding). */
   configured: boolean;
+  /**
+   * `true` si l'imprimante elle-même est joignable (des rapports arrivent).
+   * En mode cloud, `connection === 'connected'` ne signifie que « broker
+   * cloud joignable » : l'imprimante peut être éteinte/en veille. Ce flag
+   * distingue les deux (passe à `false` si aucun rapport n'arrive).
+   */
+  printerOnline: boolean;
   /** Nom convivial de l'imprimante (saisi par l'utilisateur). Vide sinon. */
   printerName: string;
   /** État du gcode courant. */

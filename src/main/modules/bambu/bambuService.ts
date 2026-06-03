@@ -57,6 +57,7 @@ const INITIAL_STATE: BambuState = {
   connection: 'idle',
   error: null,
   configured: false,
+  printerOnline: false,
   printerName: '',
   gcodeState: 'Unknown',
   isPrinting: false,
@@ -81,6 +82,40 @@ let currentState: BambuState = { ...INITIAL_STATE };
 let printReport: Record<string, unknown> = {};
 
 let client: MqttClient | null = null;
+
+/**
+ * Watchdog de présence imprimante. `connection === 'connected'` ne garantit
+ * que le broker (surtout en cloud) ; l'imprimante est considérée EN LIGNE
+ * seulement tant que des rapports arrivent. `staleTimer` la repasse hors
+ * ligne après `REPORT_STALE_MS` sans rapport ; `pushTimer` republie `pushall`
+ * périodiquement pour solliciter un rapport (un appareil éteint ne répond pas).
+ */
+const REPORT_STALE_MS = 35_000;
+const PUSHALL_INTERVAL_MS = 20_000;
+let staleTimer: NodeJS.Timeout | null = null;
+let pushTimer: NodeJS.Timeout | null = null;
+
+function clearTimers(): void {
+  if (staleTimer) {
+    clearTimeout(staleTimer);
+    staleTimer = null;
+  }
+  if (pushTimer) {
+    clearInterval(pushTimer);
+    pushTimer = null;
+  }
+}
+
+/** Un rapport vient d'arriver : imprimante en ligne + (ré)armement du watchdog. */
+function markPrinterOnline(): void {
+  if (staleTimer) clearTimeout(staleTimer);
+  staleTimer = setTimeout(() => {
+    staleTimer = null;
+    // Plus de rapport depuis REPORT_STALE_MS → imprimante éteinte / en veille.
+    setState({ printerOnline: false });
+  }, REPORT_STALE_MS);
+  if (!currentState.printerOnline) setState({ printerOnline: true });
+}
 
 function broadcast(): void {
   const win = getNotchWindow();
@@ -298,6 +333,8 @@ function handleMessage(payload: Buffer): void {
   if (!print || typeof print !== 'object') return;
   deepMerge(printReport, print as Record<string, unknown>);
   deriveState();
+  // Un rapport `print` = l'imprimante communique → en ligne (+ réarme le watchdog).
+  markPrinterOnline();
 }
 
 /* ───────────── Connexion MQTT ───────────── */
@@ -342,6 +379,7 @@ function isAuthError(err: Error): boolean {
 }
 
 function teardown(): void {
+  clearTimers();
   if (client) {
     client.removeAllListeners();
     client.end(true);
@@ -365,6 +403,9 @@ function connectTo(
     connection: 'connecting',
     configured: true,
     error: null,
+    // Tant qu'aucun rapport n'est reçu, l'imprimante est considérée hors ligne
+    // (broker joignable ≠ imprimante allumée, surtout en cloud).
+    printerOnline: false,
     printerName: (cfg.mode === 'cloud' ? cfg.deviceName : cfg.printerName) || '',
   });
 
@@ -382,6 +423,16 @@ function connectTo(
       // Amorce l'état complet : sans pushall, le P1 n'enverrait que des
       // deltas et on n'aurait pas le tableau initial (températures, AMS…).
       c.publish(requestTopic, PUSHALL);
+      // Republie pushall périodiquement : sollicite un rapport pour alimenter
+      // le watchdog de présence (une imprimante éteinte ne répondra jamais).
+      if (pushTimer) clearInterval(pushTimer);
+      pushTimer = setInterval(() => {
+        try {
+          c.publish(requestTopic, PUSHALL);
+        } catch {
+          /* client fermé entre-temps — ignoré */
+        }
+      }, PUSHALL_INTERVAL_MS);
     });
   });
 

@@ -26,6 +26,7 @@ const EMPTY_STATE: BambuState = {
   connection: 'idle',
   error: null,
   configured: false,
+  printerOnline: false,
   printerName: '',
   gcodeState: 'Unknown',
   isPrinting: false,
