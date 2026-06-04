@@ -19,6 +19,7 @@ import {
   type Density,
   type ModuleConfig,
   type ModuleId,
+  type SetAutoStartResult,
   type Settings,
 } from '../../../shared/types';
 
@@ -31,7 +32,7 @@ interface SettingsContextValue {
     id: K,
     patch: Partial<ModuleConfig[K]>,
   ) => Promise<Settings>;
-  setAutoStart: (enabled: boolean) => Promise<Settings>;
+  setAutoStart: (enabled: boolean) => Promise<SetAutoStartResult>;
   setDashboardLayout: (layout: DashTile[]) => Promise<Settings>;
 }
 
@@ -90,9 +91,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const setAutoStart = useCallback(async (enabled: boolean) => {
     setSettings((s) => ({ ...s, autoStart: enabled }));
-    const next = await window.notch.settings.setAutoStart(enabled);
-    setSettings(next);
-    return next;
+    const res = await window.notch.settings.setAutoStart(enabled);
+    // `res.settings` reflète l'état réel : si l'opération système a échoué,
+    // `autoStart` n'a pas été persisté côté main → l'update optimiste est
+    // annulé (le toggle revient à sa position précédente).
+    setSettings(res.settings);
+    return res;
   }, []);
 
   const setDashboardLayout = useCallback(async (layout: DashTile[]) => {
