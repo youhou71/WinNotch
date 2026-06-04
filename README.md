@@ -254,6 +254,78 @@ L'installer généré (`dist/WinNotch-Setup-x.y.z.exe`) est un wizard NSIS class
 
 ---
 
+## Démarrage automatique avec Windows
+
+WinNotch peut se lancer à l'ouverture de session. Le réglage normal se fait dans **Notch → Paramètres → Système → « Démarrer avec Windows »**, qui crée une tâche planifiée `WinNotch` dans le Planificateur de tâches.
+
+### Si un antivirus bloque l'activation
+
+Certains antivirus / EDR d'entreprise empêchent l'application de créer la tâche (l'activation échoue alors avec un toast d'erreur, ex. `spawn EPERM`). Tu peux créer la tâche **manuellement** — deux méthodes au choix.
+
+**A. PowerShell** — ouvre un PowerShell standard (pas besoin d'admin) et colle ce bloc :
+
+```powershell
+$exe  = "$env:LOCALAPPDATA\Programs\WinNotch\WinNotch.exe"
+$user = "$env:USERDOMAIN\$env:USERNAME"
+$xml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Démarre WinNotch à l'ouverture de session.</Description>
+    <URI>\WinNotch</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger><Enabled>true</Enabled><UserId>$user</UserId></LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>$user</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <Enabled>true</Enabled>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+  </Settings>
+  <Actions Context="Author">
+    <Exec><Command>"$exe"</Command></Exec>
+  </Actions>
+</Task>
+"@
+$f = Join-Path $env:TEMP 'winnotch-task.xml'
+[System.IO.File]::WriteAllText($f, $xml, [System.Text.Encoding]::Unicode)
+schtasks /Create /TN "WinNotch" /XML $f /F
+Remove-Item $f
+```
+
+> Le fichier XML **doit** être encodé en UTF-16 (`[System.Text.Encoding]::Unicode`), sinon `schtasks /XML` le rejette.
+
+**B. Interface graphique** (`taskschd.msc`) :
+
+1. `Win + R` → `taskschd.msc`.
+2. **Créer une tâche…** (pas « tâche de base »).
+3. **Général** : nom `WinNotch` ; laisser « Exécuter seulement si l'utilisateur est connecté ».
+4. **Déclencheurs** → Nouveau → « À l'ouverture de session ».
+5. **Actions** → Nouveau → « Démarrer un programme » → `%LOCALAPPDATA%\Programs\WinNotch\WinNotch.exe`.
+6. **Conditions** → décoche « Ne démarrer la tâche que si l'ordinateur est sur secteur » (sinon pas de démarrage sur batterie).
+7. **Paramètres** → décoche « Arrêter la tâche si elle s'exécute plus de… ».
+
+**Vérifier / supprimer** :
+
+```powershell
+schtasks /Query  /TN WinNotch /V /FO LIST
+schtasks /Delete /TN WinNotch /F
+```
+
+Après une création manuelle, ne re-bascule pas le toggle dans l'app (il retenterait l'opération que l'antivirus bloque) — la tâche existante est détectée comme cohérente au prochain démarrage.
+
+---
+
 ## Stack technique
 
 - **Electron 41** (Chromium M146, Node 22.x) — supporte les courbes spring CSS natives.
