@@ -121,6 +121,12 @@ nsis:
   # l'utilisateur veut pouvoir installer dans un emplacement choisi
   # (et désinstaller proprement via Programmes & fonctionnalités).
   oneClick: false
+  # Nom affiché dans Panneau de config > Programmes & fonctionnalités
+  # (et "Applications installées" sous Win11). Par défaut electron-builder
+  # met "${productName} ${version}" → "WinNotch 1.3.0". On force le nom seul
+  # pour stabiliser l'entrée : utile face aux antivirus qui whitelistent par
+  # nom exact (sinon il faut re-whitelister à chaque montée de version).
+  uninstallDisplayName: ${productName}
   perMachine: false              # install per-user (pas besoin d'UAC)
   allowToChangeInstallationDirectory: true
   allowElevation: false          # pas d'élévation forcée
