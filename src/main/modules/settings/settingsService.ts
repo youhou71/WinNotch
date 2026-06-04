@@ -29,6 +29,7 @@ import {
   type Density,
   type ModuleConfig,
   type ModuleId,
+  type SetAutoStartResult,
   type Settings,
 } from '../../../shared/types';
 import {
@@ -405,9 +406,7 @@ function patchModuleConfig<K extends ModuleId>(
  *
  * Le détail d'implémentation est dans `autostartTask.ts`.
  */
-async function setAutoStart(enabled: boolean): Promise<Settings> {
-  store.set('autoStart', enabled);
-
+async function setAutoStart(enabled: boolean): Promise<SetAutoStartResult> {
   // 1. Cleanup défensif de la Run key v0.x (idempotent).
   try {
     app.setLoginItemSettings({ openAtLogin: false });
@@ -415,24 +414,35 @@ async function setAutoStart(enabled: boolean): Promise<Settings> {
     console.warn('[settings] cleanup legacy Run key échec:', err);
   }
 
-  // 2. Apply via Task Scheduler. Skip en dev (cf. docstring).
+  // 2. Applique via le Task Scheduler. En dev (`!isPackaged`) on saute
+  //    l'opération système (la task pointerait vers electron.exe) : on
+  //    considère l'opération réussie pour garder le toggle utilisable.
+  let ok = true;
+  let error: string | undefined;
   if (app.isPackaged) {
-    if (enabled) {
-      const result = await createAutostartTask(app.getPath('exe'));
-      if (!result.ok) {
-        console.warn('[settings] createAutostartTask échec:', result.error);
-      }
-    } else {
-      const result = await removeAutostartTask();
-      if (!result.ok) {
-        console.warn('[settings] removeAutostartTask échec:', result.error);
-      }
+    const result = enabled
+      ? await createAutostartTask(app.getPath('exe'))
+      : await removeAutostartTask();
+    ok = result.ok;
+    error = result.error;
+    if (!ok) {
+      console.warn(
+        `[settings] ${enabled ? 'create' : 'remove'}AutostartTask échec:`,
+        error,
+      );
     }
+  }
+
+  // 3. Ne persiste l'état QUE si l'opération système a réussi. Sinon on laisse
+  //    `autoStart` inchangé : on évite le « true fantôme » (store activé sans
+  //    tâche réelle) qui rendait l'échec invisible côté UI.
+  if (ok) {
+    store.set('autoStart', enabled);
   }
 
   const state = getAll();
   broadcast(state);
-  return state;
+  return { settings: state, ok, error };
 }
 
 /**

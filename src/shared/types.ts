@@ -610,9 +610,8 @@ export interface Settings {
   /** Configurations détaillées par module. */
   moduleConfig: ModuleConfig;
   /**
-   * Si `true`, WinNotch démarre automatiquement avec Windows
-   * (entrée dans `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-   * gérée par `app.setLoginItemSettings`).
+   * Si `true`, WinNotch démarre automatiquement avec Windows, via une tâche
+   * planifiée `WinNotch` (Task Scheduler, créée par `schtasks.exe`).
    */
   autoStart: boolean;
   /**
@@ -624,6 +623,20 @@ export interface Settings {
    * conservent leur slot dans le layout pour la réactivation.
    */
   dashboardLayout: DashTile[];
+}
+
+/**
+ * Résultat d'un appel `settings.setAutoStart`. Porte l'état persisté à jour
+ * (`settings`) ET le statut de l'opération système (création/suppression de la
+ * tâche planifiée) pour permettre au renderer d'afficher un toast de réussite
+ * ou d'échec. `ok: false` n'est jamais une exception — le détail est dans
+ * `error`.
+ */
+export interface SetAutoStartResult {
+  settings: Settings;
+  ok: boolean;
+  /** Message d'erreur si l'opération système a échoué (sinon undefined). */
+  error?: string;
 }
 
 /** Snapshot par défaut quand le store est vide. */
@@ -2353,11 +2366,12 @@ export interface NotchApi {
       patch: Partial<ModuleConfig[K]>,
     ) => Promise<Settings>;
     /**
-     * Active/désactive le démarrage automatique de WinNotch avec Windows.
-     * Implémenté via `app.setLoginItemSettings` (écrit dans
-     * `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
+     * Active/désactive le démarrage automatique de WinNotch avec Windows
+     * (tâche planifiée via `schtasks.exe`). Retourne le statut de l'opération
+     * système (`ok`/`error`) en plus des settings, pour que le renderer puisse
+     * afficher un toast de réussite/échec.
      */
-    setAutoStart: (enabled: boolean) => Promise<Settings>;
+    setAutoStart: (enabled: boolean) => Promise<SetAutoStartResult>;
     /**
      * Remplace l'ordre + la largeur des tuiles du dashboard. Le main
      * valide chaque entrée (cols 1..12, id ∈ DashTileId, pas de doublon)

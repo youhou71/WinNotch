@@ -21,6 +21,7 @@ import { useSettingsContext } from './SettingsContext';
 import { SETTINGS_MODULES, type ModuleMeta } from './modulesMeta';
 import { MODULE_GROUPS } from './moduleGroupsMeta';
 import { UpdaterRow } from '../updater/UpdaterRow';
+import { useToast } from '../toast/ToastContext';
 
 interface Props {
   /** Ouvre la page d'un module spécifique. */
@@ -55,8 +56,38 @@ function groupModules(modules: ModuleMeta[]): {
 export function SettingsHome({ onSelectModule, onOpenLayout }: Props) {
   const { settings, setDensity, setModule, toggleDnd, setAutoStart } =
     useSettingsContext();
+  const { push: pushToast } = useToast();
 
   const { groups, standalone } = groupModules(SETTINGS_MODULES);
+
+  /**
+   * Bascule le démarrage auto et confirme par un toast. L'échec de l'opération
+   * système (création/suppression de la tâche planifiée) n'est plus silencieux :
+   * `setAutoStart` remonte `ok`/`error`, et l'état réel (`res.settings`)
+   * annule l'update optimiste si la tâche n'a pas pu être créée.
+   */
+  async function handleAutoStart(next: boolean) {
+    const res = await setAutoStart(next);
+    if (res.ok) {
+      pushToast({
+        icon: next ? 'fa-solid fa-check' : 'fa-solid fa-power-off',
+        iconColor: next ? '#34d399' : '#94a3b8',
+        name: 'Démarrage',
+        message: next
+          ? 'WinNotch démarrera avec Windows'
+          : 'Démarrage automatique désactivé',
+      });
+    } else {
+      pushToast({
+        icon: 'fa-solid fa-triangle-exclamation',
+        iconColor: '#ef4444',
+        name: 'Démarrage',
+        message: res.error
+          ? `Échec : ${res.error}`
+          : 'Impossible de modifier le démarrage automatique',
+      });
+    }
+  }
 
   function renderModuleRow(m: ModuleMeta) {
     const enabled = settings.modules[m.id];
@@ -115,7 +146,7 @@ export function SettingsHome({ onSelectModule, onOpenLayout }: Props) {
           label="Démarrer avec Windows"
           description="Lance WinNotch automatiquement à l'ouverture de session."
           value={settings.autoStart}
-          onChange={(next) => void setAutoStart(next)}
+          onChange={(next) => void handleAutoStart(next)}
         />
         <SettingsRow
           icon="fa-solid fa-right-from-bracket"
