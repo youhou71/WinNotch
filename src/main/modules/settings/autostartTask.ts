@@ -101,6 +101,11 @@ function currentUserId(): string {
  *  - `StartWhenAvailable=true` : rattrape si le PC était endormi au logon.
  *  - `ExecutionTimeLimit=PT0S` : la task ne se termine pas (WinNotch tourne
  *    tant que l'utilisateur ne quit pas).
+ *
+ * ⚠️ NE PAS ajouter `<UseUnifiedSchedulingEngine>` ni
+ * `<DisallowStartOnRemoteAppSession>` : ces nœuds appartiennent au schéma Task
+ * Scheduler **1.3**. Avec `version="1.2"`, `schtasks /Create /XML` les rejette
+ * (« nœud inattendu ») et **toute la création échoue**. (Bug corrigé en v1.4.1.)
  */
 function buildTaskXml(exePath: string): string {
   const user = xmlEscape(currentUserId());
@@ -139,7 +144,6 @@ function buildTaskXml(exePath: string): string {
     <Enabled>true</Enabled>
     <Hidden>false</Hidden>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
-    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
     <WakeToRun>false</WakeToRun>
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
     <Priority>7</Priority>
