@@ -261,6 +261,7 @@ L'installer généré (`dist/WinNotch-Setup-x.y.z.exe`) est un wizard NSIS class
 - **electron-store** — persistance des Settings dans `config.json`.
 - **electron-updater** — mises à jour automatiques via GitHub Releases.
 - **`@coooookies/windows-smtc-monitor`** — bindings napi-rs pour les sessions media Windows.
+- **`@nut-tree-fork/libnut-win32`** — bindings natifs N-API pour l'envoi des touches média (play/pause, suivant, précédent).
 - **`loudness`** — wrapper PowerShell pour le volume système.
 - **`SoundVolumeView.exe`** (NirSoft, bundlé) — énumération + changement du device de sortie.
 - **`better-sqlite3`** — lecture de `state.vscdb` (workspaces VS Code récents).

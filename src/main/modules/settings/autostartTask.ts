@@ -1,189 +1,215 @@
 /**
  * Gestion du démarrage automatique de WinNotch avec Windows via le
- * **Task Scheduler** (à la place de la Run key historique).
+ * **Task Scheduler**, piloté par `schtasks.exe`.
  *
  * Pourquoi pas la Run key ?
  * --------------------------
  * `app.setLoginItemSettings({ openAtLogin: true })` écrit dans
- * `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Windows 10/11
- * applique alors son **Startup Delay** : 10 s fixes + jusqu'à 150 s
- * aléatoires selon le « Startup Impact » estimé. En pratique, beaucoup
- * d'utilisateurs voyaient le notch n'apparaître que 1–2 minutes après
- * l'ouverture de la session.
+ * `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, soumis au **Startup
+ * Delay** de Windows 10/11 (10 s fixes + jusqu'à 150 s aléatoires). Le notch
+ * n'apparaissait alors que 1–2 min après l'ouverture de session. Un trigger
+ * Task Scheduler `AtLogOn` ne subit pas ce délai.
  *
- * Le Task Scheduler ne subit pas ce délai. Un trigger `AtLogOn` se
- * déclenche immédiatement à l'ouverture de session. La task reste visible
- * dans Task Manager → Démarrage (Windows 22H2+ liste aussi les tasks au
- * logon), mais sans le délai imposé.
+ * Pourquoi `schtasks.exe` et pas PowerShell (`Register-ScheduledTask`) ?
+ * ---------------------------------------------------------------------
+ * `schtasks.exe` est un binaire Microsoft signé : il ne déclenche pas les
+ * antivirus heuristiques, contrairement à `powershell.exe -EncodedCommand`
+ * (base64 = signature d'obfuscation). Contrairement à une idée reçue,
+ * `schtasks /Create /XML` permet de régler **tous** les paramètres fins
+ * (démarrage sur batterie, pas d'arrêt en bascule batterie, etc.) via le
+ * fichier XML — l'argument « il faut PowerShell pour ça » est faux.
  *
- * Pourquoi PowerShell et pas `schtasks.exe` ?
- * --------------------------------------------
- * `schtasks` est simple pour les cas basiques mais ses flags ligne de
- * commande ne suffisent pas pour régler proprement « autoriser sur
- * batterie », « ne pas s'arrêter en cas de bascule batterie », etc. Le
- * cmdlet `Register-ScheduledTask` est plus lisible et cohérent avec les
- * autres usages PowerShell du projet (cf. `vpnDetector.ts`,
- * `metricsReader.ts`).
- *
- * Idempotence : `Register-ScheduledTask -Force` remplace la task si elle
- * existe déjà. `Unregister-ScheduledTask` est tolérant à l'absence avec
- * `-ErrorAction SilentlyContinue`. `Get-ScheduledTask` retourne `null`
- * si absente.
+ * Idempotence : `/Create … /F` remplace la task existante.
+ * `/Delete … /F` est silencieux. `/Query` renvoie un code non nul si absente.
  */
-import { spawn } from 'child_process';
-import { powershellExe } from '../shell/powershellPath';
+import { execFile } from 'child_process';
+import { writeFileSync, unlinkSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
 
 /** Nom de la task créée dans le Task Scheduler. */
 export const AUTOSTART_TASK_NAME = 'WinNotch';
 
-const POWERSHELL_TIMEOUT_MS = 8000;
+const SCHTASKS_TIMEOUT_MS = 8000;
+
+/** Résultat brut d'un appel `schtasks.exe`. */
+interface SchtasksResult {
+  stdout: string;
+  stderr: string;
+  code: number;
+}
+
+/** Issue d'une opération de gestion de la task (create/remove). */
+type AutostartResult = { ok: boolean; error?: string };
 
 /**
- * Exécute un script PowerShell via `-EncodedCommand` (base64 UTF-16LE).
- * Pattern repris de `vpnDetector` et `metricsReader` : évite tous les
- * pièges d'échappement de quotes Windows. Retourne `{ stdout, code }` —
- * `null` en cas de timeout ou d'erreur de spawn.
+ * Exécute `schtasks.exe` avec les arguments donnés. Retourne `{ stdout, stderr,
+ * code }`, ou `null` en cas de timeout / spawn impossible. Ne rejette jamais.
  */
-function runPowerShell(
-  script: string,
-): Promise<{ stdout: string; stderr: string; code: number | null } | null> {
+function runSchtasks(args: string[]): Promise<SchtasksResult | null> {
   return new Promise((resolve) => {
-    let resolved = false;
-    let stdout = '';
-    let stderr = '';
-    const encoded = Buffer.from(script, 'utf16le').toString('base64');
-    const child = spawn(
-      powershellExe(),
-      [
-        '-NoProfile',
-        '-NoLogo',
-        '-NonInteractive',
-        '-ExecutionPolicy', 'Bypass',
-        '-EncodedCommand', encoded,
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+    execFile(
+      'schtasks.exe',
+      args,
+      { windowsHide: true, timeout: SCHTASKS_TIMEOUT_MS },
+      (err, stdout, stderr) => {
+        const e = err as (Error & { killed?: boolean; code?: number | string }) | null;
+        if (e?.killed) {
+          resolve(null); // timeout : process tué
+          return;
+        }
+        // e.code = code de sortie (number) pour un exit non nul, ou une string
+        // ('ENOENT') si schtasks.exe est introuvable.
+        const rawCode = e?.code;
+        const code = typeof rawCode === 'number' ? rawCode : e ? 1 : 0;
+        resolve({ stdout: String(stdout), stderr: String(stderr), code });
+      },
     );
-
-    const timeout = setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
-      try { child.kill(); } catch { /* déjà mort */ }
-      resolve(null);
-    }, POWERSHELL_TIMEOUT_MS);
-
-    child.on('error', () => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-      resolve(null);
-    });
-    child.stdout.on('data', (c: Buffer) => { stdout += c.toString('utf8'); });
-    child.stderr.on('data', (c: Buffer) => { stderr += c.toString('utf8'); });
-    child.on('close', (code) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-      resolve({ stdout, stderr, code });
-    });
   });
 }
 
+/** Échappe une chaîne pour l'insérer dans le XML de tâche. */
+function xmlEscape(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 /**
- * Échappe une string pour l'inclure dans un script PowerShell entre
- * single quotes. Seul caractère à doubler en single-quoted PS : `'`.
+ * Identifiant de l'utilisateur courant pour le XML (`DOMAIN\User` si le
+ * domaine est connu, sinon le nom seul — suffisant pour un trigger AtLogOn
+ * per-user, comme le faisait l'ancien `-User $env:USERNAME`).
  */
-function psQuote(s: string): string {
-  return s.replace(/'/g, "''");
+function currentUserId(): string {
+  const user = process.env.USERNAME ?? '';
+  const domain = process.env.USERDOMAIN ?? '';
+  return domain && user ? `${domain}\\${user}` : user;
+}
+
+/**
+ * Construit le XML d'une tâche planifiée reproduisant les réglages de l'ancien
+ * `Register-ScheduledTask` :
+ *  - `LogonTrigger` user courant : déclenchement immédiat à l'ouverture de session.
+ *  - `InteractiveToken` + `LeastPrivilege` : contexte utilisateur normal, pas
+ *    d'élévation (cohérent avec l'install per-user NSIS, pas de mot de passe stocké).
+ *  - `DisallowStartIfOnBatteries=false` + `StopIfGoingOnBatteries=false` : un
+ *    laptop sur batterie au boot voit quand même le notch apparaître.
+ *  - `StartWhenAvailable=true` : rattrape si le PC était endormi au logon.
+ *  - `ExecutionTimeLimit=PT0S` : la task ne se termine pas (WinNotch tourne
+ *    tant que l'utilisateur ne quit pas).
+ */
+function buildTaskXml(exePath: string): string {
+  const user = xmlEscape(currentUserId());
+  const command = xmlEscape(`"${exePath}"`);
+  return `<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Démarre WinNotch à l'ouverture de session.</Description>
+    <URI>\\${AUTOSTART_TASK_NAME}</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>${user}</UserId>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>${user}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>${command}</Command>
+    </Exec>
+  </Actions>
+</Task>`;
 }
 
 /**
  * Crée (ou remplace) la task de démarrage auto pour l'exe courant.
  *
- * Réglages choisis :
- *  - `AtLogOn` user courant : se déclenche à l'ouverture de session.
- *  - `LogonType Interactive` + `RunLevel Limited` : pas d'élévation,
- *    contexte utilisateur normal. Cohérent avec l'install per-user NSIS.
- *  - `AllowStartIfOnBatteries` + `DontStopIfGoingOnBatteries` : un
- *    laptop sur batterie au boot doit quand même voir le notch
- *    apparaître. L'utilisateur peut désactiver via Settings s'il
- *    préfère.
- *  - `StartWhenAvailable` : si le PC était endormi au moment du logon
- *    (cas peu probable mais possible), rattrape au réveil.
- *  - Pas de `ExecutionTimeLimit` : la task ne se termine pas (WinNotch
- *    tourne tant que l'utilisateur ne quit pas).
+ * Le XML est écrit dans un fichier temporaire **encodé en UTF-16LE + BOM** —
+ * `schtasks /Create /XML` est capricieux sur l'encodage et attend de l'UTF-16
+ * conforme à la déclaration `encoding="UTF-16"`.
  */
 export async function createAutostartTask(
   exePath: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const script = `
-$ErrorActionPreference = 'Stop'
-try {
-  $action = New-ScheduledTaskAction -Execute '${psQuote(exePath)}'
-  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-  $settings = New-ScheduledTaskSettingsSet \`
-    -AllowStartIfOnBatteries \`
-    -DontStopIfGoingOnBatteries \`
-    -StartWhenAvailable \`
-    -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
-  $principal = New-ScheduledTaskPrincipal \`
-    -UserId $env:USERNAME \`
-    -LogonType Interactive \`
-    -RunLevel Limited
-  Register-ScheduledTask \`
-    -TaskName '${AUTOSTART_TASK_NAME}' \`
-    -Action $action \`
-    -Trigger $trigger \`
-    -Settings $settings \`
-    -Principal $principal \`
-    -Force | Out-Null
-  Write-Output 'OK'
-} catch {
-  Write-Error $_.Exception.Message
-  exit 1
-}
-  `.trim();
-
-  const result = await runPowerShell(script);
-  if (!result) {
-    return { ok: false, error: 'PowerShell timeout' };
+): Promise<AutostartResult> {
+  const tmpFile = join(tmpdir(), `winnotch-task-${randomUUID()}.xml`);
+  try {
+    // Écrit l'XML en UTF-16 LE préfixé du BOM (0xFF 0xFE) attendu par
+    // `schtasks /XML` — BOM en octets explicites plutôt qu'un U+FEFF invisible.
+    const xmlBuf = Buffer.from(buildTaskXml(exePath), 'utf16le');
+    writeFileSync(tmpFile, Buffer.concat([Buffer.from([0xff, 0xfe]), xmlBuf]));
+    const result = await runSchtasks([
+      '/Create',
+      '/TN',
+      AUTOSTART_TASK_NAME,
+      '/XML',
+      tmpFile,
+      '/F',
+    ]);
+    if (!result) return { ok: false, error: 'schtasks timeout' };
+    if (result.code !== 0) {
+      return {
+        ok: false,
+        error: result.stderr.trim() || result.stdout.trim() || `schtasks exit ${result.code}`,
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    try {
+      unlinkSync(tmpFile);
+    } catch {
+      /* déjà absent */
+    }
   }
-  if (result.code !== 0) {
-    return { ok: false, error: result.stderr.trim() || `PowerShell exit ${result.code}` };
-  }
-  return { ok: true };
 }
 
 /**
- * Supprime la task. Idempotent : `-ErrorAction SilentlyContinue` rend
- * l'appel safe même si la task n'existe pas.
+ * Supprime la task. Idempotent : un code non nul (task absente) est ignoré.
  */
-export async function removeAutostartTask(): Promise<{
-  ok: boolean;
-  error?: string;
-}> {
-  const script = `
-$ErrorActionPreference = 'SilentlyContinue'
-Unregister-ScheduledTask -TaskName '${AUTOSTART_TASK_NAME}' -Confirm:$false | Out-Null
-Write-Output 'OK'
-  `.trim();
-  const result = await runPowerShell(script);
-  if (!result) {
-    return { ok: false, error: 'PowerShell timeout' };
-  }
+export async function removeAutostartTask(): Promise<AutostartResult> {
+  const result = await runSchtasks(['/Delete', '/TN', AUTOSTART_TASK_NAME, '/F']);
+  if (!result) return { ok: false, error: 'schtasks timeout' };
   return { ok: true };
 }
 
 /**
- * Vérifie si la task est enregistrée. Retourne `false` si la task
- * n'existe pas, si PowerShell timeout, ou en cas d'erreur de spawn.
+ * Vérifie si la task est enregistrée. Retourne `false` si la task n'existe
+ * pas (exit non nul), si schtasks timeout, ou en cas d'erreur de spawn.
  */
 export async function isAutostartTaskRegistered(): Promise<boolean> {
-  const script = `
-$ErrorActionPreference = 'SilentlyContinue'
-$task = Get-ScheduledTask -TaskName '${AUTOSTART_TASK_NAME}'
-if ($task) { Write-Output 'YES' } else { Write-Output 'NO' }
-  `.trim();
-  const result = await runPowerShell(script);
+  const result = await runSchtasks(['/Query', '/TN', AUTOSTART_TASK_NAME]);
   if (!result) return false;
-  return result.stdout.trim() === 'YES';
+  return result.code === 0;
 }
