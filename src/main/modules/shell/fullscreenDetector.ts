@@ -24,6 +24,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { screen } from 'electron';
 import { IpcChannel } from '../../../shared/types';
 import { powershellExe } from './powershellPath';
+import { psScriptPath } from './psScriptPath';
 import { getNotchWindow } from '../../window/notchWindow';
 
 const POLL_INTERVAL_MS = 750;
@@ -33,40 +34,13 @@ const EDGE_TOLERANCE_PX = 2;
 let psProcess: ChildProcessWithoutNullStreams | null = null;
 let lastEmitted: boolean | null = null;
 
-/**
- * Script PowerShell qui définit le P/Invoke et boucle en émettant
- * "x,y,w,h,pid" sur chaque tick. Le timestamp implicite (ordre des
- * lignes) suffit, pas besoin de l'inclure.
- */
-const PS_SCRIPT = `
-$ErrorActionPreference = 'Stop'
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public struct RECT { public int Left, Top, Right, Bottom; }
-public class W {
-  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-}
-"@
-while ($true) {
-  $h = [W]::GetForegroundWindow()
-  if ($h -ne [IntPtr]::Zero) {
-    $r = New-Object RECT
-    if ([W]::GetWindowRect($h, [ref]$r)) {
-      # $pid est une variable réservée PowerShell (read-only, PID du
-      # process PS courant). On utilise $winPid pour le PID de la
-      # fenêtre foreground.
-      $winPid = [uint32]0
-      [void][W]::GetWindowThreadProcessId($h, [ref]$winPid)
-      Write-Output "$($r.Left),$($r.Top),$($r.Right),$($r.Bottom),$winPid"
-    }
-  }
-  [System.Console]::Out.Flush()
-  Start-Sleep -Milliseconds ${POLL_INTERVAL_MS}
-}
-`;
+// Le script de détection (Add-Type P/Invoke GetForegroundWindow/GetWindowRect +
+// boucle émettant "left,top,right,bottom,pid") vit dans
+// `resources/ps/fullscreen-detector.ps1`, lancé via `-File` avec l'intervalle de
+// poll passé en argument. On évite ainsi le bloc `Add-Type` inline dans la ligne
+// de commande, que les antivirus heuristiques signalent. Faute de lib native
+// fournissant les bounds de la fenêtre active avec des prebuilds compatibles
+// Electron, ce module reste en PowerShell (le `Add-Type` demeure dans le .ps1).
 
 /**
  * Compare deux rectangles avec une marge de tolérance.
@@ -124,7 +98,15 @@ export function startFullscreenDetector(): void {
   try {
     psProcess = spawn(
       powershellExe(),
-      ['-NoProfile', '-NonInteractive', '-Command', PS_SCRIPT],
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'RemoteSigned',
+        '-File',
+        psScriptPath('fullscreen-detector.ps1'),
+        String(POLL_INTERVAL_MS),
+      ],
       { windowsHide: true },
     );
   } catch (err) {

@@ -7,6 +7,10 @@ dist
 .env.*
 !.env.example
 
+# Cache de compilation incrémentale TypeScript (tsconfig `composite`/`incremental`).
+# Dérivé et local, régénéré à chaque `tsc` — ne doit pas être versionné.
+*.tsbuildinfo
+
 # Documentation locale (non versionnée). Sert à garder des notes
 # personnelles (procédures de release, secrets de dev, TODOs…) sans
 # polluer le dépôt.

@@ -3,60 +3,47 @@
  *
  * Toute application qui s'enregistre auprès de SMTC (Spotify, Apple Music,
  * navigateur YouTube, Windows Media Player, foobar2000…) réagit aux touches
- * média virtuelles `VK_MEDIA_PLAY_PAUSE` (0xB3), `VK_MEDIA_NEXT_TRACK` (0xB0)
- * et `VK_MEDIA_PREV_TRACK` (0xB1). On les déclenche via PowerShell + P/Invoke
- * sur `user32::keybd_event` — pas de binaire à bundler, pas de dépendance
- * utilisateur, fonctionne sur tout Windows 10/11.
+ * média virtuelles `VK_MEDIA_PLAY_PAUSE`, `VK_MEDIA_NEXT_TRACK` et
+ * `VK_MEDIA_PREV_TRACK`. On les envoie via le binding natif
+ * `@nut-tree-fork/libnut-win32` (`keyTap`), qui appelle l'API Windows en C++.
  *
- * Coût : un spawn PowerShell par appel (~150-300 ms). Acceptable car les
- * actions sont déclenchées par clic utilisateur, pas en boucle.
+ * Pourquoi pas PowerShell ? L'implémentation précédente lançait
+ * `powershell.exe` + `Add-Type` (compilation C# runtime de `user32::keybd_event`)
+ * à chaque clic — un pattern que les antivirus heuristiques signalent comme
+ * suspect. L'appel natif est synchrone, quasi instantané, et ne spawne aucun
+ * process externe.
+ *
+ * `keyTap` reconnaît les libellés `'audio_play'` (play/pause), `'audio_next'`
+ * et `'audio_prev'`. Le binding est platform-specific (`-win32`) : WinNotch ne
+ * cible que Windows (cf. electron-builder.yml `win.target: nsis`), on l'importe
+ * donc directement plutôt que via le wrapper `@nut-tree-fork/libnut` (dont la
+ * dépendance `@nut-tree-fork/shared` n'est pas résolue en v4).
+ *
+ * Import : le bundle main est ESM (`"type": "module"`) mais `libnut-win32` est
+ * un module CJS dont les exports sont définis dynamiquement par le binaire
+ * natif — Node ESM ne peut donc PAS en extraire les exports nommés
+ * (`import { keyTap }` échoue au runtime). On importe le default (= l'objet
+ * `module.exports` complet) et on lit `keyTap` dessus.
  */
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import { powershellExe } from '../shell/powershellPath';
+import libnut from '@nut-tree-fork/libnut-win32';
 
-const execFileAsync = promisify(execFile);
-
-/** Codes virtuels Windows pour les touches média. */
-const VK_MEDIA_PLAY_PAUSE = 0xb3;
-const VK_MEDIA_NEXT_TRACK = 0xb0;
-const VK_MEDIA_PREV_TRACK = 0xb1;
+/** Libellés de touches média acceptés par `keyTap`. */
+type MediaKey = 'audio_play' | 'audio_next' | 'audio_prev';
 
 /**
- * Construit le script PowerShell qui définit le P/Invoke et envoie la
- * touche (key down puis key up avec 30 ms de pause, durée minimale
- * acceptée par la plupart des players).
- *
- * On utilise une chaîne PowerShell simple-quote (pas de here-string),
- * compatible avec un script sur une seule ligne — `@'...'@` exige des
- * sauts de ligne autour de ses délimiteurs.
+ * Envoie une touche média virtuelle. Tolère les échecs (log + return) : un
+ * clic média ne doit jamais faire crasher l'app. `async` conservé pour ne pas
+ * changer le contrat des appelants (`musicService.ts` fait `await sendX()`),
+ * même si `keyTap` est synchrone.
  */
-function buildScript(vkCode: number): string {
-  const sig =
-    "'[System.Runtime.InteropServices.DllImport(\"user32.dll\")] " +
-    "public static extern void keybd_event(byte vk, byte scan, uint flags, int extra);'";
-  return [
-    `$sig = ${sig}`,
-    "$t = Add-Type -MemberDefinition $sig -Name 'WnKbd' -Namespace WinNotch -PassThru",
-    `$t::keybd_event(${vkCode}, 0, 0, 0)`,
-    'Start-Sleep -Milliseconds 30',
-    `$t::keybd_event(${vkCode}, 0, 2, 0)`,
-  ].join('; ');
-}
-
-/** Envoie une touche média virtuelle. Tolère les échecs (log + return). */
-async function sendKey(vk: number): Promise<void> {
+async function sendKey(key: MediaKey): Promise<void> {
   try {
-    await execFileAsync(
-      powershellExe(),
-      ['-NoProfile', '-NonInteractive', '-Command', buildScript(vk)],
-      { windowsHide: true, timeout: 5000 },
-    );
+    libnut.keyTap(key);
   } catch (err) {
     console.warn('[music/mediaKeys] échec envoi touche média:', err);
   }
 }
 
-export const sendPlayPause = (): Promise<void> => sendKey(VK_MEDIA_PLAY_PAUSE);
-export const sendNext = (): Promise<void> => sendKey(VK_MEDIA_NEXT_TRACK);
-export const sendPrevious = (): Promise<void> => sendKey(VK_MEDIA_PREV_TRACK);
+export const sendPlayPause = (): Promise<void> => sendKey('audio_play');
+export const sendNext = (): Promise<void> => sendKey('audio_next');
+export const sendPrevious = (): Promise<void> => sendKey('audio_prev');

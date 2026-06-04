@@ -69,6 +69,12 @@ extraResources:
   # dans Alt+Tab, le gestionnaire des tâches et Aero Peek.
   - from: build/icon.ico
     to: icon.ico
+  # Scripts PowerShell embarqués (boucle du process persistant VPN/réseau +
+  # détecteur plein écran), lancés via `powershell -File` pour garder une ligne
+  # de commande propre (pas de -EncodedCommand, que les antivirus signalent).
+  # Cf. src/main/modules/shell/psScriptPath.ts.
+  - from: resources/ps
+    to: ps
 
 # Activer l'asar (archive concaténée → démarrage plus rapide, anti-tampering
 # léger) mais EXCLURE les modules natifs : leurs .node ne sont pas chargés
@@ -78,6 +84,8 @@ extraResources:
 # Pourquoi :
 #  - @coooookies/windows-smtc-monitor : napi-rs prebuilt (N-API stable),
 #    le rebuild casse le binaire .node optionnel.
+#  - @nut-tree-fork/libnut-win32 : binaire N-API prebuilt (touches média).
+#    Validé chargeable tel quel sous l'ABI Electron — pas de rebuild.
 #  - better-sqlite3 : prebuild Electron déjà fourni via prebuild-install.
 #  - loudness : pas natif (wrappe PowerShell).
 #  - node-global-key-listener : .exe externe (pas natif Node).
@@ -93,6 +101,7 @@ asarUnpack:
   - "**/node_modules/loudness/**"
   - "**/node_modules/node-global-key-listener/**"
   - "**/node_modules/@coooookies/windows-smtc-monitor/**"
+  - "**/node_modules/@nut-tree-fork/libnut-win32/**"
 
 # === Configuration Windows ===
 win:

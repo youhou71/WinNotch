@@ -26,35 +26,14 @@
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { powershellExe } from './powershellPath';
+import { psScriptPath } from './psScriptPath';
 
-/**
- * Boucle lue par le powershell.exe persistant. Passée en `-EncodedCommand`
- * (base64 UTF-16LE) pour être insensible au quoting. `$ProgressPreference`
- * coupe le flux de progression (sinon CLIXML sur stderr lors de l'autoload).
- */
-const BOOTSTRAP = [
-  "$ProgressPreference = 'SilentlyContinue'",
-  '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-  'while ($true) {',
-  '  $line = [Console]::In.ReadLine()',
-  '  if ($null -eq $line) { break }',
-  '  if ($line.Length -eq 0) { continue }',
-  "  $sp = $line.IndexOf(' ')",
-  '  if ($sp -lt 0) { continue }',
-  '  $id = $line.Substring(0, $sp)',
-  '  $b64 = $line.Substring($sp + 1)',
-  '  try {',
-  '    $code = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64))',
-  '    $res = & ([scriptblock]::Create($code))',
-  '    $text = [string]$res',
-  '    $o = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($text))',
-  '    [Console]::Out.WriteLine(\'{"id":"\' + $id + \'","ok":true,"out":"\' + $o + \'"}\')',
-  '  } catch {',
-  '    $e = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_.Exception.Message))',
-  '    [Console]::Out.WriteLine(\'{"id":"\' + $id + \'","ok":false,"err":"\' + $e + \'"}\')',
-  '  }',
-  '}',
-].join('\n');
+// La boucle exécutée par le process persistant vit dans le script embarqué
+// `resources/ps/persistent-loop.ps1`, lancé via `-File` (cf. ensureProc).
+// On évite ainsi `-EncodedCommand` (base64) dans la ligne de commande, que les
+// antivirus heuristiques signalent comme de l'obfuscation. Le protocole stdin
+// (1 ligne par requête, script en base64) reste interne au pipe — jamais dans
+// la ligne de commande, donc invisible aux scanners.
 
 export interface PsResult {
   /** Sortie stdout du script (chaîne vide si rien). */
@@ -127,10 +106,6 @@ function onStdout(chunk: string): void {
   }
 }
 
-function encodeUtf16(s: string): string {
-  return Buffer.from(s, 'utf16le').toString('base64');
-}
-
 /** Démarre le process si besoin. Retourne null si le spawn échoue. */
 function ensureProc(): ChildProcessWithoutNullStreams | null {
   if (proc) return proc;
@@ -143,10 +118,13 @@ function ensureProc(): ChildProcessWithoutNullStreams | null {
         '-NoProfile',
         '-NoLogo',
         '-NonInteractive',
+        // RemoteSigned (et non Bypass) : autorise un .ps1 local non signé sans
+        // Mark-of-the-Web (cas des fichiers extraits par l'installeur), tout en
+        // étant bien moins alarmant qu'un Bypass pour les antivirus.
         '-ExecutionPolicy',
-        'Bypass',
-        '-EncodedCommand',
-        encodeUtf16(BOOTSTRAP),
+        'RemoteSigned',
+        '-File',
+        psScriptPath('persistent-loop.ps1'),
       ],
       { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
     );
