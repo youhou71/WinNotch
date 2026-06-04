@@ -14,6 +14,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   IpcChannel,
   type AudioState,
+  type BambuCloudLoginResult,
+  type BambuState,
   type CalendarInfo,
   type CalendarProviderId,
   type OutlookCategory,
@@ -270,6 +272,74 @@ const api: NotchApi = {
       ipcRenderer.on(IpcChannel.SystemChange, handler);
       return () => {
         ipcRenderer.off(IpcChannel.SystemChange, handler);
+      };
+    },
+  },
+  bambu: {
+    getState: () => ipcRenderer.invoke(IpcChannel.BambuGetState),
+    testConnection: (host: string, serial: string, accessCode: string) =>
+      ipcRenderer.invoke(
+        IpcChannel.BambuTestConnection,
+        host,
+        serial,
+        accessCode,
+      ) as Promise<{ ok: boolean; error?: string }>,
+    saveCredentials: (
+      host: string,
+      serial: string,
+      accessCode: string,
+      printerName: string,
+    ) =>
+      ipcRenderer.invoke(
+        IpcChannel.BambuSaveCredentials,
+        host,
+        serial,
+        accessCode,
+        printerName,
+      ) as Promise<{ ok: boolean; error?: string }>,
+    disconnect: () =>
+      ipcRenderer.invoke(IpcChannel.BambuDisconnect) as Promise<{
+        ok: boolean;
+      }>,
+    setMode: (mode: 'lan' | 'cloud') =>
+      ipcRenderer.invoke(IpcChannel.BambuSetMode, mode) as Promise<{
+        ok: boolean;
+      }>,
+    cloudLogin: (email: string, password: string, region: 'global' | 'china') =>
+      ipcRenderer.invoke(
+        IpcChannel.BambuCloudLogin,
+        email,
+        password,
+        region,
+      ) as Promise<BambuCloudLoginResult>,
+    cloudRequestCode: (email: string, region: 'global' | 'china') =>
+      ipcRenderer.invoke(
+        IpcChannel.BambuCloudRequestCode,
+        email,
+        region,
+      ) as Promise<{ ok: boolean; error?: string }>,
+    cloudSubmitCode: (
+      email: string,
+      code: string,
+      region: 'global' | 'china',
+    ) =>
+      ipcRenderer.invoke(
+        IpcChannel.BambuCloudSubmitCode,
+        email,
+        code,
+        region,
+      ) as Promise<BambuCloudLoginResult>,
+    cloudSelectDevice: (serial: string, name: string) =>
+      ipcRenderer.invoke(
+        IpcChannel.BambuCloudSelectDevice,
+        serial,
+        name,
+      ) as Promise<{ ok: boolean }>,
+    onChange: (cb: (state: BambuState) => void) => {
+      const handler = (_: unknown, state: BambuState) => cb(state);
+      ipcRenderer.on(IpcChannel.BambuChange, handler);
+      return () => {
+        ipcRenderer.off(IpcChannel.BambuChange, handler);
       };
     },
   },

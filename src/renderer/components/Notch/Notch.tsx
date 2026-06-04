@@ -250,6 +250,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
     vpn: 122,
     teams: 160,
     system: 72,
+    bambu: 150,
   };
   const hasMusicCard = settings.modules.music && !!music.title;
   const hasClaudeCard =

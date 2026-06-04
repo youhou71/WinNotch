@@ -20,6 +20,19 @@ import { getNotchWindow } from '../window/notchWindow';
 let peeking = false;
 
 /**
+ * Dernier état de survol du notch rapporté par le hit-test du renderer.
+ * Utilisé par le handler `blur` de la fenêtre (cf. notchWindow.ts) pour ne
+ * PAS rétracter quand l'utilisateur interagit avec le notch (un clic sur un
+ * bouton/champ peut provoquer un blur transitoire) — on ne rétracte que sur
+ * un vrai clic en dehors (curseur hors du notch au moment du blur).
+ */
+let mouseOverNotch = false;
+
+export function isMouseOverNotch(): boolean {
+  return mouseOverNotch;
+}
+
+/**
  * Bascule l'état Peek. Quand `on=true`, la fenêtre devient totalement
  * passe-plats jusqu'au prochain `setPeekState(false)`.
  */
@@ -47,6 +60,8 @@ export function setPeekState(on: boolean): void {
  */
 export function registerMouseIpc(): void {
   ipcMain.on(IpcChannel.MouseCapture, (_event, capture: boolean) => {
+    // Toujours mémoriser le survol (même en Peek) pour le handler `blur`.
+    mouseOverNotch = capture;
     const win = getNotchWindow();
     // En mode Peek, on ignore toutes les demandes du renderer pour ne pas
     // ré-activer la capture par mégarde.

@@ -31,6 +31,7 @@
  * si absente.
  */
 import { spawn } from 'child_process';
+import { powershellExe } from '../shell/powershellPath';
 
 /** Nom de la task créée dans le Task Scheduler. */
 export const AUTOSTART_TASK_NAME = 'WinNotch';
@@ -52,7 +53,7 @@ function runPowerShell(
     let stderr = '';
     const encoded = Buffer.from(script, 'utf16le').toString('base64');
     const child = spawn(
-      'powershell.exe',
+      powershellExe(),
       [
         '-NoProfile',
         '-NoLogo',

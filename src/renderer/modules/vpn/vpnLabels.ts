@@ -8,6 +8,7 @@ const CLIENT_LABELS: Record<VpnClient, string> = {
   nordvpn: 'NordVPN',
   openvpn: 'OpenVPN',
   wireguard: 'WireGuard',
+  fortinet: 'FortiClient',
   'windows-native': 'VPN Windows',
   unknown: 'VPN',
 };

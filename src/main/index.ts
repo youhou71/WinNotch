@@ -49,6 +49,7 @@ import {
 } from './modules/gitlocal/gitlocalService';
 import { registerVpnIpc, stopVpn } from './modules/vpn/vpnService';
 import { registerTeamsIpc, stopTeams } from './modules/teams/teamsService';
+import { registerBambuIpc, stopBambu } from './modules/bambu/bambuService';
 import {
   registerSystemIpc,
   stopSystem,
@@ -68,6 +69,7 @@ import {
   startFullscreenDetector,
   stopFullscreenDetector,
 } from './modules/shell/fullscreenDetector';
+import { stopPersistentPowershell } from './modules/shell/persistentPowershell';
 import { startAltPeekListener, stopAltPeekListener } from './shortcuts/altPeek';
 import {
   registerGlobalShortcuts,
@@ -122,6 +124,11 @@ app.whenReady().then(async () => {
     console.log(
       '[WinNotch] Module Système live désactivé (WINNOTCH_DISABLE_SYSTEM=1)',
     );
+  }
+  if (process.env.WINNOTCH_DISABLE_BAMBU !== '1') {
+    registerBambuIpc();
+  } else {
+    console.log('[WinNotch] Module Bambu désactivé (WINNOTCH_DISABLE_BAMBU=1)');
   }
   if (process.env.WINNOTCH_DISABLE_CLAUDE_USAGE !== '1') {
     registerClaudeUsageIpc();
@@ -193,9 +200,11 @@ app.on('window-all-closed', () => {
   stopVpn();
   stopTeams();
   stopSystem();
+  stopBambu();
   stopTasks();
   stopUpdater();
   stopFullscreenDetector();
+  stopPersistentPowershell();
   unregisterGlobalShortcuts();
   // Convention Electron : sur macOS l'app reste vivante sans fenêtre,
   // sur Windows/Linux on quitte.
@@ -217,8 +226,10 @@ app.on('before-quit', () => {
   stopVpn();
   stopTeams();
   stopSystem();
+  stopBambu();
   stopTasks();
   stopUpdater();
   stopFullscreenDetector();
+  stopPersistentPowershell();
   unregisterGlobalShortcuts();
 });

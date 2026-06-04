@@ -26,6 +26,7 @@ import { useSettingsContext } from './SettingsContext';
 import { useMeetingsContext } from '../meetings/MeetingsContext';
 import { SystemSettings } from '../system/SystemSettings';
 import { ClaudeUsageSettings } from '../claudeUsage/ClaudeUsageSettings';
+import { BambuSettings } from '../bambu/BambuSettings';
 import { useToast } from '../toast/ToastContext';
 import { MODULE_META_BY_ID } from './modulesMeta';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
@@ -96,6 +97,7 @@ export function SettingsModulePage({ moduleId, onBack }: Props) {
       {moduleId === 'vpn' && <VpnSettings />}
       {moduleId === 'teams' && <TeamsSettings />}
       {moduleId === 'system' && <SystemSettings />}
+      {moduleId === 'bambu' && <BambuSettings />}
     </>
   );
 }

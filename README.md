@@ -95,6 +95,18 @@ Réutilise l'authentification du module **Prochains rendez-vous** (mêmes tokens
 
 **Couplage DND bidirectionnel** (activé par défaut, désactivable dans Settings → Teams) : `Ctrl+Shift+D` bascule aussi ton statut Teams en DoNotDisturb (et inversement, un Teams DoNotDisturb détecté par le polling active le DND WinNotch). Un filtre anti-écho de 30 s évite les boucles entre l'écriture locale et la lecture du tick suivant.
 
+### Imprimante 3D (Bambu)
+Suivi d'un print Bambu Lab **série P1** (P1P / P1S) en local, **lecture seule**. Chip imprimante dans le notch rétracté pendant une impression (`42 %` + ETA), qui vire au rouge si une erreur HMS est active. Card dans le dashboard : barre de progression + temps restant + couche X/Y + nom du fichier, températures buse / lit, bobines AMS (couleur + type + % restant, slot actif surligné), et erreurs HMS en rouge avec lien direct vers le wiki Bambu.
+
+Deux **modes de connexion** (au choix dans Settings → Imprimante 3D) :
+
+- **Réseau local (LAN)** — MQTT direct au broker de l'imprimante (`mqtts://<ip>:8883`, auth `bblp` + code d'accès LAN, certificat auto-signé). Rapide, privé, sans dépendance Internet. Prérequis : **mode LAN** activé sur l'imprimante + **IP** + **numéro de série** + **code d'accès** (chiffré localement via DPAPI). PC et imprimante doivent être sur le **même réseau**.
+- **Cloud Bambu** — pour suivre ses impressions **à distance** (ex. depuis le PC du boulot, imprimante à la maison). Connexion au broker cloud Bambu (`us.mqtt.bambulab.com`, ou `cn.` pour la Chine) via le **compte Bambu**. Connexion par **code email** : tu saisis ton email, reçois un code par mail, et le valides. Une connexion par **mot de passe** reste disponible en option. Note : les comptes **Google / Apple** ne reçoivent pas toujours le code email — dans ce cas, ajoute un mot de passe à ton compte sur bambulab.com et utilise l'option mot de passe. Puis tu choisis l'imprimante dans la liste liée au compte. Ni mot de passe ni code ne sont stockés — seul un **jeton chiffré** (DPAPI) est conservé, rafraîchi automatiquement. Prérequis : l'imprimante doit rester **connectée au cloud** (le mode « LAN Only » strict la coupe du cloud).
+
+Dans les deux modes : la série P1 envoie des rapports en *deltas* (champs modifiés uniquement) fusionnés dans un état accumulé, amorcé par un `pushall` à la connexion ; reconnexion automatique ; chip non masquée en Ne pas Déranger (un print de plusieurs heures prime sur le DND).
+
+> Caméra, contrôle (pause/stop) et série X1 hors périmètre de cette version.
+
 ### Updater
 Mises à jour automatiques via GitHub Releases. Check au boot + toutes les heures. Notifications utilisateur à chaque étape (disponible → téléchargée → installée). Aucun téléchargement ni install sans confirmation explicite.
 
@@ -217,6 +229,7 @@ Masque les chips de **notifications** et bloque les toasts. Indicateur visuel : 
 | VPN | **visible** | état système — l'utilisateur veut savoir en permanence si son tunnel est actif |
 | Teams (présence) | **visible** | état système — la pastille reste pertinente même en DND, surtout avec le couplage bidirectionnel `Ctrl+Shift+D ↔ Teams DoNotDisturb` |
 | Système (CPU/RAM/Net) | **visible** | état système — la jauge est utile même pendant une démo |
+| Imprimante 3D (Bambu) | **visible** | état d'impression — surveiller un print de plusieurs heures prime sur le DND |
 | Music | non affectée | la chip est dans `cr-left`, pas une notification |
 | Clipboard | non affectée | rappel passif d'historique, pas une notification |
 

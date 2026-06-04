@@ -22,6 +22,7 @@ import { GitLocalCard } from '../../modules/gitlocal/GitLocalCard';
 import { VpnCard } from '../../modules/vpn/VpnCard';
 import { TeamsCard } from '../../modules/teams/TeamsCard';
 import { SystemCard } from '../../modules/system/SystemCard';
+import { BambuCard } from '../../modules/bambu/BambuCard';
 
 /**
  * Callbacks d'ouverture passés aux cards qui drillent vers une page plein
@@ -62,6 +63,8 @@ export function renderTileCard(id: DashTileId, cb: TileCallbacks = {}): ReactNod
       return <TeamsCard />;
     case 'system':
       return <SystemCard />;
+    case 'bambu':
+      return <BambuCard />;
     default:
       return null;
   }

@@ -22,6 +22,8 @@ import { VpnChip } from '../../modules/vpn/VpnChip';
 import { useVpnContext } from '../../modules/vpn/VpnContext';
 import { TeamsChip } from '../../modules/teams/TeamsChip';
 import { SystemChip } from '../../modules/system/SystemChip';
+import { BambuChip } from '../../modules/bambu/BambuChip';
+import { useBambuContext } from '../../modules/bambu/BambuContext';
 import { NotchTooltip } from '../Tooltip/NotchTooltip';
 import { ClipboardChip } from '../../modules/clipboard/ClipboardChip';
 import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
@@ -34,6 +36,7 @@ export function CollapsedRow() {
   const { state: gitlab } = useGitLabContext();
   const { state: gitlocal } = useGitLocalContext();
   const { state: vpn } = useVpnContext();
+  const { state: bambu } = useBambuContext();
   const { state: clipboard } = useClipboardContext();
   const { settings, toggleDnd } = useSettingsContext();
 
@@ -126,6 +129,16 @@ export function CollapsedRow() {
   const systemCfg = settings.moduleConfig.system;
   const systemEnabled = settings.modules.system && systemCfg.collapsed;
 
+  // La chip Bambu : module activé + autorisée en collapsed + (print en cours
+  // OU showWhenIdle). Pas masquée en DND — c'est un état (comme VPN/Système) :
+  // on veut surveiller un print de plusieurs heures même en présentation.
+  // La chip se cache d'elle-même si l'imprimante n'est pas configurée.
+  const bambuCfg = settings.moduleConfig.bambu;
+  const bambuEnabled =
+    settings.modules.bambu &&
+    bambuCfg.collapsed &&
+    (bambu.isPrinting || bambuCfg.showWhenIdle);
+
   return (
     <div
       className="collapsed-row"
@@ -182,6 +195,9 @@ export function CollapsedRow() {
         {/* Système live (CPU/RAM/NET) — toujours pertinent, jamais masqué
             par DND : c'est une jauge d'état de la machine, pas une alerte. */}
         {systemEnabled && <SystemChip />}
+        {/* Bambu — état d'impression, jamais masqué par DND : surveiller un
+            long print prime sur le mode "ne pas déranger". */}
+        {bambuEnabled && <BambuChip />}
       </div>
     </div>
   );
