@@ -19,6 +19,7 @@ import { app, BrowserWindow } from 'electron';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import {
   createNotchWindow,
+  registerNotchWindowIpc,
   registerScreenListeners,
 } from './window/notchWindow';
 import { registerMouseIpc } from './ipc/mouse';
@@ -88,6 +89,7 @@ app.whenReady().then(async () => {
   // Les handlers IPC doivent être enregistrés AVANT createNotchWindow,
   // sinon le renderer peut émettre des `invoke` qui partent dans le vide.
   registerMouseIpc();
+  registerNotchWindowIpc();
   registerSettingsIpc();
   // Réconcilie le toggle autoStart avec l'état système (migration v0.x →
   // v1 Task Scheduler, ou suppression manuelle de la task via msconfig /

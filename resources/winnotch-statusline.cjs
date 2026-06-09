@@ -57,11 +57,26 @@ function appendLog(line) {
 function readStdin() {
   return new Promise((resolve) => {
     let buf = '';
+    let done = false;
+    // Résout une seule fois ET annule le timeout de sécurité. Sans le
+    // clearTimeout, le timer non annulé maintient l'event loop Node
+    // référencé jusqu'à son expiration : le process restait vivant ~1,5 s
+    // après avoir fini son travail. Claude Code relance ce wrapper à
+    // chaque rafraîchissement (~20×/min/session) → des process node se
+    // chevauchaient inutilement. En l'annulant sur 'end', le process sort
+    // dès que la statusline est écrite.
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(buf);
+    };
+    // Timeout de sécurité : si stdin ne se ferme jamais (cas anormal), on
+    // relâche après 1500 ms plutôt que de bloquer indéfiniment.
+    const timer = setTimeout(finish, 1500);
     process.stdin.setEncoding('utf8');
     process.stdin.on('data', (chunk) => { buf += chunk; });
-    process.stdin.on('end', () => resolve(buf));
-    // Timeout de sécurité : si stdin reste vide 1500 ms, on relâche.
-    setTimeout(() => resolve(buf), 1500);
+    process.stdin.on('end', finish);
   });
 }
 

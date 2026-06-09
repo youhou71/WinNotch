@@ -31,6 +31,24 @@ interface NotchProps {
   fullscreen: boolean;
 }
 
+// Marge réservée sous le notch étendu : on laisse ~100 px de respiration
+// entre le bas du notch déployé et le bord de la workArea (barre des tâches).
+const NOTCH_BOTTOM_RESERVE_PX = 100;
+// Plancher de la hauteur max — garantit un notch déployable lisible même sur
+// un très petit écran.
+const MIN_MAX_H = 360;
+
+/**
+ * Hauteur max du notch étendu = workArea de l'écran (barre des tâches
+ * déduite via `screen.availHeight`) moins une marge de respiration. On
+ * s'appuie sur `screen.availHeight` et non `window.innerHeight` : la fenêtre
+ * Electron épouse désormais la taille du notch (cf. notchWindow.ts), donc
+ * `innerHeight` ne reflète plus la hauteur de l'écran.
+ */
+function computeMaxNotchHeight(): number {
+  return Math.max(MIN_MAX_H, window.screen.availHeight - NOTCH_BOTTOM_RESERVE_PX);
+}
+
 export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
   const [pressing, setPressing] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -46,11 +64,12 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
   // ce qui évite un flash de notch trop court au moment du passage
   // collapsed → expanded (le DOM n'est pas encore peuplé au 1er render).
   const [contentH, setContentH] = useState<number | null>(null);
-  // Hauteur max disponible. Calculée à partir de `window.innerHeight`
-  // (= workArea.height, cf. notchWindow.ts qui sizes la fenêtre Electron
-  // sur la workArea). Stockée en state pour suivre les redimensionnements
-  // d'écran (changement de display, resize, DPI…).
-  const [maxH, setMaxH] = useState(() => Math.max(360, window.innerHeight - 100));
+  // Hauteur max disponible (cf. `computeMaxNotchHeight`). Stockée en state
+  // pour suivre les changements d'écran (display principal, branchement,
+  // DPI…). Utiliser `availHeight` plutôt que `innerHeight` est indispensable
+  // depuis que la fenêtre épouse le notch, sinon boucle vicieuse (fenêtre
+  // petite → maxH petit → notch petit).
+  const [maxH, setMaxH] = useState(computeMaxNotchHeight);
 
   // Click outside → collapse. Listener attaché seulement en mode expanded
   // pour économiser les re-render.
@@ -70,8 +89,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
   // DPI ou la résolution → notchWindow.ts resize la fenêtre Electron, ce
   // qui propage un `resize` côté renderer).
   useEffect(() => {
-    const onResize = () =>
-      setMaxH(Math.max(360, window.innerHeight - 100));
+    const onResize = () => setMaxH(computeMaxNotchHeight());
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
@@ -288,7 +306,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
   //  - MIN_H garantit une fenêtre lisible même quand tout est éteint /
   //    en mode DND / search bar seule (sinon le notch deviendrait une
   //    bande ~120 px peu utilisable).
-  //  - maxH = window.innerHeight - 100, suit la workArea de l'écran
+  //  - maxH = screen.availHeight - 100, suit la workArea de l'écran
   //    principal (cf. notchWindow.ts).
   const MIN_H = 280;
   const expandedH = Math.max(
@@ -300,6 +318,18 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
     mode === 'expanded'
       ? { w: 580, h: expandedH, r: 26 }
       : { w: collapsedW, h: 34, r: 12 };
+
+  // Pousse la hauteur souhaitée de la fenêtre Electron au main, qui la borne
+  // à la taille réelle du notch (cf. notchWindow.ts). On ajoute une marge
+  // pour le box-shadow externe du notch étendu (`0 12px 30px` dans
+  // notch.css, ~42 px sous le notch) ; en collapsed l'ombre est interne
+  // (inset) donc une petite marge suffit. Le main applique la croissance
+  // tout de suite et diffère la réduction jusqu'à la fin de l'animation CSS.
+  const shadowMargin = mode === 'expanded' ? 56 : 6;
+  const desiredWindowH = Math.ceil(geom.h) + shadowMargin;
+  useEffect(() => {
+    window.notch.shell.setHeight(desiredWindowH);
+  }, [desiredWindowH]);
 
   // Masquage automatique en plein écran : on cache la chip rétractée
   // pour ne pas perturber l'utilisateur (vidéo, jeu, présentation…).

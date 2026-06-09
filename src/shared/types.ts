@@ -1749,6 +1749,16 @@ export const IpcChannel = {
   ShellFullscreenChange: 'shell:fullscreenChange',
   /** Renderer → main : informe du nouveau mode (collapsed/expanded) — sert à enregistrer Esc en global shortcut seulement quand expanded. */
   ShellModeChanged: 'shell:modeChanged',
+  /**
+   * Renderer → main : hauteur souhaitée de la fenêtre (px), par **couche**.
+   * Le main applique le max des couches : `notch` (hauteur visible du notch +
+   * marge d'ombre) et `tooltip` (bulle rich qui déborde sous le notch en
+   * collapsed, rendue en portal hors du shell). Borner la BrowserWindow à
+   * cette taille — au lieu de couvrir tout l'écran — évite que la fenêtre
+   * transparente désactive le compositing MPO de Windows (saccades système).
+   * Une hauteur `<= 0` retire la couche (overlay fermé).
+   */
+  ShellSetHeight: 'shell:setHeight',
   /** Renderer → main : quitte WinNotch proprement (déclenche before-quit + window-all-closed). */
   ShellQuit: 'shell:quit',
 
@@ -2011,6 +2021,15 @@ export interface NotchApi {
      * tout en gardant Esc libre pour les autres apps en mode collapsed.
      */
     notifyModeChanged: (mode: NotchMode) => void;
+    /**
+     * Notifie le main de la hauteur souhaitée de la fenêtre (px) pour une
+     * **couche** (`'notch'` par défaut, ou `'tooltip'` pour une bulle qui
+     * déborde sous le notch collapsed). Le main applique le max des couches
+     * et borne la BrowserWindow à cette taille (au lieu de couvrir tout
+     * l'écran) pour ne plus désactiver le compositing MPO de Windows.
+     * Croissance immédiate, réduction différée. `height <= 0` retire la couche.
+     */
+    setHeight: (height: number, layer?: string) => void;
     /** S'abonne aux requêtes de toggle (raccourci global Ctrl+Shift+Space). */
     onToggle: (cb: () => void) => () => void;
     /** S'abonne aux requêtes de collapse (blur de la fenêtre). */
