@@ -68,6 +68,9 @@ const api: NotchApi = {
     notifyModeChanged: (mode: 'collapsed' | 'expanded') => {
       ipcRenderer.send(IpcChannel.ShellModeChanged, mode);
     },
+    setHeight: (height: number) => {
+      ipcRenderer.send(IpcChannel.ShellSetHeight, height);
+    },
     onToggle: (cb: () => void) => {
       const handler = () => cb();
       ipcRenderer.on(IpcChannel.ShellToggleNotch, handler);

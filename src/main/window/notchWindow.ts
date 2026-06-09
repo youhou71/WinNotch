@@ -2,16 +2,24 @@
  * Gestion de la fenêtre Electron qui héberge le Notch.
  *
  * Stratégie : une fenêtre frameless et transparente de **largeur fixe**
- * (800 px) et de **hauteur égale à la `workArea` de l'écran principal**
- * (écran moins la barre des tâches Windows). Le notch lui-même est dessiné
- * en CSS à l'intérieur et s'anime via les transitions Chromium (width/
- * height/border-radius + courbe spring `linear()`).
+ * (800 px) dont la **hauteur épouse le notch réel** (collapsed ~40 px,
+ * expanded = hauteur du contenu + marge d'ombre). Le notch lui-même est
+ * dessiné en CSS à l'intérieur et s'anime via les transitions Chromium
+ * (width/height/border-radius + courbe spring `linear()`).
  *
- * Pourquoi prendre toute la hauteur workArea ? Le notch étendu doit pouvoir
- * grossir jusqu'à `workArea.height - 100 px` selon son contenu (cf.
- * `Notch.tsx` qui mesure le contenu réel via ResizeObserver). Comme la
- * fenêtre est transparente et passe-plat (`setIgnoreMouseEvents`), le
- * surplus de surface invisible ne gêne ni l'utilisateur ni les clics.
+ * Pourquoi ne PAS prendre toute la hauteur workArea ? Une fenêtre
+ * `transparent: true` always-on-top couvrant tout l'écran empêche Windows
+ * d'activer le MPO (Multiplane Overlay) : DWM doit recomposer de larges
+ * régions à chaque rafraîchissement, ce qui se traduit par des saccades
+ * système (curseur, scroll, vidéo) ressenties partout, sans pic CPU/GPU.
+ * On borne donc la fenêtre à la taille réelle du notch : le renderer
+ * (`Notch.tsx`) mesure son contenu via ResizeObserver et pousse la hauteur
+ * souhaitée par `shell:setHeight` ; `setNotchWindowHeight` l'applique.
+ *
+ * Timing : croissance appliquée immédiatement (le notch doit avoir la
+ * place de s'étendre avant l'animation CSS), réduction différée jusqu'à la
+ * fin de l'animation (`SHRINK_DELAY_MS`) pour ne pas clipper le notch qui
+ * rétrécit.
  *
  * Politique multi-écrans : le notch reste **ancré à l'écran principal**.
  * Il ne suit pas le curseur. La fenêtre est repositionnée et redimensionnée
@@ -27,7 +35,7 @@
  * passer la souris (`setIgnoreMouseEvents(true, { forward: true })`) et le
  * renderer demande la capture via IPC quand le curseur survole le notch.
  */
-import { BrowserWindow, screen } from 'electron';
+import { BrowserWindow, ipcMain, screen } from 'electron';
 import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
 import { IpcChannel } from '../../shared/types';
@@ -50,35 +58,109 @@ const WINDOW_ICON_PATH = is.dev
   : join(process.resourcesPath, 'icon.ico');
 
 /**
- * Largeur fixe de la fenêtre. La hauteur est déterminée dynamiquement à
- * partir de `workArea.height` (cf. `computeBounds`).
+ * Largeur fixe de la fenêtre. La hauteur est déterminée dynamiquement par
+ * le renderer via `shell:setHeight` (cf. `setNotchWindowHeight`).
  */
 export const WINDOW_WIDTH = 800;
 
-let notchWindow: BrowserWindow | null = null;
+/**
+ * Hauteur initiale au boot, avant que le renderer ne mesure le notch et
+ * ne pousse sa hauteur réelle. Couvre le notch collapsed (~34 px) + marge.
+ */
+const INITIAL_HEIGHT = 80;
 
 /**
- * Calcule la position top-center et la hauteur sur l'**écran principal**
- * Windows.
+ * Délai avant d'appliquer une **réduction** de hauteur. Doit couvrir la
+ * durée de l'animation CSS du notch (`transition: height 700ms` dans
+ * notch.css) pour ne pas couper le bas du notch pendant qu'il rétrécit.
+ */
+const SHRINK_DELAY_MS = 760;
+
+/**
+ * Seuil sous lequel un changement de hauteur est ignoré : évite un
+ * `setBounds` pour des micro-variations (±1-2 px) du contenu mesuré.
+ */
+const HEIGHT_EPSILON = 2;
+
+let notchWindow: BrowserWindow | null = null;
+
+/** Hauteur actuellement appliquée à la fenêtre (px). */
+let currentHeight = INITIAL_HEIGHT;
+
+/** Timer de réduction différée en attente (annulé si une croissance arrive). */
+let shrinkTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Calcule la position top-center sur l'**écran principal** Windows pour une
+ * hauteur donnée.
  *
  * `workArea` (et non `bounds`) respecte la position et la taille de la
- * barre des tâches Windows. La fenêtre prend toute la hauteur du
- * workArea : ainsi le notch étendu peut grossir jusqu'à
- * `window.innerHeight - 100` côté renderer sans dépasser la fenêtre.
+ * barre des tâches Windows. La fenêtre est ancrée en haut (`y = workArea.y`)
+ * et la hauteur est clampée à `workArea.height` pour ne jamais déborder de
+ * l'écran. Le notch grandit vers le bas, `y` reste donc constant.
  *
  * `screen.getPrimaryDisplay()` retourne toujours l'écran défini comme
  * "principal" dans les paramètres Windows — change si l'utilisateur le
  * modifie dans Paramètres → Système → Affichage.
  */
-function computeBounds(): Electron.Rectangle {
+function computeBounds(height: number): Electron.Rectangle {
   const display = screen.getPrimaryDisplay();
-  const { x, y, width, height } = display.workArea;
+  const { x, y, width, height: workH } = display.workArea;
   return {
     x: Math.round(x + (width - WINDOW_WIDTH) / 2),
     y,
     width: WINDOW_WIDTH,
-    height,
+    height: Math.max(1, Math.min(Math.round(height), workH)),
   };
+}
+
+/** Applique immédiatement une hauteur à la fenêtre et mémorise l'état. */
+function applyHeight(height: number): void {
+  if (!notchWindow || notchWindow.isDestroyed()) return;
+  const bounds = computeBounds(height);
+  currentHeight = bounds.height;
+  notchWindow.setBounds(bounds);
+}
+
+/**
+ * Redimensionne la fenêtre à la hauteur souhaitée par le renderer.
+ *
+ * - **Croissance** (target > actuel) : appliquée tout de suite — le notch
+ *   doit disposer de la place avant que son animation CSS ne le fasse
+ *   grandir, sinon le bas est clippé.
+ * - **Réduction** (target < actuel) : différée de `SHRINK_DELAY_MS` pour
+ *   laisser l'animation de rétraction se jouer dans une fenêtre encore
+ *   assez grande. Toute nouvelle demande annule le timer en attente : une
+ *   croissance pendant la temporisation reprend la main immédiatement.
+ */
+export function setNotchWindowHeight(height: number): void {
+  if (!notchWindow || notchWindow.isDestroyed()) return;
+  if (shrinkTimer) {
+    clearTimeout(shrinkTimer);
+    shrinkTimer = null;
+  }
+  const target = computeBounds(height).height;
+  if (Math.abs(target - currentHeight) <= HEIGHT_EPSILON) return;
+  if (target > currentHeight) {
+    applyHeight(target);
+  } else {
+    shrinkTimer = setTimeout(() => {
+      shrinkTimer = null;
+      applyHeight(target);
+    }, SHRINK_DELAY_MS);
+  }
+}
+
+/**
+ * Enregistre le handler IPC `shell:setHeight`. À appeler avant
+ * `createNotchWindow` (comme les autres `register*Ipc`).
+ */
+export function registerNotchWindowIpc(): void {
+  ipcMain.on(IpcChannel.ShellSetHeight, (_event, height: number) => {
+    if (typeof height === 'number' && Number.isFinite(height)) {
+      setNotchWindowHeight(height);
+    }
+  });
 }
 
 /** Accesseur lecture seule pour les modules qui ont besoin de la fenêtre. */
@@ -103,7 +185,8 @@ export function getNotchWindow(): BrowserWindow | null {
  *    permettre le hit-test (voir useHitTest)
  */
 export function createNotchWindow(): BrowserWindow {
-  const bounds = computeBounds();
+  currentHeight = INITIAL_HEIGHT;
+  const bounds = computeBounds(INITIAL_HEIGHT);
 
   notchWindow = new BrowserWindow({
     ...bounds,
@@ -171,12 +254,13 @@ export function createNotchWindow(): BrowserWindow {
  * Replace la fenêtre top-center de l'écran principal Windows.
  *
  * Appelée à chaque événement écran (changement de primary display,
- * branchement, débranchement, modif DPI/résolution).
+ * branchement, débranchement, modif DPI/résolution). Préserve la hauteur
+ * courante (pilotée par le contenu) en la re-clampant au nouveau workArea
+ * — un écran plus petit peut imposer de réduire le notch étendu.
  */
 export function repositionToPrimaryScreen(): void {
   if (!notchWindow) return;
-  const bounds = computeBounds();
-  notchWindow.setBounds(bounds);
+  applyHeight(currentHeight);
 }
 
 /**
