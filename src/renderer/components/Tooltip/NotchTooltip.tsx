@@ -18,6 +18,7 @@ import {
   isValidElement,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -26,6 +27,10 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+
+// Marge sous le bas mesuré de la bulle pour englober son box-shadow
+// (`0 6px 24px` dans tooltip.css) quand on dimensionne la fenêtre.
+const TOOLTIP_SHADOW_MARGIN_PX = 28;
 
 interface Props {
   /** Contenu rendu dans la bulle tooltip — JSX libre. */
@@ -50,6 +55,7 @@ export function NotchTooltip({ content, children, delayMs = 250, accentStyle }: 
   const [show, setShow] = useState(false);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  const bubbleRef = useRef<HTMLDivElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const compute = useCallback(() => {
@@ -85,6 +91,43 @@ export function NotchTooltip({ content, children, delayMs = 250, accentStyle }: 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  // La bulle est rendue en portal (position fixed) et déborde sous le notch
+  // collapsed. Or la fenêtre Electron épouse désormais la hauteur du notch
+  // (cf. notchWindow.ts) → sans agrandir la fenêtre, le bas de la bulle est
+  // clippé par son bord. Tant qu'elle est affichée, on pousse la couche
+  // 'tooltip' = bas réel mesuré de la bulle + marge d'ombre (re-mesure si la
+  // position ou le contenu changent). Le main prend le max des couches
+  // (croissance immédiate) → la fenêtre s'agrandit dès l'apparition.
+  //
+  // On ne touche la couche QUE quand la tooltip est affichée : la couche
+  // 'tooltip' est partagée par toutes les chips (un seul survol à la fois).
+  // Si une chip masquée poussait 0 à chaque re-render (ex. sparkline système
+  // qui re-render chaque seconde), elle écraserait la réserve de la chip
+  // dont la tooltip est ouverte → fenêtre qui rétrécit sous la bulle.
+  useLayoutEffect(() => {
+    if (!show) return;
+    const bottom = bubbleRef.current?.getBoundingClientRect().bottom ?? 0;
+    window.notch.shell.setHeight(
+      Math.ceil(bottom) + TOOLTIP_SHADOW_MARGIN_PX,
+      'tooltip',
+    );
+  }, [show, pos, content]);
+
+  // Libère la réserve à la fermeture (transition show → false) et au mount.
+  // Dépend de `show` seul → aucun spam IPC sur les re-render de contenu.
+  useEffect(() => {
+    if (show) return;
+    window.notch.shell.setHeight(0, 'tooltip');
+  }, [show]);
+
+  // Filet de sécurité : libère aussi si le composant se démonte alors qu'une
+  // tooltip est ouverte (passage collapsed → expanded, chip retirée…).
+  useEffect(() => {
+    return () => {
+      window.notch.shell.setHeight(0, 'tooltip');
     };
   }, []);
 
@@ -133,6 +176,7 @@ export function NotchTooltip({ content, children, delayMs = 250, accentStyle }: 
       {show && pos
         ? createPortal(
             <div
+              ref={bubbleRef}
               className="notch-tooltip"
               style={{ left: pos.left, top: pos.top, ...(accentStyle ?? {}) }}
               role="tooltip"

@@ -91,6 +91,16 @@ let currentHeight = INITIAL_HEIGHT;
 let shrinkTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
+ * Hauteurs demandées par **couche** ; la fenêtre prend le max.
+ *  - `notch`   : hauteur visible du notch + marge d'ombre (toujours présente).
+ *  - `tooltip` : bulle rich d'une chip qui déborde sous le notch en collapsed
+ *    (rendue en portal hors du shell). Sans cette couche, une tooltip plus
+ *    haute que le notch collapsed serait clippée par le bord de la fenêtre.
+ * Les overlays transitoires retirent leur couche (hauteur 0) à la fermeture.
+ */
+const layerHeights = new Map<string, number>([['notch', INITIAL_HEIGHT]]);
+
+/**
  * Calcule la position top-center sur l'**écran principal** Windows pour une
  * hauteur donnée.
  *
@@ -122,24 +132,33 @@ function applyHeight(height: number): void {
   notchWindow.setBounds(bounds);
 }
 
+/** Hauteur cible = la couche la plus haute demandée. */
+function targetHeight(): number {
+  let max = 0;
+  for (const h of layerHeights.values()) {
+    if (h > max) max = h;
+  }
+  return max;
+}
+
 /**
- * Redimensionne la fenêtre à la hauteur souhaitée par le renderer.
+ * (Ré)applique la hauteur cible (max des couches) à la fenêtre.
  *
- * - **Croissance** (target > actuel) : appliquée tout de suite — le notch
- *   doit disposer de la place avant que son animation CSS ne le fasse
- *   grandir, sinon le bas est clippé.
- * - **Réduction** (target < actuel) : différée de `SHRINK_DELAY_MS` pour
- *   laisser l'animation de rétraction se jouer dans une fenêtre encore
- *   assez grande. Toute nouvelle demande annule le timer en attente : une
+ * - **Croissance** (cible > actuel) : appliquée tout de suite — le contenu
+ *   (notch qui s'étend, tooltip qui apparaît) doit disposer de la place
+ *   avant d'être peint, sinon son bas est clippé.
+ * - **Réduction** (cible < actuel) : différée de `SHRINK_DELAY_MS` pour
+ *   laisser l'animation CSS du notch se jouer dans une fenêtre encore assez
+ *   grande. Toute nouvelle demande annule le timer en attente : une
  *   croissance pendant la temporisation reprend la main immédiatement.
  */
-export function setNotchWindowHeight(height: number): void {
+function reconcileHeight(): void {
   if (!notchWindow || notchWindow.isDestroyed()) return;
   if (shrinkTimer) {
     clearTimeout(shrinkTimer);
     shrinkTimer = null;
   }
-  const target = computeBounds(height).height;
+  const target = computeBounds(targetHeight()).height;
   if (Math.abs(target - currentHeight) <= HEIGHT_EPSILON) return;
   if (target > currentHeight) {
     applyHeight(target);
@@ -152,15 +171,35 @@ export function setNotchWindowHeight(height: number): void {
 }
 
 /**
+ * Enregistre (ou retire) la hauteur souhaitée pour une couche, puis
+ * réconcilie. `height <= 0` retire la couche (overlay fermé). La couche
+ * `notch` n'est jamais retirée — elle garde un plancher si on lui pousse 0.
+ */
+export function setNotchWindowHeight(height: number, layer = 'notch'): void {
+  if (height > 0) {
+    layerHeights.set(layer, height);
+  } else {
+    layerHeights.delete(layer);
+  }
+  if (!layerHeights.has('notch')) {
+    layerHeights.set('notch', INITIAL_HEIGHT);
+  }
+  reconcileHeight();
+}
+
+/**
  * Enregistre le handler IPC `shell:setHeight`. À appeler avant
  * `createNotchWindow` (comme les autres `register*Ipc`).
  */
 export function registerNotchWindowIpc(): void {
-  ipcMain.on(IpcChannel.ShellSetHeight, (_event, height: number) => {
-    if (typeof height === 'number' && Number.isFinite(height)) {
-      setNotchWindowHeight(height);
-    }
-  });
+  ipcMain.on(
+    IpcChannel.ShellSetHeight,
+    (_event, height: number, layer?: string) => {
+      if (typeof height === 'number' && Number.isFinite(height)) {
+        setNotchWindowHeight(height, typeof layer === 'string' ? layer : 'notch');
+      }
+    },
+  );
 }
 
 /** Accesseur lecture seule pour les modules qui ont besoin de la fenêtre. */
@@ -186,6 +225,8 @@ export function getNotchWindow(): BrowserWindow | null {
  */
 export function createNotchWindow(): BrowserWindow {
   currentHeight = INITIAL_HEIGHT;
+  layerHeights.clear();
+  layerHeights.set('notch', INITIAL_HEIGHT);
   const bounds = computeBounds(INITIAL_HEIGHT);
 
   notchWindow = new BrowserWindow({

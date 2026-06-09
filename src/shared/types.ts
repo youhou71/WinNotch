@@ -1750,11 +1750,13 @@ export const IpcChannel = {
   /** Renderer → main : informe du nouveau mode (collapsed/expanded) — sert à enregistrer Esc en global shortcut seulement quand expanded. */
   ShellModeChanged: 'shell:modeChanged',
   /**
-   * Renderer → main : hauteur souhaitée de la fenêtre (px) = hauteur visible
-   * du notch + marge d'ombre. Le main redimensionne la BrowserWindow au plus
-   * juste au lieu de couvrir toute la hauteur de l'écran. Une fenêtre
-   * transparente plein écran désactive le compositing MPO de Windows (saccades
-   * système) ; la borner à la taille réelle du notch lève ce coût.
+   * Renderer → main : hauteur souhaitée de la fenêtre (px), par **couche**.
+   * Le main applique le max des couches : `notch` (hauteur visible du notch +
+   * marge d'ombre) et `tooltip` (bulle rich qui déborde sous le notch en
+   * collapsed, rendue en portal hors du shell). Borner la BrowserWindow à
+   * cette taille — au lieu de couvrir tout l'écran — évite que la fenêtre
+   * transparente désactive le compositing MPO de Windows (saccades système).
+   * Une hauteur `<= 0` retire la couche (overlay fermé).
    */
   ShellSetHeight: 'shell:setHeight',
   /** Renderer → main : quitte WinNotch proprement (déclenche before-quit + window-all-closed). */
@@ -2020,13 +2022,14 @@ export interface NotchApi {
      */
     notifyModeChanged: (mode: NotchMode) => void;
     /**
-     * Notifie le main de la hauteur souhaitée de la fenêtre (px) = hauteur
-     * visible du notch + marge d'ombre. Le main borne la BrowserWindow à
-     * cette taille (au lieu de couvrir tout l'écran) pour ne plus désactiver
-     * le compositing MPO de Windows. Croissance appliquée immédiatement,
-     * réduction différée jusqu'à la fin de l'animation CSS du notch.
+     * Notifie le main de la hauteur souhaitée de la fenêtre (px) pour une
+     * **couche** (`'notch'` par défaut, ou `'tooltip'` pour une bulle qui
+     * déborde sous le notch collapsed). Le main applique le max des couches
+     * et borne la BrowserWindow à cette taille (au lieu de couvrir tout
+     * l'écran) pour ne plus désactiver le compositing MPO de Windows.
+     * Croissance immédiate, réduction différée. `height <= 0` retire la couche.
      */
-    setHeight: (height: number) => void;
+    setHeight: (height: number, layer?: string) => void;
     /** S'abonne aux requêtes de toggle (raccourci global Ctrl+Shift+Space). */
     onToggle: (cb: () => void) => () => void;
     /** S'abonne aux requêtes de collapse (blur de la fenêtre). */
