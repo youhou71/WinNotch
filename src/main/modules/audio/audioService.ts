@@ -5,25 +5,48 @@
  *  - les 4 handlers `invoke` consommés par le renderer (get/set volume,
  *    set muted, set device)
  *  - un polling toutes les 2 s pour détecter les changements externes
- *    (touches Volume Windows, sleep, branchement d'un casque, etc.)
+ *    (touches Volume Windows, sleep, etc.)
  *  - un push événementiel `audio:change` quand l'état diffère du cache
  *
+ * Budget spawns (audit perf P2) — le polling spawnait 3 process/cycle
+ * (loudness ×2 + SoundVolumeView + fichier temp), soit ~90 process/min en
+ * continu, chacun scanné par l'antivirus. Désormais :
+ *  - le polling ne lit QUE volume+muted via UN spawn (`getVolumeInfo`)
+ *  - la liste des devices (SoundVolumeView + fichier temp) n'est lue qu'à
+ *    la demande : ouverture du panneau audio (`AudioGetState`) avec un
+ *    cache TTL, et après un changement de device (`AudioSetDevice`).
+ *    Un branchement de casque externe est donc reflété au prochain
+ *    `AudioGetState` — suffisant, la liste n'est visible que panneau ouvert.
+ *  - les lectures concurrentes sont mutualisées (garde in-flight, pattern
+ *    de systemService) : plus d'empilement de process si le système ralentit
+ *    (le timeout SVV de 8 s pouvait empiler jusqu'à 4 instances).
+ *  - le polling est suspendu pendant la mise en veille (powerMonitor).
+ *
  * L'état est mis en cache pour pouvoir réagir gracieusement aux échecs
- * partiels : si une seule des trois sources (volume / muted / devices)
- * échoue à un cycle, on conserve la dernière valeur connue pour les autres.
+ * partiels : si une source (volume / devices) échoue à un cycle, on
+ * conserve la dernière valeur connue pour les autres.
  */
-import { ipcMain } from 'electron';
-import { IpcChannel, type AudioState } from '../../../shared/types';
+import { ipcMain, powerMonitor } from 'electron';
+import { IpcChannel, type AudioState, type AudioDevice } from '../../../shared/types';
 import { getNotchWindow } from '../../window/notchWindow';
-import { getVolume, setVolume, getMuted, setMuted } from './volume';
+import { getVolumeInfo, setVolume, setMuted, type VolumeInfo } from './volume';
 import { listOutputDevices, setDefaultOutput } from './devices';
 
 /**
- * Intervalle du polling. 2 s est un compromis entre réactivité (l'utilisateur
- * voit son volume bouger après avoir appuyé sur les touches média) et coût
- * (chaque cycle spawne 2 child_process : loudness + SVV).
+ * Intervalle du polling volume/muted. 2 s est un compromis entre réactivité
+ * (l'utilisateur voit son volume bouger après avoir appuyé sur les touches
+ * média) et coût (un spawn léger par cycle).
  */
 const POLL_INTERVAL_MS = 2000;
+
+/**
+ * Durée de validité du cache devices. À l'ouverture du panneau audio, une
+ * liste plus jeune que ce TTL est resservie telle quelle (zéro spawn SVV) ;
+ * plus vieille, elle est relue. 30 s suffit : un changement de périphérique
+ * pendant que le panneau est ouvert passe par `AudioSetDevice` qui force
+ * le refresh.
+ */
+const DEVICES_TTL_MS = 30_000;
 
 /** Dernier état connu — sert de fallback en cas d'échec partiel. */
 let cached: AudioState = {
@@ -34,25 +57,66 @@ let cached: AudioState = {
 };
 
 let pollTimer: NodeJS.Timeout | null = null;
+/** True entre les events powerMonitor suspend → resume : gèle le polling. */
+let suspended = false;
+
+/** Timestamp de la dernière lecture devices réussie (epoch ms, 0 = jamais). */
+let devicesFetchedAt = 0;
 
 /**
- * Lit l'état audio complet en parallèle. `Promise.allSettled` garantit
- * qu'une erreur sur une source n'empêche pas les autres de retourner
- * leur valeur (ex. SVV peut être en circuit-breaker pendant que loudness
- * fonctionne très bien).
+ * Gardes anti-réentrance : une seule lecture volume et une seule lecture
+ * devices en vol à la fois. Les appelants concurrents (tick du polling +
+ * invokes IPC simultanés) partagent la même promesse au lieu d'empiler
+ * des child_process.
  */
-async function readState(): Promise<AudioState> {
-  const results = await Promise.allSettled([
-    getVolume(),
-    getMuted(),
-    listOutputDevices(),
+let volumeInFlight: Promise<VolumeInfo> | null = null;
+let devicesInFlight: Promise<AudioDevice[]> | null = null;
+
+function readVolumeInfo(): Promise<VolumeInfo> {
+  if (!volumeInFlight) {
+    volumeInFlight = getVolumeInfo().finally(() => {
+      volumeInFlight = null;
+    });
+  }
+  return volumeInFlight;
+}
+
+function readDevices(): Promise<AudioDevice[]> {
+  if (!devicesInFlight) {
+    devicesInFlight = listOutputDevices()
+      .then((devices) => {
+        devicesFetchedAt = Date.now();
+        return devices;
+      })
+      .finally(() => {
+        devicesInFlight = null;
+      });
+  }
+  return devicesInFlight;
+}
+
+function devicesCacheStale(): boolean {
+  return Date.now() - devicesFetchedAt > DEVICES_TTL_MS;
+}
+
+/**
+ * Lit l'état audio. `Promise.allSettled` garantit qu'une erreur sur une
+ * source n'écrase pas les valeurs de l'autre (ex. SVV peut être en
+ * circuit-breaker pendant que loudness fonctionne très bien).
+ *
+ * @param withDevices relit la liste des devices via SoundVolumeView
+ *                    (coûteux : spawn + fichier temp). Sinon, le cache
+ *                    devices est resservi tel quel.
+ */
+async function readState(withDevices: boolean): Promise<AudioState> {
+  const [volRes, devRes] = await Promise.allSettled([
+    readVolumeInfo(),
+    withDevices ? readDevices() : Promise.resolve(cached.devices),
   ]);
-  const [volRes, mutedRes, devRes] = results;
-  if (volRes.status === 'rejected') console.error('[audio] getVolume rejected:', volRes.reason);
-  if (mutedRes.status === 'rejected') console.error('[audio] getMuted rejected:', mutedRes.reason);
+  if (volRes.status === 'rejected') console.error('[audio] getVolumeInfo rejected:', volRes.reason);
   if (devRes.status === 'rejected') console.error('[audio] listOutputDevices rejected:', devRes.reason);
-  const level = volRes.status === 'fulfilled' ? volRes.value : cached.level;
-  const muted = mutedRes.status === 'fulfilled' ? mutedRes.value : cached.muted;
+  const level = volRes.status === 'fulfilled' ? volRes.value.level : cached.level;
+  const muted = volRes.status === 'fulfilled' ? volRes.value.muted : cached.muted;
   const devices = devRes.status === 'fulfilled' ? devRes.value : cached.devices;
   const current = devices.find((d) => d.isDefault) ?? null;
   return {
@@ -76,8 +140,8 @@ function broadcast(state: AudioState): void {
  * comparés par longueur ; un swap simultané de deux devices serait raté
  * mais reste improbable).
  */
-async function refresh(): Promise<AudioState> {
-  const next = await readState();
+async function refresh(opts: { withDevices?: boolean } = {}): Promise<AudioState> {
+  const next = await readState(opts.withDevices ?? false);
   const changed =
     next.level !== cached.level ||
     next.muted !== cached.muted ||
@@ -96,8 +160,10 @@ async function refresh(): Promise<AudioState> {
  * réponse, sans attendre le prochain polling.
  */
 export function registerAudioIpc(): void {
+  // Appelé à l'ouverture du panneau audio : seul endroit (avec SetDevice)
+  // où la liste des devices est rafraîchie, sous réserve du TTL.
   ipcMain.handle(IpcChannel.AudioGetState, async () => {
-    return refresh();
+    return refresh({ withDevices: devicesCacheStale() });
   });
 
   ipcMain.handle(IpcChannel.AudioSetVolume, async (_e, level: number) => {
@@ -112,17 +178,33 @@ export function registerAudioIpc(): void {
 
   ipcMain.handle(IpcChannel.AudioSetDevice, async (_e, id: string) => {
     await setDefaultOutput(id);
-    return refresh();
+    // Refresh forcé (bypass TTL) : c'est précisément `isDefault` qui vient
+    // de changer dans la liste.
+    return refresh({ withDevices: true });
   });
 }
 
-/** Démarre le polling 2 s. Idempotent. */
+/** Démarre le polling volume/muted. Idempotent. */
 export function startAudioPolling(): void {
   if (pollTimer) return;
-  void refresh();
+  // Premier cycle avec devices : le panneau doit avoir une liste prête
+  // dès la première ouverture.
+  void refresh({ withDevices: true });
   pollTimer = setInterval(() => {
+    if (suspended) return;
     void refresh();
   }, POLL_INTERVAL_MS);
+
+  // Gèle le polling pendant la veille : au réveil, un refresh immédiat
+  // (devices compris — un dock/casque a pu apparaître pendant la veille)
+  // resynchronise l'état sans attendre le prochain tick.
+  powerMonitor.on('suspend', () => {
+    suspended = true;
+  });
+  powerMonitor.on('resume', () => {
+    suspended = false;
+    void refresh({ withDevices: true });
+  });
 }
 
 /** Arrête le polling. Appelé à la fermeture de l'app. */

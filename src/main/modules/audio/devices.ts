@@ -21,7 +21,8 @@
  */
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, readFileSync, unlinkSync } from 'fs';
+import { existsSync } from 'fs';
+import { readFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
@@ -35,12 +36,19 @@ const execFileAsync = promisify(execFile);
  * Résout le chemin du binaire SVV selon l'environnement.
  * En dev : `<repo>/resources/`. En prod : `process.resourcesPath` (où
  * electron-builder copie le contenu de `resources/` via `extraResources`).
+ * Chemin et existence mis en cache au premier appel — le binaire ne bouge
+ * pas pendant la vie du process, inutile de re-stat le disque à chaque
+ * lecture (les appels sync sur le thread principal sont à économiser).
  */
-function resolveSvvPath(): string {
-  if (is.dev) {
-    return join(app.getAppPath(), 'resources', 'SoundVolumeView.exe');
+let svvPathCache: { path: string; exists: boolean } | null = null;
+function resolveSvv(): { path: string; exists: boolean } {
+  if (!svvPathCache) {
+    const path = is.dev
+      ? join(app.getAppPath(), 'resources', 'SoundVolumeView.exe')
+      : join(process.resourcesPath, 'SoundVolumeView.exe');
+    svvPathCache = { path, exists: existsSync(path) };
   }
-  return join(process.resourcesPath, 'SoundVolumeView.exe');
+  return svvPathCache;
 }
 
 /**
@@ -91,14 +99,20 @@ const SVV_MAX_FAILURES = 3;
  * (typique pour le dossier `Temp` sous un compte avec accents).
  * On tente donc des dossiers neutres avant le tmpdir par défaut.
  */
+let tempDirCache: string | null = null;
 function pickTempDir(): string {
+  if (tempDirCache) return tempDirCache;
   const candidates = ['C:\\Windows\\Temp', 'C:\\Temp', tmpdir()];
   for (const c of candidates) {
     try {
-      if (existsSync(c)) return c;
+      if (existsSync(c)) {
+        tempDirCache = c;
+        return c;
+      }
     } catch { /* ignore */ }
   }
-  return tmpdir();
+  tempDirCache = tmpdir();
+  return tempDirCache;
 }
 
 /**
@@ -113,15 +127,15 @@ async function runSvvJson(): Promise<SvvRow[]> {
   if (svvFailCount >= SVV_MAX_FAILURES) {
     return [];
   }
-  const svvPath = resolveSvvPath();
-  if (!existsSync(svvPath)) {
-    throw new Error(`SoundVolumeView.exe introuvable à ${svvPath}`);
+  const svv = resolveSvv();
+  if (!svv.exists) {
+    throw new Error(`SoundVolumeView.exe introuvable à ${svv.path}`);
   }
   // SVV étant un binaire GUI, on ne peut pas se fier à son stdout —
   // on passe par un fichier temporaire JSON.
   const tmpFile = join(pickTempDir(), `winnotch-svv-${randomUUID()}.json`);
   try {
-    await execFileAsync(svvPath, ['/sjson', tmpFile], {
+    await execFileAsync(svv.path, ['/sjson', tmpFile], {
       windowsHide: true,
       timeout: 8000,
     });
@@ -132,12 +146,18 @@ async function runSvvJson(): Promise<SvvRow[]> {
         `[audio/devices] SoundVolumeView a échoué ${SVV_MAX_FAILURES} fois — désactivation. Les périphériques resteront vides.`,
       );
     }
-    try { unlinkSync(tmpFile); } catch { /* ignore */ }
+    await unlink(tmpFile).catch(() => { /* ignore */ });
     throw err;
   }
-  if (!existsSync(tmpFile)) return [];
   try {
-    const buf = readFileSync(tmpFile);
+    // `readFile` async : ne bloque plus l'event loop du main (le JSON SVV
+    // peut faire plusieurs centaines de Ko). ENOENT = SVV n'a rien écrit.
+    let buf: Buffer;
+    try {
+      buf = await readFile(tmpFile);
+    } catch {
+      return [];
+    }
     if (buf.length === 0) return [];
     let text: string;
     // SVV écrit en UTF-16 LE avec BOM (FF FE).
@@ -166,7 +186,7 @@ async function runSvvJson(): Promise<SvvRow[]> {
     if (!cleaned) return [];
     return JSON.parse(cleaned) as SvvRow[];
   } finally {
-    try { unlinkSync(tmpFile); } catch { /* ignore */ }
+    await unlink(tmpFile).catch(() => { /* ignore */ });
   }
 }
 
@@ -219,10 +239,10 @@ export async function listOutputDevices(): Promise<AudioDevice[]> {
  * le changement.
  */
 export async function setDefaultOutput(id: string): Promise<void> {
-  const svvPath = resolveSvvPath();
-  if (!existsSync(svvPath)) return;
+  const svv = resolveSvv();
+  if (!svv.exists) return;
   try {
-    await execFileAsync(svvPath, ['/SetDefault', id, 'all'], {
+    await execFileAsync(svv.path, ['/SetDefault', id, 'all'], {
       windowsHide: true,
     });
   } catch {

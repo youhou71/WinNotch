@@ -88,7 +88,6 @@ extraResources:
 #    Validé chargeable tel quel sous l'ABI Electron — pas de rebuild.
 #  - better-sqlite3 : prebuild Electron déjà fourni via prebuild-install.
 #  - loudness : pas natif (wrappe PowerShell).
-#  - node-global-key-listener : .exe externe (pas natif Node).
 #
 # Aucun n'a besoin de rebuild contre l'ABI Electron. Si un futur module
 # natif l'exige, lancer manuellement `npm run rebuild-natives` avant
@@ -99,7 +98,6 @@ asar: true
 asarUnpack:
   - "**/node_modules/better-sqlite3/**"
   - "**/node_modules/loudness/**"
-  - "**/node_modules/node-global-key-listener/**"
   - "**/node_modules/@coooookies/windows-smtc-monitor/**"
   - "**/node_modules/@nut-tree-fork/libnut-win32/**"
 

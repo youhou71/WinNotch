@@ -1,8 +1,9 @@
 /**
  * Hook qui reflète l'état du mode Peek (Alt maintenu).
  *
- * Le main process capture Alt globalement via `node-global-key-listener`
- * et émet l'événement `peek:change` sur IPC. Ce hook s'y abonne pour
+ * Le main process détecte Alt via le polling `GetAsyncKeyState` du poller
+ * PowerShell résident (cf. altPeek.ts + fullscreenDetector.ts) et émet
+ * l'événement `peek:change` sur IPC. Ce hook s'y abonne pour
  * fournir un booléen exploitable côté React (ex. appliquer la classe CSS
  * `.is-peeking` qui passe le notch à opacité 0.15 + pointer-events:none).
  */
