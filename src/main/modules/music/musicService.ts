@@ -4,8 +4,11 @@
  * Centralise :
  *  - les 4 handlers `invoke` (get state, play/pause, next, previous)
  *  - le monitor SMTC qui push les changements en event-driven (pas de polling)
- *  - un timer doux 1 s qui relit SMTC pour détecter les seeks / dérives
- *    (le scrubber lui-même est animé côté renderer via rAF, pas par ce tick)
+ *
+ * La détection des seeks / dérives vit dans le WORKER (smtcWorker.ts,
+ * tick 1 s qui n'envoie que sur changement réel) — l'ancien tick 1 s de
+ * ce service ne faisait que relire le cache déjà alimenté par les push du
+ * worker : purement redondant, supprimé à l'audit perf P10.
  *
  * Le contrôle se fait via les touches média virtuelles (cf. mediaKeys.ts),
  * pas via l'API SMTC qui est read-only dans ce package.
@@ -21,9 +24,6 @@ import {
 } from './smtc';
 import { sendPlayPause, sendNext, sendPrevious } from './mediaKeys';
 
-/** Intervalle de relecture SMTC pour détecter seek / dérive. */
-const TIMELINE_TICK_MS = 1000;
-
 /**
  * Seuil (s) au-delà duquel un écart entre position observée et position
  * extrapolée depuis l'anchor est considéré comme un seek manuel et
@@ -32,7 +32,6 @@ const TIMELINE_TICK_MS = 1000;
 const SEEK_THRESHOLD_SEC = 2;
 
 let cached: MusicState = EMPTY_MUSIC_STATE;
-let tickTimer: NodeJS.Timeout | null = null;
 
 /** Push asynchrone d'un MusicState au renderer. */
 function broadcast(state: MusicState): void {
@@ -70,8 +69,8 @@ function update(next: MusicState): void {
 }
 
 /**
- * Enregistre les 4 handlers IPC + démarre SMTC + démarre le tick de
- * relecture (utilisé uniquement pour détecter seek / dérive).
+ * Enregistre les 4 handlers IPC + démarre SMTC. La détection seek/dérive
+ * est portée par le tick du worker.
  */
 export function registerMusicIpc(): void {
   // Démarrage du monitor SMTC. Le callback met à jour le cache et push
@@ -79,13 +78,6 @@ export function registerMusicIpc(): void {
   initSmtcMonitor((state) => {
     update(state);
   });
-
-  // Tick de relecture : sert uniquement à détecter un seek manuel quand
-  // l'app source (ex. Spotify) ne notifie pas via timeline-changed. Pas
-  // d'impact visuel direct — l'UI est animée côté renderer.
-  tickTimer = setInterval(() => {
-    update(readMusicState());
-  }, TIMELINE_TICK_MS);
 
   ipcMain.handle(IpcChannel.MusicGetState, async () => {
     return readMusicState();
@@ -109,11 +101,7 @@ export function registerMusicIpc(): void {
   });
 }
 
-/** Arrête le tick + démonte le monitor SMTC. */
+/** Démonte le monitor SMTC. */
 export function stopMusic(): void {
-  if (tickTimer) {
-    clearInterval(tickTimer);
-    tickTimer = null;
-  }
   disposeSmtcMonitor();
 }
