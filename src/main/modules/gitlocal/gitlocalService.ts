@@ -97,12 +97,61 @@ function broadcast(): void {
  * `error` sur l'objet — jamais throw, pour qu'un repo cassé n'empêche
  * pas les autres de s'afficher.
  */
+/**
+ * Variables d'environnement que simple-git refuse de transmettre à git
+ * (`blockUnsafeOperationsPlugin` — elles permettent l'exécution de commandes
+ * arbitraires : éditeur, pager, ssh…). Passer `process.env` tel quel à
+ * `.env()` fait donc échouer TOUS les repos dès que l'utilisateur a un
+ * `EDITOR` défini dans son environnement. On les retire : un `git status`
+ * en lecture seule n'ouvre ni éditeur, ni pager, ni connexion ssh.
+ * Liste alignée sur `@simple-git/argv-parser` (clés comparées en lowercase).
+ */
+const UNSAFE_GIT_ENV_KEYS = new Set([
+  'editor',
+  'pager',
+  'prefix',
+  'git_askpass',
+  'ssh_askpass',
+  'git_config',
+  'git_config_count',
+  'git_config_global',
+  'git_config_system',
+  'git_editor',
+  'git_sequence_editor',
+  'git_exec_path',
+  'git_external_diff',
+  'git_pager',
+  'git_proxy_command',
+  'git_template_dir',
+  'git_ssh',
+  'git_ssh_command',
+]);
+
+/**
+ * Environnement passé aux `git status` : `process.env` épuré des clés
+ * bloquées + `GIT_OPTIONAL_LOCKS=0`. Calculé une fois (l'environnement du
+ * process ne change pas en cours de vie).
+ */
+let gitEnvCache: NodeJS.ProcessEnv | null = null;
+function gitEnv(): NodeJS.ProcessEnv {
+  if (!gitEnvCache) {
+    const env: NodeJS.ProcessEnv = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (UNSAFE_GIT_ENV_KEYS.has(key.toLowerCase())) continue;
+      env[key] = value;
+    }
+    // git status en lecture seule ne prend pas le verrou d'index — pas de
+    // contention avec un `git` que l'utilisateur lance en parallèle dans
+    // le repo (et pas d'écriture disque).
+    env.GIT_OPTIONAL_LOCKS = '0';
+    gitEnvCache = env;
+  }
+  return gitEnvCache;
+}
+
 async function readRepoStatus(path: string): Promise<GitLocalRepo> {
   const name = basename(path);
-  // GIT_OPTIONAL_LOCKS=0 : git status en lecture seule ne prend pas le
-  // verrou d'index — pas de contention avec un `git` que l'utilisateur
-  // lance en parallèle dans le repo (et pas d'écriture disque).
-  const git = simpleGit(path).env({ ...process.env, GIT_OPTIONAL_LOCKS: '0' });
+  const git = simpleGit(path).env(gitEnv());
   try {
     // `--untracked-files=normal` : les dossiers untracked comptent comme UNE
     // entrée au lieu d'être énumérés fichier par fichier (le `-u` par défaut
