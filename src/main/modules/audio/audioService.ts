@@ -72,6 +72,33 @@ let devicesFetchedAt = 0;
 let volumeInFlight: Promise<VolumeInfo> | null = null;
 let devicesInFlight: Promise<AudioDevice[]> | null = null;
 
+/**
+ * Coalescence latest-wins des écritures de volume (défense en profondeur
+ * derrière le throttle du renderer) : pendant qu'un spawn `setVolume` est
+ * en vol, les nouvelles demandes ne font que remplacer la cible. Au retour,
+ * un seul spawn supplémentaire applique la dernière valeur demandée. Une
+ * rafale de N demandes coûte donc au plus 2 spawns sérialisés au lieu de N
+ * concurrents.
+ */
+let pendingVolume: number | null = null;
+let setVolumeDrain: Promise<void> | null = null;
+
+function setVolumeCoalesced(level: number): Promise<void> {
+  pendingVolume = level;
+  if (!setVolumeDrain) {
+    setVolumeDrain = (async () => {
+      while (pendingVolume !== null) {
+        const target = pendingVolume;
+        pendingVolume = null;
+        await setVolume(target);
+      }
+    })().finally(() => {
+      setVolumeDrain = null;
+    });
+  }
+  return setVolumeDrain;
+}
+
 function readVolumeInfo(): Promise<VolumeInfo> {
   if (!volumeInFlight) {
     volumeInFlight = getVolumeInfo().finally(() => {
@@ -167,8 +194,15 @@ export function registerAudioIpc(): void {
   });
 
   ipcMain.handle(IpcChannel.AudioSetVolume, async (_e, level: number) => {
-    await setVolume(level);
-    return refresh();
+    await setVolumeCoalesced(level);
+    // Pas de relecture : le setter vient d'appliquer la valeur (clamp
+    // identique à celui de setVolume), rien d'autre n'a changé. Le polling
+    // 2 s réconciliera si Windows a ajusté différemment.
+    cached = {
+      ...cached,
+      level: Math.max(0, Math.min(100, Math.round(level))),
+    };
+    return cached;
   });
 
   ipcMain.handle(IpcChannel.AudioSetMuted, async (_e, muted: boolean) => {
