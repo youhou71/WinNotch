@@ -60,10 +60,30 @@ const EMPTY: WorkerMusicState = {
 
 const SMTC_PLAYING = 4;
 
-function bufferToDataUrl(buf: Buffer | undefined | null): string | null {
+/**
+ * Seuil (s) au-delà duquel un écart entre la position lue et la position
+ * extrapolée depuis le dernier état envoyé est considéré comme un seek —
+ * et justifie un envoi. Aligné sur SEEK_THRESHOLD_SEC du main.
+ */
+const SEEK_THRESHOLD_SEC = 2;
+
+/**
+ * Cache du data URL de la pochette (audit perf P10) : l'encodage base64
+ * d'un buffer de plusieurs centaines de Ko tournait à CHAQUE lecture
+ * d'état (1 Hz), pour une image qui ne change qu'au changement de piste.
+ * Clé = titre|album|taille du buffer.
+ */
+let thumbCache: { key: string; dataUrl: string | null } | null = null;
+
+function thumbnailDataUrl(session: MediaSession): string | null {
+  const buf = session.media?.thumbnail;
   if (!buf || buf.length === 0) return null;
+  const key = `${session.media?.title ?? ''}|${session.media?.albumTitle ?? ''}|${buf.length}`;
+  if (thumbCache?.key === key) return thumbCache.dataUrl;
   const mime = buf[0] === 0xff && buf[1] === 0xd8 ? 'image/jpeg' : 'image/png';
-  return `data:${mime};base64,${buf.toString('base64')}`;
+  const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+  thumbCache = { key, dataUrl };
+  return dataUrl;
 }
 
 /**
@@ -88,7 +108,7 @@ function buildState(session: MediaSession | null | undefined): WorkerMusicState 
     artist: session.media?.artist || '',
     album: session.media?.albumTitle || '',
     source: session.sourceAppId || '',
-    thumbnail: bufferToDataUrl(session.media?.thumbnail),
+    thumbnail: thumbnailDataUrl(session),
     position: finiteOrZero(session.timeline?.position),
     duration: finiteOrZero(session.timeline?.duration),
     updatedAt: Date.now(),
@@ -130,11 +150,19 @@ function main(): void {
     return;
   }
 
+  /** Dernier état envoyé au main — sert d'anchor pour le diff du tick. */
+  let lastSent: WorkerMusicState = EMPTY;
+
+  const sendState = (state: WorkerMusicState) => {
+    lastSent = state;
+    send({ type: 'state', state });
+  };
+
   let debounceTimer: NodeJS.Timeout | null = null;
   const emit = () => {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-      send({ type: 'state', state: safeReadCurrent() });
+      sendState(safeReadCurrent());
     }, 100);
   };
 
@@ -149,10 +177,36 @@ function main(): void {
     send({ type: 'error', stage: 'subscribe', message: String(err) });
   }
 
-  // Tick 1 s pour faire avancer la timeline même quand SMTC n'émet pas
-  // de timeline event (cas Spotify).
+  /** True si un champ visuel (hors position) diffère entre deux états. */
+  const differs = (a: WorkerMusicState, b: WorkerMusicState): boolean =>
+    a.title !== b.title ||
+    a.playing !== b.playing ||
+    a.source !== b.source ||
+    a.album !== b.album ||
+    a.duration !== b.duration ||
+    a.thumbnail !== b.thumbnail;
+
+  // Tick 1 s : détecte les seeks / dérives que SMTC ne notifie pas via
+  // timeline event (cas Spotify). Audit perf P10 — avant, ce tick poussait
+  // l'état COMPLET (pochette base64 incluse) au main chaque seconde, même
+  // en pause. Désormais :
+  //  - en pause, on ne lit SMTC qu'1 tick sur 5 (filet si un event de
+  //    reprise s'est perdu) ;
+  //  - on n'envoie que si un champ visuel a changé OU si la position
+  //    s'écarte de l'extrapolation (seek) — le renderer anime la
+  //    progression localement depuis l'anchor, il n'a pas besoin d'un
+  //    refresh de position par seconde.
+  let tickCount = 0;
   setInterval(() => {
-    send({ type: 'state', state: safeReadCurrent() });
+    tickCount++;
+    if (!lastSent.playing && tickCount % 5 !== 0) return;
+    const state = safeReadCurrent();
+    const expected = lastSent.playing
+      ? lastSent.position + (Date.now() - lastSent.updatedAt) / 1000
+      : lastSent.position;
+    const seeked = Math.abs(state.position - expected) > SEEK_THRESHOLD_SEC;
+    if (!differs(state, lastSent) && !seeked) return;
+    sendState(state);
   }, 1000);
 
   // Émission initiale.
@@ -163,7 +217,8 @@ function main(): void {
   parentPort?.on('message', (event: Electron.MessageEvent) => {
     const msg = event.data as { type?: string } | undefined;
     if (msg?.type === 'getState') {
-      send({ type: 'state', state: safeReadCurrent() });
+      // Demande explicite du main : envoi inconditionnel.
+      sendState(safeReadCurrent());
     } else if (msg?.type === 'shutdown') {
       try { monitor?.destroy?.(); } catch { /* ignore */ }
       process.exit(0);

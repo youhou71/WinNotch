@@ -90,6 +90,16 @@ function emit(fullscreen: boolean): void {
   win.webContents.send(IpcChannel.ShellFullscreenChange, fullscreen);
 }
 
+/**
+ * True si une app est actuellement en plein écran sur l'écran principal
+ * (= le notch est masqué côté renderer via `.is-fullscreen-hidden`).
+ * Permet aux pollers du main (ex. systemService) de suspendre le travail
+ * qui ne sert qu'à alimenter une UI invisible.
+ */
+export function isFullscreenActive(): boolean {
+  return lastEmitted === true;
+}
+
 function handleLine(line: string): void {
   const trimmed = line.trim();
   if (!trimmed) return;

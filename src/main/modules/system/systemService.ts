@@ -27,6 +27,8 @@ import {
   type SystemState,
 } from '../../../shared/types';
 import { getNotchWindow } from '../../window/notchWindow';
+import { isFullscreenActive } from '../shell/fullscreenDetector';
+import { getNotchMode } from '../../shortcuts/altPeek';
 import {
   cpuPercentBetween,
   netBytesPerSec,
@@ -88,6 +90,14 @@ async function tick(): Promise<void> {
   const task = (async () => {
     const cfg = store.get('moduleConfig').system;
 
+    // Notch invisible (app fullscreen + notch resté collapsed) : on saute
+    // la requête WMI réseau ET le broadcast — ce travail n'alimenterait
+    // qu'une UI à opacity 0 (audit perf P7). CPU/RAM restent lus (sync,
+    // quasi gratuits) pour garder des sparklines continus au retour.
+    // `prevNet = null` évite de calculer au retour un débit moyenné sur
+    // toute la durée du masquage.
+    const uiHidden = isFullscreenActive() && getNotchMode() === 'collapsed';
+
     // CPU (synchrone, pas chère)
     const currCpu = readCpuSnapshot();
     const cpuPct = cpuPercentBetween(prevCpu, currCpu);
@@ -99,19 +109,23 @@ async function tick(): Promise<void> {
     // Uptime
     const uptimeSec = readUptimeSec();
 
-    // Réseau (async, PowerShell)
+    // Réseau (async, PowerShell) — sauté quand l'UI est masquée.
     let netBps = 0;
     let netError: string | null = null;
-    try {
-      const { snapshot, error } = await readNetSnapshot();
-      if (snapshot) {
-        netBps = netBytesPerSec(prevNet, snapshot, cfg.netInterfaces);
-        prevNet = snapshot;
-      } else {
-        netError = error;
+    if (uiHidden) {
+      prevNet = null;
+    } else {
+      try {
+        const { snapshot, error } = await readNetSnapshot();
+        if (snapshot) {
+          netBps = netBytesPerSec(prevNet, snapshot, cfg.netInterfaces);
+          prevNet = snapshot;
+        } else {
+          netError = error;
+        }
+      } catch (err) {
+        netError = err instanceof Error ? err.message : String(err);
       }
-    } catch (err) {
-      netError = err instanceof Error ? err.message : String(err);
     }
 
     currentState = {
@@ -133,7 +147,7 @@ async function tick(): Promise<void> {
       lastTickAt: Date.now(),
       lastError: netError,
     };
-    broadcast();
+    if (!uiHidden) broadcast();
   })();
   tickInFlight = task;
   try {

@@ -80,7 +80,24 @@ async function apiFetch<T>(
       `GitLab ${res.status} ${res.statusText} sur ${path}`,
     );
   }
-  return (await res.json()) as T;
+  // Un proxy d'entreprise / portail captif / page SSO peut répondre 200
+  // avec du HTML à la place de l'API (typique : instance accessible
+  // uniquement via VPN, VPN déconnecté). Sans ce garde, l'erreur brute de
+  // JSON.parse (« Unexpected token '<' ») remontait jusqu'à l'UI.
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.toLowerCase().includes('json')) {
+    throw new GitLabNetworkError(
+      `${base} a répondu en « ${contentType || 'type inconnu'} » au lieu de JSON — ` +
+        'instance probablement inaccessible (VPN déconnecté ? proxy ou page de connexion sur le chemin ?)',
+    );
+  }
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new GitLabNetworkError(
+      `${base} a renvoyé un JSON invalide sur ${path} — réponse tronquée ou interceptée par un proxy.`,
+    );
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────

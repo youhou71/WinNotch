@@ -23,6 +23,10 @@ export function ClaudeChip() {
   // jaune visible immédiatement dans le notch collapsed.
   const waiting = sessions.filter((s) => s.waitingForInput);
   const working = active.filter((s) => !s.waitingForInput);
+  // Le spin du spark ne tourne que si Claude travaille vraiment — la chip
+  // est visible toute la journée, une animation permanente forçait le DWM
+  // à recomposer en continu (cf. claude.css, audit perf P6).
+  const anyWorking = sessions.some((s) => s.status === 'working');
 
   return (
     <NotchTooltip
@@ -61,7 +65,7 @@ export function ClaudeChip() {
     >
       <div className="chip chip-claude">
         <div className="logo-stack">
-          <div className="claude-spark" />
+          <div className={'claude-spark' + (anyWorking ? ' is-working' : '')} />
           {waiting.length > 0 ? (
             <span
               className="count-badge claude-badge claude-badge-wfi"

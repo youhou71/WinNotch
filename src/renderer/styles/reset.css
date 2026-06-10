@@ -62,3 +62,32 @@ a:focus-visible {
   outline-offset: -1px;
   border-radius: 4px;
 }
+
+/*
+ * Garde-fous animations (audit perf P6).
+ *
+ * 1. Quand le notch est masqué pour cause d'app fullscreen (opacity: 0,
+ *    cf. notch.css), la fenêtre reste rendue par Chromium : toute
+ *    animation encore active continuait à produire des frames et à faire
+ *    recomposer le DWM — précisément pendant que l'utilisateur regarde un
+ *    jeu ou une vidéo. On gèle tout.
+ */
+.notch.is-fullscreen-hidden *,
+.notch.is-fullscreen-hidden *::before,
+.notch.is-fullscreen-hidden *::after {
+  animation-play-state: paused !important;
+}
+
+/*
+ * 2. Respect de l'option Windows « Afficher les animations » — réduit
+ *    aussi la charge de compositing pour qui l'a désactivée.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

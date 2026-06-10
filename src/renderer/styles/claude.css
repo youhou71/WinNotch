@@ -16,7 +16,13 @@
 
 /* `claude-spark` = anneau conic-gradient animé. Le `mask` radial
    creuse le centre pour ne laisser qu'un cercle fin. Deux pseudo-elts
-   tournent à vitesses différentes pour un effet "scintillement". */
+   tournent à vitesses différentes pour un effet "scintillement".
+
+   Perf (audit P6) : la rotation ne tourne QUE si au moins une session est
+   `working` (classe `.is-working` posée par ClaudeChip/ClaudeCard). La
+   chip est visible toute la journée dans le notch collapsed — un spin
+   permanent forçait le DWM à recomposer le bureau à chaque vsync, même
+   au repos. Au repos, l'anneau reste affiché en statique. */
 .claude-spark {
   width: 15px;
   height: 15px;
@@ -38,15 +44,22 @@
     transparent 100%
   );
   border-radius: 50%;
-  animation: claude-spin 1.6s linear infinite;
   mask: radial-gradient(circle, transparent 35%, black 38%);
   -webkit-mask: radial-gradient(circle, transparent 35%, black 38%);
 }
 
+.claude-spark.is-working::before,
+.claude-spark.is-working::after {
+  animation: claude-spin 1.6s linear infinite;
+}
+
 .claude-spark::after {
+  opacity: 0.6;
+}
+
+.claude-spark.is-working::after {
   animation-duration: 2.2s;
   animation-direction: reverse;
-  opacity: 0.6;
 }
 
 @keyframes claude-spin {
@@ -80,20 +93,37 @@
 /*
  * Badge "?" jaune quand au moins une session attend une réponse. Pulse
  * doucement pour attirer l'œil sans être agressif.
+ *
+ * Perf (audit P6) : le halo est un ::after pré-peint (box-shadow STATIQUE)
+ * animé uniquement en transform/opacity — propriétés composited, zéro
+ * repaint par frame. L'ancienne version animait directement box-shadow
+ * (non compositable → repaint complet du badge à chaque frame, en
+ * continu dans le notch collapsed).
  */
 .claude-badge-wfi {
   background: linear-gradient(135deg, #fbbf24, #f59e0b);
   color: #1a1310;
   font-weight: 700;
-  animation: claude-wfi-pulse 1.6s ease-in-out infinite;
 }
 
-@keyframes claude-wfi-pulse {
+.claude-badge-wfi::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.35);
+  pointer-events: none;
+  animation: claude-wfi-halo 1.6s ease-in-out infinite;
+}
+
+@keyframes claude-wfi-halo {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.5);
+    transform: scale(0.85);
+    opacity: 0;
   }
   50% {
-    box-shadow: 0 0 0 4px rgba(251, 191, 36, 0);
+    transform: scale(1.1);
+    opacity: 1;
   }
 }
 
@@ -159,19 +189,31 @@
   flex-shrink: 0;
 }
 
+/* Halo compositor-only (cf. note .claude-badge-wfi) : glow pré-peint sur
+   ::after, seul transform/opacity bouge. */
 .sess-orb.status-working {
-  animation: orb-pulse 1.6s ease-in-out infinite;
+  position: relative;
 }
 
-@keyframes orb-pulse {
+.sess-orb.status-working::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px 2px var(--sess-color, var(--accent-violet));
+  pointer-events: none;
+  animation: orb-halo 1.6s ease-in-out infinite;
+}
+
+@keyframes orb-halo {
   0%,
   100% {
-    box-shadow: 0 0 0 0 var(--sess-color, var(--accent-violet));
-    opacity: 1;
+    transform: scale(0.8);
+    opacity: 0;
   }
   50% {
-    box-shadow: 0 0 0 4px transparent, 0 0 10px var(--sess-color, var(--accent-violet));
-    opacity: 0.85;
+    transform: scale(1.2);
+    opacity: 0.9;
   }
 }
 
@@ -311,7 +353,9 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: claude-shimmer 2.4s linear infinite;
+  /* steps(24) ≈ 10 fps : background-position n'est pas compositable, chaque
+     frame repeint le texte — inutile d'en produire 60/s pour un shimmer. */
+  animation: claude-shimmer 2.4s steps(24) infinite;
 }
 
 @keyframes claude-shimmer {

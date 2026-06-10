@@ -3,9 +3,20 @@
  *
  * Pattern identique à `meetings/tokenStore.ts` : on chiffre le JSON
  * sérialisé via Electron `safeStorage` (DPAPI sur Windows) et on stocke
- * la valeur base64 dans le electron-store de WinNotch (clé dédiée
- * `clipboardHistory`, et `clipboardLastSeenAt` pour le timestamp du
- * dernier "vu" — pas sensible, stocké en clair).
+ * la valeur base64 dans un electron-store DÉDIÉ (`clipboard-history.json`),
+ * plus `clipboardLastSeenAt` pour le timestamp du dernier "vu" — pas
+ * sensible, stocké en clair.
+ *
+ * Pourquoi un fichier dédié (audit perf P9) : l'historique chiffré pèse
+ * vite des centaines de Ko ; logé dans `config.json`, il gonflait le
+ * fichier que CHAQUE `store.get()` de TOUS les services relit en
+ * synchrone à chaque tick (settings, audio, system, gitlocal…). Une
+ * migration one-shot rapatrie les anciennes clés depuis `config.json`.
+ *
+ * Écriture débouncée (audit perf P9) : chaque copie re-chiffrait (DPAPI
+ * synchrone) et réécrivait TOUT l'historique immédiatement. On coalesce à
+ * 2 s — `flushHistory()` est appelé à l'arrêt du module pour ne rien
+ * perdre à la fermeture de l'app.
  *
  * Si `safeStorage.isEncryptionAvailable()` retourne false (premier
  * lancement avant que le KeyChain/Credentials Manager soit prêt, ou
@@ -24,13 +35,44 @@ interface ClipboardStoreSchema {
   clipboardLastSeenAt: number;
 }
 
+const SAVE_DEBOUNCE_MS = 2000;
+
 const store = new Store<ClipboardStoreSchema>({
   defaults: {
     clipboardHistory: '',
     clipboardLastSeenAt: 0,
   },
-  name: 'config', // même fichier que settings — `name:'config'` partage le store.
+  name: 'clipboard-history',
 });
+
+/**
+ * Migration one-shot : rapatrie l'historique depuis `config.json` (où il
+ * vivait avant l'audit perf P9) puis supprime les anciennes clés pour
+ * dégonfler le fichier. Idempotent : une fois les clés absentes, no-op.
+ */
+let migrated = false;
+function migrateFromConfigIfNeeded(): void {
+  if (migrated) return;
+  migrated = true;
+  try {
+    const legacy = new Store<Record<string, unknown>>({ name: 'config' });
+    const oldHistory = legacy.get('clipboardHistory') as string | undefined;
+    const oldSeenAt = legacy.get('clipboardLastSeenAt') as number | undefined;
+    if (typeof oldHistory === 'string' && oldHistory && !store.get('clipboardHistory')) {
+      store.set('clipboardHistory', oldHistory);
+    }
+    if (typeof oldSeenAt === 'number' && oldSeenAt && !store.get('clipboardLastSeenAt')) {
+      store.set('clipboardLastSeenAt', oldSeenAt);
+    }
+    if (oldHistory !== undefined) legacy.delete('clipboardHistory' as never);
+    if (oldSeenAt !== undefined) legacy.delete('clipboardLastSeenAt' as never);
+    if (oldHistory !== undefined || oldSeenAt !== undefined) {
+      console.log('[clipboard] historique migré de config.json vers clipboard-history.json');
+    }
+  } catch (err) {
+    console.warn('[clipboard] migration depuis config.json échouée (non bloquant):', err);
+  }
+}
 
 function isAvailable(): boolean {
   try {
@@ -72,14 +114,47 @@ function decrypt(payload: string): ClipboardEntry[] {
 }
 
 export function loadHistory(): ClipboardEntry[] {
+  migrateFromConfigIfNeeded();
   return decrypt(store.get('clipboardHistory'));
 }
 
+/* ───────────── Écriture débouncée ───────────── */
+
+let pendingEntries: ClipboardEntry[] | null = null;
+let saveTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Programme la persistance (chiffrement DPAPI + écriture du fichier
+ * complet) au plus une fois toutes les SAVE_DEBOUNCE_MS. Une rafale de
+ * copies ne coûte qu'une écriture ; seule la dernière version compte.
+ */
 export function saveHistory(entries: ClipboardEntry[]): void {
+  pendingEntries = entries;
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    flushHistory();
+  }, SAVE_DEBOUNCE_MS);
+}
+
+/**
+ * Écrit immédiatement la version en attente, s'il y en a une. Appelé par
+ * le débounce, et par `stopClipboard()` à la fermeture de l'app pour ne
+ * pas perdre les dernières copies.
+ */
+export function flushHistory(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  if (pendingEntries === null) return;
+  const entries = pendingEntries;
+  pendingEntries = null;
   store.set('clipboardHistory', encrypt(entries));
 }
 
 export function loadLastSeenAt(): number {
+  migrateFromConfigIfNeeded();
   return store.get('clipboardLastSeenAt');
 }
 

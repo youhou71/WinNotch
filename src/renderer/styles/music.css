@@ -136,8 +136,13 @@
   background: rgba(255, 255, 255, 0.85);
   border-radius: 1px;
   /* Animation décalée : chaque barre rebondit avec un léger délai pour
-     simuler un equalizer audio. */
-  animation: bar-bounce 700ms ease-in-out infinite;
+     simuler un equalizer audio.
+     Perf (audit P6) : steps(8) ≈ 11 fps au lieu de 60+. Le scaleY est
+     compositor-only mais chaque frame produite force quand même le DWM à
+     recomposer le bureau (fenêtre transparente always-on-top) — et ces
+     barres tournent toute la journée dès qu'une musique joue. Le rendu
+     discret par paliers reste crédible pour un equalizer. */
+  animation: bar-bounce 700ms steps(8) infinite;
 }
 
 .music-tile .overlay-bars span:nth-child(1) {
@@ -349,13 +354,18 @@
 }
 
 .card-music.is-compact .mc-scrub-fill {
+  width: 100%;
   height: 100%;
   background: linear-gradient(90deg, var(--accent-pink), var(--accent-violet));
   border-radius: 3px;
-  /* Pas de transition CSS : la largeur est pilotée frame par frame par
-     `MusicCard.tsx` via requestAnimationFrame. Une transition ici créerait
-     un lag visible (chaque frame relancerait une animation de 220 ms qui
-     ne se termine jamais). */
+  /* La progression est pilotée par MusicCard.tsx via `transform: scaleX()`
+     (compositor-only — zéro repaint, contrairement à l'ancien style.width
+     écrit à 60 fps par rAF). Le setInterval ne tickant qu'à 1 Hz, la
+     transition linéaire 1 s lisse le mouvement entre deux ticks : c'est le
+     compositor qui interpole, aucune frame n'est peinte (audit perf P11). */
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 1s linear;
 }
 
 .card-music.is-compact .mc-elapsed,

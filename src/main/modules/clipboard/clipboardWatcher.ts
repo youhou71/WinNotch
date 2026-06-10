@@ -55,9 +55,18 @@ function tick(): void {
   let text = '';
   let image: NativeImage | null = null;
   try {
+    // `availableFormats()` est une simple énumération (pas de copie de
+    // données) : on ne fait le `readImage()` — qui copie le bitmap complet
+    // dans un NativeImage — que si Windows annonce réellement un format
+    // image. Le cas ultra-majoritaire (texte ou clipboard inchangé sans
+    // image) ne touche plus jamais au bitmap (audit perf P9).
+    const formats = clipboard.availableFormats();
+    const hasImage = formats.some((f) => f.startsWith('image/'));
     text = clipboard.readText() ?? '';
-    image = clipboard.readImage();
-    if (image.isEmpty()) image = null;
+    if (hasImage) {
+      image = clipboard.readImage();
+      if (image.isEmpty()) image = null;
+    }
   } catch (err) {
     console.warn('[clipboard] lecture du presse-papier échouée:', err);
     return;
@@ -113,9 +122,12 @@ export function markSelfWrite(): void {
   // On recalcule le hash maintenant : le ticker repartira de là après
   // le délai d'ignore.
   try {
+    const formats = clipboard.availableFormats();
     const text = clipboard.readText() ?? '';
-    const image = clipboard.readImage();
-    lastHash = hashContent(text, image.isEmpty() ? null : image);
+    const image = formats.some((f) => f.startsWith('image/'))
+      ? clipboard.readImage()
+      : null;
+    lastHash = hashContent(text, image && !image.isEmpty() ? image : null);
   } catch {
     lastHash = '';
   }

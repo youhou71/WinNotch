@@ -47,7 +47,16 @@ let currentMode: NotchMode = 'collapsed';
 /** Met à jour le mode courant. Appelé depuis globalShortcuts.ts. */
 export function setNotchMode(mode: NotchMode): void {
   currentMode = mode;
-  void currentMode;
+}
+
+/**
+ * Mode courant du notch. Utilisé par les pollers du main (systemService)
+ * pour distinguer « masqué pour fullscreen » de « ouvert par-dessus le
+ * fullscreen via Ctrl+Shift+Space » (le mode expanded override la classe
+ * de masquage côté renderer).
+ */
+export function getNotchMode(): NotchMode {
+  return currentMode;
 }
 
 /**
