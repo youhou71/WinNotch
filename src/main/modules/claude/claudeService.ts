@@ -24,7 +24,7 @@ import {
   type ClaudeSession,
 } from '../../../shared/types';
 import { getNotchWindow } from '../../window/notchWindow';
-import { parseSessionFile } from './sessionParser';
+import { computeStatus, parseSessionFile } from './sessionParser';
 
 /** Fenêtre temporelle de visibilité (h) — sessions plus vieilles sont ignorées. */
 const VISIBILITY_HOURS = 24;
@@ -93,62 +93,110 @@ function getVisibleSessions(): ClaudeSession[] {
 }
 
 /**
- * Tick rapide : stat chaque fichier connu, détecte ceux dont mtime ou
- * size a changé, et les re-parse. Très cheap (juste des stat() Windows).
+ * Stat un fichier connu et le re-parse si mtime/size a bougé (ou le retire
+ * du cache s'il a disparu). Retourne true si le cache a changé. Aucun
+ * broadcast ici — les ticks coalescent en un seul envoi.
+ */
+async function checkFile(path: string): Promise<boolean> {
+  const prevStat = fileStats.get(path);
+  let stat;
+  try {
+    stat = await fs.stat(path);
+  } catch {
+    // Fichier supprimé.
+    cache.delete(path);
+    fileStats.delete(path);
+    return true;
+  }
+  if (
+    prevStat &&
+    stat.mtimeMs === prevStat.mtimeMs &&
+    stat.size === prevStat.size
+  ) {
+    return false;
+  }
+  fileStats.set(path, { mtimeMs: stat.mtimeMs, size: stat.size });
+  const parsed = await parseSessionFile(path);
+  if (!parsed) {
+    cache.delete(path);
+    fileStats.delete(path);
+  } else {
+    cache.set(path, parsed);
+  }
+  return true;
+}
+
+/** Gardes de réentrance : un tick lent (scan dir) peut dépasser 500 ms. */
+let fastTickInFlight = false;
+let slowTickInFlight = false;
+
+/**
+ * Tick rapide : ne stat QUE les sessions actives (working/waiting) — ce
+ * sont les seules dont le fichier peut bouger d'une demi-seconde à l'autre
+ * (audit perf P4 : on stat-ait tous les fichiers du cache, sessions
+ * dormantes comprises, 2×/s). Les sessions idle/done sont surveillées par
+ * le tick lent (une reprise est détectée en ≤ 5 s, suffisant). Broadcast
+ * unique par tick au lieu d'un envoi de la liste complète par fichier
+ * modifié.
  */
 async function fastTick(): Promise<void> {
-  for (const [path, prevStat] of fileStats) {
-    let stat;
-    try {
-      stat = await fs.stat(path);
-    } catch {
-      // Fichier supprimé.
-      cache.delete(path);
-      fileStats.delete(path);
-      broadcast();
-      continue;
+  if (fastTickInFlight) return;
+  fastTickInFlight = true;
+  try {
+    let changed = false;
+    for (const [path, session] of cache) {
+      if (session.status !== 'working' && session.status !== 'waiting') continue;
+      if (await checkFile(path)) changed = true;
     }
-    if (
-      stat.mtimeMs !== prevStat.mtimeMs ||
-      stat.size !== prevStat.size
-    ) {
-      fileStats.set(path, { mtimeMs: stat.mtimeMs, size: stat.size });
-      const parsed = await parseSessionFile(path);
-      if (!parsed) {
-        cache.delete(path);
-        fileStats.delete(path);
-      } else {
-        cache.set(path, parsed);
-      }
-      broadcast();
-    }
+    if (changed) broadcast();
+  } finally {
+    fastTickInFlight = false;
   }
 }
 
 /**
- * Tick lent : recalcule les statuts (transition working → idle dépend
- * du temps écoulé) ET scanne le PROJECTS_DIR pour détecter les nouvelles
- * sessions créées après le boot.
+ * Tick lent : recalcule les statuts EN PURE MÉMOIRE (la transition
+ * working → waiting → idle → done ne dépend que du mtime déjà connu et des
+ * flags `endedTurn`/`waitingForInput` persistés au parse — audit perf P4 :
+ * on re-parsait ici tous les .jsonl du cache toutes les 5 s, soit jusqu'à
+ * 512 KB de lecture par fichier pour ne recalculer qu'un statut), surveille
+ * les sessions dormantes (reprise/suppression), scanne le PROJECTS_DIR
+ * pour les nouvelles sessions, et borne le cache.
  */
 async function slowTick(): Promise<void> {
+  if (slowTickInFlight) return;
+  slowTickInFlight = true;
+  try {
+    await slowTickBody();
+  } finally {
+    slowTickInFlight = false;
+  }
+}
+
+async function slowTickBody(): Promise<void> {
   let changed = false;
 
-  // 1. Recalcule des statuts pour les fichiers connus (le statut
-  //    dépend de la mtime → working → waiting → idle → done même sans
-  //    modification du fichier).
-  for (const path of cache.keys()) {
-    const before = cache.get(path)?.status;
-    const fresh = await parseSessionFile(path);
-    if (fresh) {
-      cache.set(path, fresh);
-      if (fresh.status !== before) {
-        changed = true;
-      }
-    } else {
-      cache.delete(path);
-      fileStats.delete(path);
+  // 1. Recalcul des statuts en mémoire pour les fichiers connus, zéro I/O.
+  for (const [path, session] of cache) {
+    const stat = fileStats.get(path);
+    if (!stat) continue;
+    const status = computeStatus(
+      stat.mtimeMs,
+      session.endedTurn,
+      session.waitingForInput,
+    );
+    if (status !== session.status) {
+      cache.set(path, { ...session, status });
       changed = true;
     }
+  }
+
+  // 1bis. Sessions dormantes (idle/done) : un stat toutes les 5 s pour
+  //       détecter une reprise (l'utilisateur relance la session) ou une
+  //       suppression — le tick rapide ne les regarde plus.
+  for (const [path, session] of cache) {
+    if (session.status === 'working' || session.status === 'waiting') continue;
+    if (await checkFile(path)) changed = true;
   }
 
   // 2. Détection de nouveaux fichiers (nouvelles sessions).

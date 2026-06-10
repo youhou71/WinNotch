@@ -15,7 +15,7 @@
  *    suffisante pour l'UI ; le total exact nécessiterait de parser tout
  *    le fichier).
  */
-import { promises as fs, statSync, readFileSync } from 'fs';
+import { promises as fs } from 'fs';
 import { basename } from 'path';
 import type { ClaudeSession, ClaudeSessionStatus } from '../../../shared/types';
 
@@ -164,15 +164,16 @@ function isWaitingForUserInput(events: JsonlEvent[]): boolean {
 }
 
 /**
- * Tail synchrone d'un fichier — lit les derniers N "lignes" (events).
- * Approche pragmatique : on charge depuis la fin par bloc de 256 KB
- * jusqu'à avoir assez de retours à la ligne. Suffisant pour les
- * fichiers Claude qui peuvent atteindre quelques MB.
+ * Tail asynchrone d'un fichier — lit les derniers N "lignes" (events).
+ * Entièrement en `fs.promises` : ces lectures (jusqu'à 512 KB par fichier,
+ * potentiellement plusieurs fichiers par tick) tournaient en synchrone sur
+ * le thread principal Electron et gelaient l'event loop — donc les IPC, la
+ * fenêtre, et la réactivité générale (audit perf P4).
  */
-function tailLines(filePath: string, maxLines: number): string[] {
+async function tailLines(filePath: string, maxLines: number): Promise<string[]> {
   let stat;
   try {
-    stat = statSync(filePath);
+    stat = await fs.stat(filePath);
   } catch {
     return [];
   }
@@ -183,7 +184,7 @@ function tailLines(filePath: string, maxLines: number): string[] {
   const SMALL_FILE_LIMIT = 512 * 1024;
   if (stat.size <= SMALL_FILE_LIMIT) {
     try {
-      const content = readFileSync(filePath, 'utf8');
+      const content = await fs.readFile(filePath, 'utf8');
       const all = content.split(/\r?\n/).filter(Boolean);
       return all.slice(-maxLines);
     } catch {
@@ -194,17 +195,11 @@ function tailLines(filePath: string, maxLines: number): string[] {
   // Fichier plus gros : on lit les 512 KB de fin (assez pour > 50 events).
   try {
     const buf = Buffer.alloc(SMALL_FILE_LIMIT);
-    const fd = require('fs').openSync(filePath, 'r');
+    const fh = await fs.open(filePath, 'r');
     try {
-      require('fs').readSync(
-        fd,
-        buf,
-        0,
-        SMALL_FILE_LIMIT,
-        stat.size - SMALL_FILE_LIMIT,
-      );
+      await fh.read(buf, 0, SMALL_FILE_LIMIT, stat.size - SMALL_FILE_LIMIT);
     } finally {
-      require('fs').closeSync(fd);
+      await fh.close();
     }
     const content = buf.toString('utf8');
     // On jette la première "demi-ligne" tronquée par le slice.
@@ -235,19 +230,22 @@ function tailLines(filePath: string, maxLines: number): string[] {
  *  - 3 s à 5 min  : waiting (Claude attend l'utilisateur)
  *  - 5 min à 60 min : idle  (session ouverte mais inactive)
  *  - > 60 min     : done   (session probablement fermée)
+ *
+ * Exportée : le statut ne dépend que de (mtime, endedTurn, waitingForInput),
+ * tous trois déjà connus du cache de claudeService — le recalcul périodique
+ * des transitions se fait donc en pure mémoire, sans relire le fichier.
  */
-function computeStatus(
+export function computeStatus(
   mtimeMs: number,
-  lastAssistantEvent: JsonlEvent | null,
+  endedTurn: boolean,
   waitingForInput: boolean,
 ): ClaudeSessionStatus {
   const ageMs = Date.now() - mtimeMs;
-  const stop = lastAssistantEvent?.message?.stop_reason;
   // Deux cas qui signifient "Claude a la main à l'utilisateur" et le
   // .jsonl ne sera plus touché tant que l'utilisateur ne reprend pas :
-  //  - stop_reason === 'end_turn' : tour fini normalement
+  //  - stop_reason === 'end_turn' : tour fini normalement (endedTurn)
   //  - tool_use AskUserQuestion / ExitPlanMode : attend une réponse manuelle
-  const ended = stop === 'end_turn' || waitingForInput;
+  const ended = endedTurn || waitingForInput;
 
   if (ended) {
     // 3 s de garde pour laisser le file write se stabiliser, puis on
@@ -309,7 +307,7 @@ export async function parseSessionFile(
   }
   if (!stat.isFile() || stat.size === 0) return null;
 
-  const lines = tailLines(filePath, TAIL_LINES);
+  const lines = await tailLines(filePath, TAIL_LINES);
   if (lines.length === 0) return null;
 
   const events: JsonlEvent[] = [];
@@ -349,7 +347,8 @@ export async function parseSessionFile(
   }
 
   const waitingForInput = isWaitingForUserInput(events);
-  const status = computeStatus(stat.mtimeMs, lastAssistant, waitingForInput);
+  const endedTurn = lastAssistant?.message?.stop_reason === 'end_turn';
+  const status = computeStatus(stat.mtimeMs, endedTurn, waitingForInput);
   const currentText = extractCurrentText(events);
   const hadWork = lastTurnHadWork(events);
 
@@ -366,5 +365,6 @@ export async function parseSessionFile(
     model,
     waitingForInput,
     lastTurnHadWork: hadWork,
+    endedTurn,
   };
 }

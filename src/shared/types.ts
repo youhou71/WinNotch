@@ -888,6 +888,14 @@ export interface ClaudeSession {
    * `end_turn`.
    */
   lastTurnHadWork: boolean;
+  /**
+   * True si le dernier event assistant porte `stop_reason === 'end_turn'`.
+   * Persisté au parse pour que le recalcul périodique du statut (transition
+   * working → waiting → idle → done, cf. `computeStatus`) se fasse en pure
+   * mémoire depuis le mtime connu, sans relire le fichier (audit perf P4 —
+   * `slowTick` re-parsait tous les .jsonl du cache toutes les 5 s).
+   */
+  endedTurn: boolean;
 }
 
 /* ─────────────────────────────────────────────────────────────────────
