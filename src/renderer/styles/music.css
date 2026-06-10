@@ -354,13 +354,18 @@
 }
 
 .card-music.is-compact .mc-scrub-fill {
+  width: 100%;
   height: 100%;
   background: linear-gradient(90deg, var(--accent-pink), var(--accent-violet));
   border-radius: 3px;
-  /* Pas de transition CSS : la largeur est pilotée frame par frame par
-     `MusicCard.tsx` via requestAnimationFrame. Une transition ici créerait
-     un lag visible (chaque frame relancerait une animation de 220 ms qui
-     ne se termine jamais). */
+  /* La progression est pilotée par MusicCard.tsx via `transform: scaleX()`
+     (compositor-only — zéro repaint, contrairement à l'ancien style.width
+     écrit à 60 fps par rAF). Le setInterval ne tickant qu'à 1 Hz, la
+     transition linéaire 1 s lisse le mouvement entre deux ticks : c'est le
+     compositor qui interpole, aucune frame n'est peinte (audit perf P11). */
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 1s linear;
 }
 
 .card-music.is-compact .mc-elapsed,

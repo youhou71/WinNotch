@@ -15,8 +15,16 @@
  *  - rAF coalesce les mousemove successifs en un seul test par frame
  *  - `isCapturedRef` évite d'envoyer l'IPC en boucle quand l'état ne
  *    change pas (l'utilisateur bouge la souris sur le notch sans sortir)
+ *  - le re-test périodique s'éteint après 1,5 s sans mouvement souris et
+ *    redémarre au premier mousemove (audit perf P11 — avant, il forçait
+ *    un `elementFromPoint` ~8,3×/s en permanence, souris immobile depuis
+ *    des heures comprise)
  */
 import { useEffect, useRef } from 'react';
+
+const POLL_MS = 120;
+/** Sans mousemove depuis ce délai, le re-test périodique s'arrête. */
+const POLL_IDLE_STOP_MS = 1500;
 
 export function useHitTest(): void {
   const isCapturedRef = useRef(false);
@@ -39,6 +47,8 @@ export function useHitTest(): void {
     const onMove = (e: MouseEvent) => {
       lastX = e.clientX;
       lastY = e.clientY;
+      lastMoveAt = Date.now();
+      startPoll();
       // Coalesce : si une frame est déjà programmée, on garde juste
       // les coordonnées les plus récentes.
       if (raf) return;
@@ -62,9 +72,23 @@ export function useHitTest(): void {
     // `mousemove` ne soit émis, donc la capture reste périmée et le clic
     // « traverse » la fenêtre (cas aléatoire des formulaires de réglages).
     // Un re-test léger (elementFromPoint ~µs) referme cette fenêtre de course.
-    const poll = window.setInterval(() => {
-      if (lastX >= 0) test();
-    }, 120);
+    //
+    // Auto-extinction : ces décalages de contenu suivent une interaction
+    // (clic, survol) — passé POLL_IDLE_STOP_MS sans mousemove, le poll
+    // s'arrête et redémarre au prochain mouvement.
+    let poll: number | null = null;
+    let lastMoveAt = 0;
+
+    const startPoll = () => {
+      if (poll !== null) return;
+      poll = window.setInterval(() => {
+        if (lastX >= 0) test();
+        if (Date.now() - lastMoveAt > POLL_IDLE_STOP_MS && poll !== null) {
+          window.clearInterval(poll);
+          poll = null;
+        }
+      }, POLL_MS);
+    };
 
     window.addEventListener('mousemove', onMove);
     document.addEventListener('mouseleave', onLeave);
@@ -72,7 +96,7 @@ export function useHitTest(): void {
     return () => {
       window.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseleave', onLeave);
-      window.clearInterval(poll);
+      if (poll !== null) window.clearInterval(poll);
       if (raf) cancelAnimationFrame(raf);
     };
   }, []);

@@ -117,9 +117,17 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
   // En mode collapsed on ne mesure pas (le contenu expanded n'est pas
   // monté) et on remet contentH à null pour rebenchmark au prochain
   // passage expanded.
+  //
+  // Deps `[mode]` (audit perf P11) : sans tableau de dépendances, cet
+  // effet se ré-exécutait à CHAQUE render du Notch (tick musique, état
+  // système…) — destruction + recréation des deux observers et remesure
+  // forcée (layout) à chaque fois. Les observers couvrent eux-mêmes tous
+  // les changements internes (mutations + resize) : seul le changement de
+  // mode justifie de reconstruire le dispositif. `setContentH` passe par
+  // la forme fonctionnelle pour ne pas dépendre de `contentH`.
   useLayoutEffect(() => {
     if (mode !== 'expanded') {
-      if (contentH !== null) setContentH(null);
+      setContentH((prev) => (prev === null ? prev : null));
       return;
     }
     const root = wrapperRef.current;
@@ -199,7 +207,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
       ro.disconnect();
       mo.disconnect();
     };
-  });
+  }, [mode]);
 
   // Largeur collapsed dynamique selon les modules actifs et leur état.
   // 124 = largeur de base (notch vide).

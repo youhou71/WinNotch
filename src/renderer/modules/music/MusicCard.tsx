@@ -10,10 +10,17 @@
  * permet pas le seek, on se contente d'afficher la progression.
  *
  * Animation : le state IPC n'expose qu'un anchor (position, duration,
- * updatedAt). La progression visuelle est calculée localement à 60 fps
- * via `requestAnimationFrame` et appliquée *imperatively* au DOM —
- * `style.width` du fill et `textContent` du elapsed — pour éviter de
- * re-render React à chaque frame.
+ * updatedAt). La progression est recalculée localement par un interval
+ * 1 s et appliquée *imperatively* au DOM — `transform: scaleX()` du fill
+ * (compositor-only, lissé par une transition CSS 1 s linéaire) et
+ * `textContent` du elapsed — sans re-render React.
+ *
+ * Audit perf P11 : l'ancienne boucle `requestAnimationFrame` tournait à
+ * 60 fps en permanence (pause comprise) et écrivait `style.width` à
+ * chaque frame (propriété de layout → repaint). Chaque frame produite
+ * force en plus le DWM à recomposer le bureau (fenêtre transparente
+ * always-on-top, cf. P6). Désormais : 1 update/s en lecture, ZÉRO timer
+ * en pause.
  */
 import { useEffect, useRef } from 'react';
 import { useMusicContext } from './MusicContext';
@@ -34,24 +41,23 @@ export function MusicCard() {
   const fillRef = useRef<HTMLDivElement>(null);
   const elapsedRef = useRef<HTMLSpanElement>(null);
 
-  // Animation rAF : recalcule la position interpolée à chaque frame à
-  // partir de l'anchor du state, et met à jour le DOM directement.
-  // Re-déclenché quand l'anchor change (track switch, play/pause, seek).
+  // Progression : recalcule la position interpolée depuis l'anchor et met
+  // à jour le DOM directement, une fois par seconde en lecture. La
+  // transition CSS 1 s linéaire sur le transform lisse le mouvement entre
+  // deux ticks. Re-déclenché quand l'anchor change (track switch,
+  // play/pause, seek).
   useEffect(() => {
     if (!state.title) return;
 
-    let frameId = 0;
-    let lastSec = -1;
-
     // Sanitize : si l'anchor contient des valeurs non-finies (cas vu avec
     // certaines sources SMTC qui renvoient NaN pour la timeline), on
-    // retombe sur des zéros pour éviter de propager le NaN à `style.width`
+    // retombe sur des zéros pour éviter de propager le NaN au transform
     // et au textContent.
     const anchorPos = Number.isFinite(state.position) ? state.position : 0;
     const anchorDur = Number.isFinite(state.duration) ? state.duration : 0;
     const anchorAt = Number.isFinite(state.updatedAt) ? state.updatedAt : 0;
 
-    const tick = (): void => {
+    const apply = (): void => {
       const elapsedFromAnchor =
         state.playing && anchorAt > 0 ? (Date.now() - anchorAt) / 1000 : 0;
       const positionNow =
@@ -60,23 +66,20 @@ export function MusicCard() {
           : anchorPos + elapsedFromAnchor;
 
       if (fillRef.current) {
-        const pct = anchorDur > 0 ? (positionNow / anchorDur) * 100 : 0;
-        fillRef.current.style.width = pct + '%';
+        const ratio = anchorDur > 0 ? Math.min(positionNow / anchorDur, 1) : 0;
+        fillRef.current.style.transform = `scaleX(${ratio})`;
       }
-
-      // Le texte ne change qu'à l'entier de seconde près → on évite les
-      // 60 writes/s du textContent inutiles.
-      const sec = Math.floor(positionNow);
-      if (sec !== lastSec && elapsedRef.current) {
-        elapsedRef.current.textContent = formatElapsed(sec);
-        lastSec = sec;
+      if (elapsedRef.current) {
+        elapsedRef.current.textContent = formatElapsed(Math.floor(positionNow));
       }
-
-      frameId = requestAnimationFrame(tick);
     };
 
-    frameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameId);
+    apply();
+    // En pause, rien n'avance : aucun timer. La reprise arrive via un
+    // nouvel anchor (push SMTC) qui re-déclenche cet effet.
+    if (!state.playing) return;
+    const id = setInterval(apply, 1000);
+    return () => clearInterval(id);
   }, [state.title, state.playing, state.position, state.duration, state.updatedAt]);
 
   // Si aucune lecture détectée, on ne rend rien — l'ExpandedDashboard fait
