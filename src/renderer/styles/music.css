@@ -136,8 +136,13 @@
   background: rgba(255, 255, 255, 0.85);
   border-radius: 1px;
   /* Animation décalée : chaque barre rebondit avec un léger délai pour
-     simuler un equalizer audio. */
-  animation: bar-bounce 700ms ease-in-out infinite;
+     simuler un equalizer audio.
+     Perf (audit P6) : steps(8) ≈ 11 fps au lieu de 60+. Le scaleY est
+     compositor-only mais chaque frame produite force quand même le DWM à
+     recomposer le bureau (fenêtre transparente always-on-top) — et ces
+     barres tournent toute la journée dès qu'une musique joue. Le rendu
+     discret par paliers reste crédible pour un equalizer. */
+  animation: bar-bounce 700ms steps(8) infinite;
 }
 
 .music-tile .overlay-bars span:nth-child(1) {

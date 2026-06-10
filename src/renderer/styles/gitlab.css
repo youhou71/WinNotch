@@ -42,17 +42,31 @@
  * signaler l'urgence. Prend la priorité visuelle sur le badge orange
  * reviews quand au moins une issue critique est ouverte non assignée.
  */
+/* Perf (audit P6) : halo ::after pré-peint (box-shadow statique) animé en
+   transform/opacity uniquement — compositor-only, zéro repaint par frame.
+   L'ancien pulse animait box-shadow en continu dans le notch collapsed. */
 .gitlab-badge-issues {
   background: linear-gradient(135deg, #ef4444, #b91c1c);
-  animation: gitlab-issues-pulse 1.8s ease-in-out infinite;
 }
 
-@keyframes gitlab-issues-pulse {
+.gitlab-badge-issues::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
+  pointer-events: none;
+  animation: gitlab-issues-halo 1.8s ease-in-out infinite;
+}
+
+@keyframes gitlab-issues-halo {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+    transform: scale(0.85);
+    opacity: 0;
   }
   50% {
-    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+    transform: scale(1.1);
+    opacity: 1;
   }
 }
 

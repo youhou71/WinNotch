@@ -146,11 +146,18 @@ export function ClaudeCard() {
 
   const session = active.find((s) => s.id === selectedId) ?? active[0];
 
+  // Le spark ne tourne que si une session travaille réellement (cf.
+  // claude.css — au repos l'anneau reste statique, zéro frame produite).
+  const anyWorking = active.some((s) => s.status === 'working');
+
   return (
     <div className="card card-claude" data-notch-hit="true">
       <div className="card-header">
         <div className="card-header-left">
-          <div className="claude-spark" style={{ width: 14, height: 14 }} />
+          <div
+            className={'claude-spark' + (anyWorking ? ' is-working' : '')}
+            style={{ width: 14, height: 14 }}
+          />
           Claude Code
         </div>
         <div className="card-header-right">
