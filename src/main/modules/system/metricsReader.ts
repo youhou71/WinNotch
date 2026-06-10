@@ -124,12 +124,18 @@ const NET_SCRIPT = `
 $ErrorActionPreference = 'SilentlyContinue'
 $OutputEncoding = [System.Text.Encoding]::UTF8
 $stats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue
+# Jointure hashtable : DEUX requêtes CIM fixes au lieu de 1 + N
+# (l'ancien Get-NetAdapter -Name par adaptateur multipliait les requêtes
+# WMI à chaque tick 1 Hz — audit perf P7, gain mesurable sur WmiPrvSE).
+$adaptersByName = @{}
+foreach ($a in (Get-NetAdapter -ErrorAction SilentlyContinue)) {
+  if ($a.Status -eq 'Up') { $adaptersByName[$a.Name] = $a }
+}
 $rows = @()
 if ($stats) {
   foreach ($s in $stats) {
-    $adapter = Get-NetAdapter -Name $s.Name -ErrorAction SilentlyContinue
+    $adapter = $adaptersByName[[string]$s.Name]
     if (-not $adapter) { continue }
-    if ($adapter.Status -ne 'Up') { continue }
     $rows += [pscustomobject]@{
       name = [string]$s.Name
       description = [string]$adapter.InterfaceDescription

@@ -2,13 +2,21 @@
  * Service du module VPN status.
  *
  * Responsabilités :
- *  - Polling PowerShell toutes les `pollMs` ms (défaut 10 000).
+ *  - Détection pilotée par les changements d'interfaces réseau : à chaque
+ *    tick (`pollMs`, défaut 10 000 ms) on compare une SIGNATURE de
+ *    `os.networkInterfaces()` (pur Node, quasi gratuit) — le script
+ *    PowerShell (3 requêtes WMI/CIM) ne tourne que si la signature a
+ *    changé (connexion/déconnexion VPN = apparition/disparition d'une
+ *    interface ou d'une adresse) ou au plus toutes les 60 s en
+ *    réconciliation lente (audit perf P7 — avant : 3 requêtes WMI toutes
+ *    les 10 s en continu).
  *  - Maintien d'une table interne `connectedSince` indexée par
  *    `interfaceName` pour fournir une durée de session stable même
  *    entre deux ticks.
  *  - Lookup pays asynchrone (best-effort, désactivable par config).
  *  - Broadcast IPC `vpn:change` à chaque transition d'état.
- *  - Handler `vpn:getState` / `vpn:refresh`.
+ *  - Handler `vpn:getState` / `vpn:refresh` (refresh manuel = détection
+ *    complète forcée, sans heuristique).
  *
  * Flag d'arrêt : `WINNOTCH_DISABLE_VPN=1` saute l'enregistrement.
  *
@@ -17,6 +25,7 @@
  * client, et le risque de couper une session active par accident.
  */
 import { ipcMain } from 'electron';
+import os from 'node:os';
 import Store from 'electron-store';
 import {
   DEFAULT_SETTINGS,
@@ -54,6 +63,26 @@ const sessionTable = new Map<string, { since: number; isApprox: boolean }>();
 let pollTimer: NodeJS.Timeout | null = null;
 let tickInFlight: Promise<VpnState> | null = null;
 let bootCompleted = false;
+
+/** Intervalle max entre deux détections PowerShell complètes. */
+const FULL_DETECT_INTERVAL_MS = 60_000;
+let lastDetectAt = 0;
+let lastIfaceSignature = '';
+
+/**
+ * Signature compacte des interfaces réseau visibles par Node. Toute
+ * connexion/déconnexion VPN fait apparaître/disparaître une interface ou
+ * une adresse → la signature change → on déclenche la détection complète.
+ */
+function networkSignature(): string {
+  const ifaces = os.networkInterfaces();
+  const parts: string[] = [];
+  for (const name of Object.keys(ifaces).sort()) {
+    const addrs = (ifaces[name] ?? []).map((a) => a.address).sort();
+    parts.push(`${name}=${addrs.join(',')}`);
+  }
+  return parts.join(';');
+}
 
 function broadcast(): void {
   const win = getNotchWindow();
@@ -110,9 +139,26 @@ function scheduleCountryLookups(connections: VpnConnection[]): void {
   }
 }
 
+/**
+ * Tick périodique : ne lance la détection PowerShell que si les interfaces
+ * réseau ont bougé depuis le dernier passage, ou si la dernière détection
+ * complète date de plus de `FULL_DETECT_INTERVAL_MS` (réconciliation lente
+ * — filet pour les états que `os.networkInterfaces()` ne reflète pas).
+ */
+async function pollTick(): Promise<void> {
+  const sig = networkSignature();
+  const now = Date.now();
+  if (sig === lastIfaceSignature && now - lastDetectAt < FULL_DETECT_INTERVAL_MS) {
+    return;
+  }
+  lastIfaceSignature = sig;
+  await refreshOnce();
+}
+
 async function refreshOnce(): Promise<VpnState> {
   if (tickInFlight) return tickInFlight;
   const task = (async () => {
+    lastDetectAt = Date.now();
     const { snapshot, error } = await runDetectScript();
     const now = Date.now();
     if (!snapshot) {
@@ -170,7 +216,7 @@ function restartPolling(): void {
   const cfg = store.get('moduleConfig').vpn;
   const ms = Math.max(MIN_POLL_MS, cfg.pollMs || 10_000);
   pollTimer = setInterval(() => {
-    void refreshOnce();
+    void pollTick();
   }, ms);
 }
 
@@ -190,6 +236,9 @@ export function registerVpnIpc(): void {
 
   subscribeConfigChanges();
 
+  // Baseline de la signature AVANT la première détection, sinon le premier
+  // pollTick relancerait une détection complète redondante.
+  lastIfaceSignature = networkSignature();
   void refreshOnce();
   restartPolling();
 }
