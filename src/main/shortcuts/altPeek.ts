@@ -1,18 +1,28 @@
 /**
- * Capture globale du clavier via `node-global-key-listener` (keyserver
- * natif Windows en sous-process).
+ * Mode Peek (Alt maintenu) — quand l'utilisateur maintient Alt n'importe
+ * où dans Windows, on rend le notch translucide (opacité 0.15) et
+ * totalement click-through.
  *
- * Usage : **Mode Peek (Alt maintenu)** — quand l'utilisateur maintient
- * Alt n'importe où dans Windows, on rend le notch translucide
- * (opacité 0.15) et totalement click-through.
+ * Détection : polling `GetAsyncKeyState(VK_MENU)` à ~75 ms dans la boucle
+ * PowerShell résidente du détecteur fullscreen (cf. `fullscreenDetector.ts`
+ * + `resources/ps/fullscreen-detector.ps1`), qui n'émet que les transitions
+ * DOWN/UP. Ce module se contente d'enregistrer le handler via
+ * `setAltKeyHandler` — il doit donc être démarré AVANT
+ * `startFullscreenDetector()` (ordre garanti dans `index.ts`).
+ *
+ * Pourquoi plus de hook clavier global (`node-global-key-listener`,
+ * retiré) ? Un hook WH_KEYBOARD_LL fait transiter CHAQUE frappe de chaque
+ * application par un aller-retour pipe vers l'event loop Node. Dès que le
+ * main process bloque (I/O synchrone, GC…), c'est la latence clavier de
+ * tout Windows qui en pâtit. Le polling est hors du chemin critique
+ * clavier : coût fixe négligeable, latence de détection ≤ 75 ms
+ * (imperceptible pour un effet d'opacité).
  *
  * Pourquoi pas d'interception d'Escape ici (pour fermer le notch) ?
- * Toutes les libs Node pour Windows (`node-global-key-listener`,
- * `uiohook-napi`, `iohook`…) ne bloquent **pas réellement** les events
- * — elles observent mais l'event continue vers l'app foreground (round-
- * trip stdin trop lent pour le WH_KEYBOARD_LL timeout). Capter Esc
- * fermerait certes le notch, mais sortirait aussi YouTube du fullscreen,
- * fermerait les menus Chrome, etc. UX cassée.
+ * Un polling (comme les hooks Node d'ailleurs) **observe** sans bloquer :
+ * l'event continue vers l'app foreground. Capter Esc fermerait certes le
+ * notch, mais sortirait aussi YouTube du fullscreen, fermerait les menus
+ * Chrome, etc. UX cassée.
  *
  * Méthodes de fermeture du notch en place à la place :
  *  - `Ctrl+Shift+Space` re-toggle (via globalShortcut)
@@ -22,9 +32,10 @@
 import { IpcChannel, type NotchMode } from '../../shared/types';
 import { getNotchWindow } from '../window/notchWindow';
 import { setPeekState } from '../ipc/mouse';
+import { setAltKeyHandler } from '../modules/shell/fullscreenDetector';
 
-/** Référence opaque vers le listener actif (pour pouvoir le kill au quit). */
-let listener: { kill: () => void } | null = null;
+/** État Peek courant — sert de dedup (filet : le script PS n'émet déjà que les transitions). */
+let peekActive = false;
 
 /**
  * Mode courant du notch — maintenu via `setNotchMode`. Conservé même
@@ -45,6 +56,8 @@ export function setNotchMode(mode: NotchMode): void {
  *  - Le push IPC permet au renderer d'appliquer la classe CSS `.is-peeking`
  */
 function emitPeek(on: boolean): void {
+  if (on === peekActive) return;
+  peekActive = on;
   setPeekState(on);
   const win = getNotchWindow();
   if (win && !win.isDestroyed()) {
@@ -53,38 +66,18 @@ function emitPeek(on: boolean): void {
 }
 
 /**
- * Démarre l'écoute globale du clavier. Import dynamique pour tolérer
- * l'absence du package (ex. lors d'un build CI multi-plateforme).
- *
- * Filtre uniquement Alt — toutes les autres touches sont ignorées pour
- * minimiser l'overhead.
+ * Branche le mode Peek sur le poller Alt du détecteur fullscreen.
+ * À appeler avant `startFullscreenDetector()` : la présence du handler au
+ * spawn active le polling Alt côté script PS.
  */
-export async function startAltPeekListener(): Promise<void> {
-  try {
-    const mod = await import('node-global-key-listener');
-    const { GlobalKeyboardListener } = mod;
-    const gkl = new GlobalKeyboardListener();
-    gkl.addListener((event) => {
-      // Alt → mode Peek (continu, basé sur DOWN/UP). On NE consomme PAS
-      // Alt — d'autres apps en ont besoin (Alt+Tab, raccourcis menu).
-      if (event.name === 'LEFT ALT' || event.name === 'RIGHT ALT') {
-        if (event.state === 'DOWN') emitPeek(true);
-        else if (event.state === 'UP') emitPeek(false);
-      }
-      return false;
-    });
-    listener = { kill: () => gkl.kill() };
-  } catch (err) {
-    console.warn('[WinNotch] Global key listener indisponible:', err);
-  }
+export function startAltPeekListener(): void {
+  setAltKeyHandler(emitPeek);
 }
 
-/** Arrête le keyserver. Appelé à la fermeture de l'app. */
+/** Débranche le handler Alt. Appelé à la fermeture de l'app. */
 export function stopAltPeekListener(): void {
-  try {
-    listener?.kill();
-  } catch {
-    // Le keyserver peut déjà être mort (crash, signal externe) — sans effet.
-  }
-  listener = null;
+  setAltKeyHandler(null);
+  // Ne jamais laisser la fenêtre coincée en passe-plats si on coupe
+  // pendant un maintien d'Alt.
+  emitPeek(false);
 }

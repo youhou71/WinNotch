@@ -1,11 +1,18 @@
 /**
- * Détecteur d'application en plein écran sur l'écran principal.
+ * Détecteur d'application en plein écran sur l'écran principal + touche Alt
+ * (mode Peek).
  *
- * Stratégie : un process PowerShell long-running poll `GetForegroundWindow`
- * + `GetWindowRect` toutes les ~750 ms et écrit les bounds sur stdout.
- * Node lit chaque ligne, compare aux bounds du primary display (via
- * `screen.getPrimaryDisplay().bounds`) et émet `shell:fullscreenChange`
- * au renderer si l'état bascule.
+ * Stratégie : UN process PowerShell long-running (mutualisé pour les deux
+ * usages, cf. `resources/ps/fullscreen-detector.ps1`) :
+ *  - poll `GetForegroundWindow` + `GetWindowRect` toutes les ~750 ms et
+ *    écrit les bounds sur stdout. Node lit chaque ligne, compare aux bounds
+ *    du primary display (via `screen.getPrimaryDisplay().bounds`) et émet
+ *    `shell:fullscreenChange` au renderer si l'état bascule.
+ *  - poll `GetAsyncKeyState(VK_MENU)` toutes les ~75 ms et émet `ALT,1` /
+ *    `ALT,0` UNIQUEMENT sur transition — routé vers le handler enregistré
+ *    par `altPeek.ts` via `setAltKeyHandler` (remplace l'ancien hook
+ *    clavier global `node-global-key-listener`, qui couplait la latence
+ *    clavier de tout Windows à la charge de l'event loop du main).
  *
  * Pourquoi un PS long-running plutôt que `execFile` à chaque tick :
  *  - Spawn PowerShell coûte 150-300 ms et ~5% CPU
@@ -14,7 +21,7 @@
  * Pourquoi 750 ms : compromis entre réactivité (l'utilisateur passe en
  * fullscreen → le notch disparaît rapidement) et coût (peu de wake-ups).
  *
- * Détection :
+ * Détection fullscreen :
  *  - "fullscreen" = la fenêtre foreground couvre **exactement** les
  *    bounds (pas workArea) du primary display
  *  - Tolérance ±2 px sur chaque bord pour gérer les arrondis DPI
@@ -28,11 +35,28 @@ import { psScriptPath } from './psScriptPath';
 import { getNotchWindow } from '../../window/notchWindow';
 
 const POLL_INTERVAL_MS = 750;
+/**
+ * Intervalle du polling Alt (mode Peek). 75 ms = latence de détection
+ * imperceptible pour un effet d'opacité, coût d'un GetAsyncKeyState
+ * négligeable.
+ */
+const ALT_POLL_INTERVAL_MS = 75;
 /** Marge tolérée sur chaque bord (DPI, ombres, etc.). */
 const EDGE_TOLERANCE_PX = 2;
 
 let psProcess: ChildProcessWithoutNullStreams | null = null;
 let lastEmitted: boolean | null = null;
+let altKeyHandler: ((down: boolean) => void) | null = null;
+
+/**
+ * Enregistre le handler des transitions Alt (down/up) émises par le script
+ * PS. Appelé par `altPeek.ts` AVANT `startFullscreenDetector()` (ordre
+ * garanti dans `index.ts`) : la présence d'un handler au moment du spawn
+ * décide si le script active son polling Alt. `null` désenregistre.
+ */
+export function setAltKeyHandler(handler: ((down: boolean) => void) | null): void {
+  altKeyHandler = handler;
+}
 
 // Le script de détection (Add-Type P/Invoke GetForegroundWindow/GetWindowRect +
 // boucle émettant "left,top,right,bottom,pid") vit dans
@@ -69,6 +93,11 @@ function emit(fullscreen: boolean): void {
 function handleLine(line: string): void {
   const trimmed = line.trim();
   if (!trimmed) return;
+  // Transitions Alt (mode Peek) — émises uniquement sur changement d'état.
+  if (trimmed.startsWith('ALT,')) {
+    altKeyHandler?.(trimmed === 'ALT,1');
+    return;
+  }
   const parts = trimmed.split(',');
   if (parts.length < 5) return;
   const [l, t, r, b, pidStr] = parts.map((s) => Number(s));
@@ -106,6 +135,9 @@ export function startFullscreenDetector(): void {
         '-File',
         psScriptPath('fullscreen-detector.ps1'),
         String(POLL_INTERVAL_MS),
+        // 0 = polling Alt désactivé côté script (aucun handler enregistré,
+        // ex. WINNOTCH_DISABLE_ALT_PEEK=1 → altPeek jamais démarré).
+        String(altKeyHandler ? ALT_POLL_INTERVAL_MS : 0),
       ],
       { windowsHide: true },
     );
@@ -122,6 +154,8 @@ export function startFullscreenDetector(): void {
     console.warn('[fullscreen] PowerShell indisponible — détection désactivée:', err.message);
     psProcess = null;
     lastEmitted = null;
+    // Ne jamais laisser le notch coincé en mode Peek si le poller meurt.
+    altKeyHandler?.(false);
   });
 
   let buffer = '';
@@ -141,6 +175,7 @@ export function startFullscreenDetector(): void {
     console.warn(`[fullscreen] détecteur arrêté (code=${code})`);
     psProcess = null;
     lastEmitted = null;
+    altKeyHandler?.(false);
   });
 }
 

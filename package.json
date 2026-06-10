@@ -41,7 +41,6 @@
     "electron-updater": "^6.8.3",
     "loudness": "^0.4.2",
     "mqtt": "^5.15.1",
-    "node-global-key-listener": "^0.3.0",
     "simple-git": "^3.36.0"
   },
   "devDependencies": {

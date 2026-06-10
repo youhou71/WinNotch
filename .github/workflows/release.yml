@@ -17,7 +17,6 @@
 # Runner : `windows-latest` car :
 #   - target NSIS (NSIS uniquement sur Windows)
 #   - `@coooookies/windows-smtc-monitor` (.node pour Windows x64)
-#   - `node-global-key-listener` (.exe Windows embarqué)
 # Pas de matrix Linux/macOS — l'app est Windows-only.
 
 name: Release

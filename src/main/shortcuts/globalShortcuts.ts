@@ -5,17 +5,15 @@
  *  - Ctrl + Shift + Space : toggle collapsed/expanded du notch
  *
  * Note : Escape **ne peut pas** être enregistré via globalShortcut
- * (Electron le refuse explicitement). On le capte donc via le keyserver
- * natif `node-global-key-listener` (cf. `altPeek.ts`), conditionnel au
- * mode `expanded` que le renderer notifie via `shell:modeChanged`.
+ * (Electron le refuse explicitement), et on ne l'intercepte pas non plus
+ * globalement (cf. altPeek.ts : la fermeture du notch passe par
+ * Ctrl+Shift+Space, le clic outside, ou Esc local sur la search bar).
  *
  * Note : pas de `win.focus()` agressif ni de `app.focus({ steal: true })`.
  * Sur Windows, ces appels réveillent la taskbar auto-hide quand
  * `SetForegroundWindow` est invoqué. Le focus système n'est pas
- * indispensable car :
- *  - Les events clavier (Esc) sont captés via `node-global-key-listener`
- *  - L'utilisateur peut cliquer dans la search bar pour donner le focus
- *    naturellement quand il veut taper
+ * indispensable car l'utilisateur peut cliquer dans la search bar pour
+ * donner le focus naturellement quand il veut taper.
  */
 import { ipcMain, globalShortcut } from 'electron';
 import { IpcChannel, type NotchMode } from '../../shared/types';

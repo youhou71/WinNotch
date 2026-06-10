@@ -337,7 +337,7 @@ Après une création manuelle, ne re-bascule pas le toggle dans l'app (il retent
 - **`loudness`** — wrapper PowerShell pour le volume système.
 - **`SoundVolumeView.exe`** (NirSoft, bundlé) — énumération + changement du device de sortie.
 - **`better-sqlite3`** — lecture de `state.vscdb` (workspaces VS Code récents).
-- **`node-global-key-listener`** — hook clavier global pour la détection `Alt` (mode Peek).
+- **Détection `Alt` (mode Peek)** — polling `GetAsyncKeyState` dans le PowerShell résident du détecteur fullscreen (`resources/ps/fullscreen-detector.ps1`). Plus aucun hook clavier global : l'ancien `node-global-key-listener` (WH_KEYBOARD_LL) faisait transiter chaque frappe du PC par l'event loop de l'app, ajoutant de la latence clavier système dès que le main était chargé.
 
 ---
 

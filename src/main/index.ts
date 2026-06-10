@@ -161,7 +161,7 @@ app.whenReady().then(async () => {
   // Feature flags de diagnostic — utiles pour isoler une source d'erreur
   // sans avoir à recompiler. Définir l'env var à "1" pour désactiver.
   //  - WINNOTCH_DISABLE_AUDIO_POLL=1 : coupe le polling 2 s (loudness + SVV)
-  //  - WINNOTCH_DISABLE_ALT_PEEK=1   : coupe le hook clavier global
+  //  - WINNOTCH_DISABLE_ALT_PEEK=1   : coupe la détection Alt (mode Peek)
   //  - WINNOTCH_DISABLE_MUSIC=1      : coupe le monitor SMTC + media keys
   //  - WINNOTCH_DISABLE_CLIPBOARD=1  : coupe le polling clipboard + IPC
   //  - WINNOTCH_DISABLE_VPN=1        : coupe le polling PowerShell VPN
@@ -170,8 +170,10 @@ app.whenReady().then(async () => {
   } else {
     console.log('[WinNotch] Audio polling désactivé (WINNOTCH_DISABLE_AUDIO_POLL=1)');
   }
+  // IMPORTANT : avant startFullscreenDetector() — le handler Alt doit être
+  // enregistré au moment du spawn du poller PS (cf. altPeek.ts).
   if (process.env.WINNOTCH_DISABLE_ALT_PEEK !== '1') {
-    void startAltPeekListener();
+    startAltPeekListener();
   } else {
     console.log('[WinNotch] Alt peek listener désactivé (WINNOTCH_DISABLE_ALT_PEEK=1)');
   }
