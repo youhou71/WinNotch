@@ -334,8 +334,8 @@ Après une création manuelle, ne re-bascule pas le toggle dans l'app (il retent
 - **electron-updater** — mises à jour automatiques via GitHub Releases.
 - **`@coooookies/windows-smtc-monitor`** — bindings napi-rs pour les sessions media Windows.
 - **`@nut-tree-fork/libnut-win32`** — bindings natifs N-API pour l'envoi des touches média (play/pause, suivant, précédent).
-- **`loudness`** — wrapper PowerShell pour le volume système.
-- **`SoundVolumeView.exe`** (NirSoft, bundlé) — énumération + changement du device de sortie.
+- **`loudness`** — binaire Core Audio bundlé pour le volume système (lecture volume+muted en un seul spawn via `getVolumeInfo`).
+- **`SoundVolumeView.exe`** (NirSoft, bundlé) — énumération + changement du device de sortie. Appelé uniquement à la demande (ouverture du panneau audio, changement de device) avec cache 30 s — plus de spawn périodique.
 - **`better-sqlite3`** — lecture de `state.vscdb` (workspaces VS Code récents).
 - **Détection `Alt` (mode Peek)** — polling `GetAsyncKeyState` dans le PowerShell résident du détecteur fullscreen (`resources/ps/fullscreen-detector.ps1`). Plus aucun hook clavier global : l'ancien `node-global-key-listener` (WH_KEYBOARD_LL) faisait transiter chaque frappe du PC par l'event loop de l'app, ajoutant de la latence clavier système dès que le main était chargé.
 
