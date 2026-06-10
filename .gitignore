@@ -19,3 +19,4 @@ dist
 # Backlog d'idées de modules non décidées — vit en local, à promouvoir
 # dans le code/README.md quand une idée est priorisée.
 project_ideas.md
+PERF_AUDIT.md
