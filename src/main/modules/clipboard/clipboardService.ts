@@ -32,6 +32,7 @@ import {
 import { getNotchWindow } from '../../window/notchWindow';
 import { detectClipboard } from './detectors';
 import {
+  flushHistory,
   loadHistory,
   loadLastSeenAt,
   saveHistory,
@@ -107,8 +108,24 @@ function commit(nextEntries: ClipboardEntry[]): ClipboardState {
 
 /* ───────────── Watcher → nouvelle entrée ───────────── */
 
+/**
+ * Au-delà de cette taille, un texte copié n'entre pas dans l'historique :
+ * chaque commit re-chiffre (DPAPI) et re-sérialise l'historique COMPLET —
+ * un blob de plusieurs Mo (dump SQL, gros JSON…) ferait exploser le coût
+ * de chaque copie suivante. On ne tronque pas (un « Copier à nouveau »
+ * collerait silencieusement un contenu amputé) : on ignore l'entrée.
+ */
+const MAX_TEXT_ENTRY_BYTES = 256 * 1024;
+
 function onClipboardChange(text: string, image: Electron.NativeImage | null): void {
   if (!isModuleEnabled()) return;
+
+  if (!image && Buffer.byteLength(text, 'utf8') > MAX_TEXT_ENTRY_BYTES) {
+    console.log(
+      `[clipboard] texte copié > ${MAX_TEXT_ENTRY_BYTES / 1024} Ko — non historisé (le presse-papier système n'est pas affecté)`,
+    );
+    return;
+  }
 
   const detection = detectClipboard(text, image);
   if (!detection) return;
@@ -354,6 +371,9 @@ export function registerClipboardIpc(): void {
 
 export function stopClipboard(): void {
   stopClipboardWatcher();
+  // L'écriture de l'historique est débouncée (2 s) : flush explicite pour
+  // ne pas perdre les copies des 2 dernières secondes à la fermeture.
+  flushHistory();
 }
 
 /**
