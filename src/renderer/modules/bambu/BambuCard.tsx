@@ -123,6 +123,32 @@ export function BambuCard() {
                 </div>
               )}
             </div>
+          ) : state.lastPrint ? (
+            <div
+              className={
+                'bambu-last' +
+                (state.lastPrint.outcome === 'failed' ? ' is-failed' : '')
+              }
+              title={state.lastPrint.fileName}
+            >
+              <i
+                className={
+                  'fa-solid ' +
+                  (state.lastPrint.outcome === 'failed'
+                    ? 'fa-circle-xmark'
+                    : 'fa-circle-check')
+                }
+              />
+              <span className="bambu-last-text">
+                {state.lastPrint.outcome === 'failed'
+                  ? 'Dernière : échec'
+                  : 'Dernière : terminée'}
+                {state.lastPrint.durationMin !== null
+                  ? ` · ${formatEta(state.lastPrint.durationMin)}`
+                  : ''}
+                {state.lastPrint.fileName ? ` — ${state.lastPrint.fileName}` : ''}
+              </span>
+            </div>
           ) : (
             <div className="bambu-status-line">
               {gcodeLabel(state.gcodeState)}

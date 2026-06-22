@@ -373,3 +373,62 @@
   color: var(--txt-dim);
   line-height: 1.4;
 }
+
+/* ──────────────────────────────────────────────────────────────────
+ *  Mode `=` (Calc & Convert) — réutilise la coque `.cb-det-*`
+ *  (clipboard.css), n'ajoute que le rendu du résultat et de l'aide.
+ * ────────────────────────────────────────────────────────────────── */
+.calc-result {
+  font-family:
+    ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--txt, #f4f4f5);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calc-error {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f87171;
+}
+
+.calc-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 4px 2px;
+}
+
+.calc-hint > i {
+  font-size: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.calc-hint-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt, #f4f4f5);
+  margin-bottom: 4px;
+}
+
+.calc-hint-sub {
+  font-size: 11px;
+  color: var(--txt-dim);
+  line-height: 1.7;
+}
+
+.calc-hint-sub code {
+  font-family:
+    ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--txt, #f4f4f5);
+  white-space: nowrap;
+}

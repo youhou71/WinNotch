@@ -5,7 +5,7 @@
  * `<ExpandedDashboard>` en `useState` local — problème : le composant est
  * démonté/remonté à chaque collapse/expand du notch, et certains
  * composants (`<TasksCounterCard>` qui force `setQuery('-')`, hooks back
- * qui vident la query, raccourci global Ctrl+Shift+V qui ouvre la page
+ * qui vident la query, raccourci global Ctrl+Alt+V qui ouvre la page
  * Clipboard) doivent pouvoir écrire/lire la query indépendamment du
  * parent.
  *

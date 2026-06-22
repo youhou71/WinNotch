@@ -5,6 +5,40 @@ Toutes les évolutions notables de WinNotch.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versioning [SemVer](https://semver.org/lang/fr/).
 
+## [Unreleased]
+
+### Added
+
+- **Mode `=` (Calc & Convert) dans la search bar** *(Roadmap Lot 1 #1)* — un préfixe `=` bascule la barre en calculette/convertisseur **100 % hors-ligne** (moteur pur `shared/calc.ts`, tokenizer + shunting-yard maison, zéro dépendance) :
+  - arithmétique `(1920/3)*2`, `2**16`, `-2**2`, `100 % 7`, décimaux / notation scientifique (`+ - * / % **`, parenthèses, moins unaire) ;
+  - bases `0xFF to dec` / `255 to hex` / littéral seul `0xFF` → dec/hex/bin/oct ;
+  - longueurs CSS `20px to rem` (base 16 px) ; tailles data `1.5MB to KB` (décimal + binaire `KiB`) ;
+  - epoch ↔ date `1700000000 to date`, `2024-01-01 to epoch`.
+  Chaque valeur a un bouton Copier ; `Entrée` copie le résultat principal. Vue `CalcView` réutilisant la coque des vues de détection. *(Implémenté comme sigil-préfixe et non comme détecteur passif du `TEXT_PIPELINE` — sinon la calculette se déclencherait sur tout nombre tapé.)*
+- **Détections dev passives étendues** *(Roadmap Lot 1 #2)* — le pipeline de détection partagé Clipboard ↔ search bar (`shared/clipboardDetectors.ts`) reconnaît trois nouveaux types, donc aussi bien dans la barre de recherche que dans l'historique du presse-papier :
+  - **UUID** (RFC 4122, version détectée) → Copier minuscules / MAJUSCULES ;
+  - **Hash** hex 32/40/64 → label MD5 / SHA-1 / SHA-256 + Copier ;
+  - **Timestamp Unix** (10/13 chiffres, borné an 2000–2100) → date locale + UTC + relatif, Copier ISO / epoch s / ms.
+  Détecteurs purs (sans dépendance Node). **Règle de priorité** : une chaîne opaque jugée sensible (mixte maj/min) n'est jamais décodée passivement comme un hash — elle reste masquée.
+- **Claude Usage — projection de tenue** *(Roadmap Lot 1 #3)* — à partir de la vélocité de consommation (moyenne glissante pondérée sur les ring buffers persistés), le module estime si une fenêtre (5 h / 7 j) sera épuisée **avant son reset** :
+  - texte sous les jauges (« 5 h épuisé dans ~38 min », « 7 j épuisé jeu. 16:00 ») ou « Tenu jusqu'au reset » ;
+  - **ligne pointillée** de projection prolongeant la mini-sparkline 24 h, bornée par le reset ;
+  - **alerte de rythme** : toast `notifyPace` (nouveau toggle, défaut activé) déclenché quand une fenêtre va dépasser avant son reset — distinct des seuils absolus 70/85/95.
+  Moteur pur testable (`claudeUsage/projection.ts`) avec garde-fous cold-start et reset/roll-off. Ajout d'un ring buffer hebdomadaire parallèle (non exposé au renderer) pour la vélocité 7 j.
+- **Bambu — toasts fin/échec + filament bas** *(Roadmap Lot 1 #4)* — notifications **toast-only** (jamais d'auto-expand, filtrées en Ne pas Déranger) sur l'imprimante 3D :
+  - **fin d'impression** avec durée (« Impression terminée · 4h12 »), **échec** (FAILED), **erreur HMS grave** (fatal / serious) ;
+  - **filament bas** quand une bobine AMS passe sous 10 % — ignoré si le `remainPercent` est inconnu (P1 sans RFID) ;
+  - **résumé de la dernière impression** affiché dans la card hors impression (terminée / échec + durée + fichier).
+  **Garde-fou** : le premier rapport reçu (snapshot `pushall`) sert de baseline silencieuse → aucun faux « terminée » au démarrage. Nouveaux toggles `notifyPrint` / `notifyFilament` (Settings → Imprimante 3D → Notifications, activés par défaut).
+
+### Changed
+
+- **Raccourci global du presse-papier `Ctrl+Shift+V` → `Ctrl+Alt+V`**. `Ctrl+Shift+V` est le raccourci Windows natif de « coller sans mise en forme » ; le conflit empêchait son usage. Mise à jour de l'accélérateur (`globalShortcuts.ts`) et de toutes les références visibles (tooltip search bar, description Settings, chip clipboard, page clipboard, aide recherche) + commentaires.
+
+### Fixed
+
+- **Contrôle du volume inopérant en version installée** (affichait `0 %` + icône mute alors qu'il y avait du son, OK en dev). Cause : le binaire `loudness` (`adjust_get_current_system_volume_vista_plus.exe`) était spawné depuis son chemin **virtuel** dans `app.asar`, or `CreateProcess` ne peut pas lire un `.exe` à l'intérieur de l'archive asar (Electron ne patche que `fs`, pas le spawn de process) → `ENOENT` silencieux, cache volume figé à `0` (et l'icône mute s'allume dès que `level === 0`). `audio/volume.ts` résout désormais le chemin et le réécrit vers `app.asar.unpacked\…` (no-op en dev), et appelle le binaire directement pour la lecture **et** l'écriture (`setVolume`/`setMuted` ne passent plus par l'API JS de `loudness`, qui souffrait du même chemin cassé). Commentaire `electron-builder.yml` (« loudness wrappe PowerShell ») corrigé au passage.
+
 ## [1.1.0] - 2026-05-29
 
 ### Added

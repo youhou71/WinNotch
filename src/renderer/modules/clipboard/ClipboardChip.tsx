@@ -26,6 +26,9 @@ const TYPE_META: Record<ClipboardEntryType, { icon: string; label: string }> = {
   json: { icon: 'fa-solid fa-brackets-curly', label: 'JSON' },
   color: { icon: 'fa-solid fa-palette', label: 'Couleur' },
   path: { icon: 'fa-regular fa-folder', label: 'Chemin' },
+  uuid: { icon: 'fa-solid fa-fingerprint', label: 'UUID' },
+  hash: { icon: 'fa-solid fa-hashtag', label: 'Hash' },
+  epoch: { icon: 'fa-solid fa-clock', label: 'Epoch' },
   text: { icon: 'fa-solid fa-quote-right', label: 'Texte' },
 };
 
@@ -151,7 +154,7 @@ export function ClipboardChip() {
               )}
             </div>
           )}
-          <div className="tt-sub">Ctrl + Shift + V pour ouvrir l'historique.</div>
+          <div className="tt-sub">Ctrl + Alt + V pour ouvrir l'historique.</div>
         </div>
       }
     >

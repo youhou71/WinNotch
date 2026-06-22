@@ -378,7 +378,7 @@ export function stopClipboard(): void {
 
 /**
  * Demande au renderer d'afficher la card Clipboard avec focus sur la
- * recherche. Appelé par le raccourci global Ctrl+Shift+V (cf.
+ * recherche. Appelé par le raccourci global Ctrl+Alt+V (cf.
  * `shortcuts/globalShortcuts.ts`).
  */
 export function focusClipboardCard(): void {

@@ -54,6 +54,12 @@ const PREFIX_ITEMS: DocItem[] = [
     enabled: (s) => s.modules.tasks,
   },
   {
+    symbol: '=',
+    label: 'Calc & Convert',
+    description:
+      'Calcul (« (1920/3)*2 », « 2**16 ») et conversions (« 20px to rem », « 1.5MB to KB », « 0xFF to dec », « 1700000000 to date »). Entrée copie le résultat.',
+  },
+  {
     symbol: '>',
     label: 'Lance Claude',
     description:
@@ -108,6 +114,24 @@ const DETECTION_ITEMS: DocItem[] = [
     description:
       'Swatch + équivalents HEX/RGB/HSL avec bouton copier sur chacun.',
   },
+  {
+    symbol: 'uuid-…-…',
+    label: 'UUID',
+    description:
+      'Reconnaît un UUID (RFC 4122) et sa version. Boutons « Copier minuscules » / « Copier MAJUSCULES ».',
+  },
+  {
+    symbol: '32/40/64 hex',
+    label: 'Hash',
+    description:
+      'Identifie un hash par sa longueur : MD5 (32), SHA-1 (40), SHA-256 (64). Une chaîne opaque sensible n\'est jamais décodée.',
+  },
+  {
+    symbol: '10 / 13 chiffres',
+    label: 'Timestamp Unix',
+    description:
+      'Interprète un epoch (secondes ou millisecondes) en date locale + UTC + relatif. Bouton « Copier ISO ».',
+  },
 ];
 
 /* ──────────────────────────────────────────────────────────────────
@@ -120,7 +144,7 @@ const SHORTCUT_ITEMS: DocItem[] = [
     description: 'Bascule collapsed ↔ expanded depuis n\'importe quelle app.',
   },
   {
-    symbol: 'Ctrl + Shift + V',
+    symbol: 'Ctrl + Alt + V',
     label: 'Ouvrir le presse-papier',
     description:
       'Ouvre le notch directement sur la card Clipboard avec focus sur sa recherche.',

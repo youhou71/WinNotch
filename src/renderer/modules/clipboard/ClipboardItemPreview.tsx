@@ -32,6 +32,12 @@ export function ClipboardItemPreview({ entry, onUnfurl }: Props) {
       return <JwtPreview entry={entry} />;
     case 'path':
       return <PathPreview entry={entry} />;
+    case 'uuid':
+      return <UuidPreview entry={entry} />;
+    case 'hash':
+      return <HashPreview entry={entry} />;
+    case 'epoch':
+      return <EpochPreview entry={entry} />;
     default:
       return null;
   }
@@ -255,6 +261,53 @@ function PathPreview({ entry }: { entry: ClipboardEntry }) {
     <div className="cb-preview cb-preview-path">
       <i className="fa-regular fa-folder cb-path-icon" />
       <span className="cb-path-full">{entry.text}</span>
+    </div>
+  );
+}
+
+/* ───────────── UUID ───────────── */
+function UuidPreview({ entry }: { entry: ClipboardEntry }) {
+  const version =
+    typeof entry.meta.version === 'number' ? entry.meta.version : null;
+  return (
+    <div className="cb-preview cb-dev-preview">
+      <i className="fa-solid fa-fingerprint cb-dev-icon" data-color="#c084fc" />
+      <span className="cb-dev-label">UUID{version ? ` v${version}` : ''}</span>
+    </div>
+  );
+}
+
+/* ───────────── Hash ───────────── */
+function HashPreview({ entry }: { entry: ClipboardEntry }) {
+  const algo = typeof entry.meta.algo === 'string' ? entry.meta.algo : 'Hash';
+  const bits = typeof entry.meta.bits === 'number' ? entry.meta.bits : null;
+  return (
+    <div className="cb-preview cb-dev-preview">
+      <i className="fa-solid fa-hashtag cb-dev-icon" data-color="#fb923c" />
+      <span className="cb-dev-label">
+        {algo}
+        {bits ? ` · ${bits} bits` : ''}
+      </span>
+    </div>
+  );
+}
+
+/* ───────────── Epoch ───────────── */
+function EpochPreview({ entry }: { entry: ClipboardEntry }) {
+  const epochMs =
+    typeof entry.meta.epochMs === 'number' ? entry.meta.epochMs : NaN;
+  if (Number.isNaN(epochMs)) return null;
+  const d = new Date(epochMs);
+  const local = d.toLocaleString('fr-FR', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+  const rel = relativeFromNow(d.toISOString());
+  return (
+    <div className="cb-preview cb-dev-preview">
+      <i className="fa-solid fa-clock cb-dev-icon" data-color="#38bdf8" />
+      <span className="cb-dev-label">{local}</span>
+      <span className="cb-dev-meta">{rel.text}</span>
     </div>
   );
 }

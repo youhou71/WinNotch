@@ -11,7 +11,9 @@
  * dans la search bar (on n'y colle pas une image).
  *
  * Ordre de priorité du pipeline : `jwt` > `url` > `json` > `color` >
- * `path` > `text`. Cf. doc du pipeline pour les raisons.
+ * `path` > `uuid` > `hash` > `epoch` > `text`. Cf. doc du pipeline pour
+ * les raisons. `hash` cède la priorité à une chaîne opaque jugée sensible
+ * (cf. `detectHash` + `isSensitive`).
  */
 import type { ClipboardEntryType } from './types';
 
@@ -309,6 +311,83 @@ export const detectPath: TextDetector = (text) => {
   };
 };
 
+/* ───────────── UUID (RFC 4122) ───────────── */
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export const detectUuid: TextDetector = (text) => {
+  const trimmed = text.trim();
+  if (!UUID_RE.test(trimmed)) return null;
+  // Le nibble de version est le 1er caractère du 3ᵉ groupe (index 14).
+  const version = Number.parseInt(trimmed[14], 16);
+  return {
+    type: 'uuid',
+    preview: `UUID v${version}`,
+    text: trimmed,
+    meta: {
+      version,
+      upper: trimmed.toUpperCase(),
+      lower: trimmed.toLowerCase(),
+    },
+  };
+};
+
+/* ───────────── Hash (MD5 / SHA-1 / SHA-256) ───────────── */
+
+const HASH_ALGOS: Record<number, string> = {
+  32: 'MD5',
+  40: 'SHA-1',
+  64: 'SHA-256',
+};
+const HEX_ONLY_RE = /^[0-9a-f]+$/i;
+
+export const detectHash: TextDetector = (text) => {
+  const trimmed = text.trim();
+  if (!HEX_ONLY_RE.test(trimmed)) return null;
+  const algo = HASH_ALGOS[trimmed.length];
+  if (!algo) return null;
+  // RÈGLE DE PRIORITÉ : une chaîne opaque jugée sensible (mixte maj/min,
+  // cf. LONG_OPAQUE_RE) prime et ne doit PAS être « décodée » passivement
+  // comme un hash — elle retombera sur `text` masqué. Les vrais hashes
+  // sont en casse unique → non sensibles → labellisés ici.
+  if (isSensitive(trimmed)) return null;
+  return {
+    type: 'hash',
+    preview: `${algo} · ${trimmed.length * 4} bits`,
+    text: trimmed,
+    meta: { algo, bits: trimmed.length * 4 },
+  };
+};
+
+/* ───────────── Epoch (timestamp Unix) ───────────── */
+
+const EPOCH_RE = /^\d{10}$|^\d{13}$/;
+// Bornes plausibles pour éviter de prendre un ID numérique pour une date :
+// année 2000 → 2100.
+const EPOCH_MIN_S = 946_684_800; // 2000-01-01T00:00:00Z
+const EPOCH_MAX_S = 4_102_444_800; // 2100-01-01T00:00:00Z
+
+export const detectEpoch: TextDetector = (text) => {
+  const trimmed = text.trim();
+  if (!EPOCH_RE.test(trimmed)) return null;
+  const raw = Number(trimmed);
+  const isMs = trimmed.length === 13;
+  const sec = isMs ? Math.floor(raw / 1000) : raw;
+  if (sec < EPOCH_MIN_S || sec > EPOCH_MAX_S) return null;
+  const epochMs = isMs ? raw : raw * 1000;
+  const localShort = new Date(epochMs).toLocaleString('fr-FR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+  return {
+    type: 'epoch',
+    preview: `Epoch · ${localShort}`,
+    text: trimmed,
+    meta: { epochMs, unit: isMs ? 'milliseconds' : 'seconds' },
+  };
+};
+
 /* ───────────── Text (fallback) ───────────── */
 
 const TEXT_PREVIEW_MAX = 120;
@@ -379,6 +458,9 @@ const TEXT_PIPELINE: TextDetector[] = [
   detectJson,
   detectColor,
   detectPath,
+  detectUuid,
+  detectHash,
+  detectEpoch,
   detectText,
 ];
 

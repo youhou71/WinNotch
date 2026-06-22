@@ -7,12 +7,12 @@
  *
  * Ouverte via :
  *  - Bouton 📋 dans la search bar (cf. NotchSearch + ExpandedDashboard)
- *  - Raccourci global `Ctrl + Shift + V` (cf. globalShortcuts)
+ *  - Raccourci global `Ctrl + Alt + V` (cf. globalShortcuts)
  *
  * À l'ouverture, `markSeen` efface le badge "non vu" de la chip
  * Clipboard du notch rétracté. Le focus initial sur la search interne
  * est piloté par `pendingFocusAt` du Context (incrémenté à chaque
- * Ctrl+Shift+V).
+ * Ctrl+Alt+V).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEntry } from '../../../shared/types';
@@ -28,6 +28,9 @@ const ITEM_TYPE_LABEL: Record<ClipboardEntry['type'], string> = {
   json: 'JSON',
   color: 'Couleur',
   path: 'Chemin',
+  uuid: 'UUID',
+  hash: 'Hash',
+  epoch: 'Epoch',
   text: 'Texte',
 };
 
@@ -205,7 +208,7 @@ export function ClipboardPage({ onClose }: Props) {
     void markSeen();
   }, [markSeen]);
 
-  // Focus la search bar quand le raccourci global Ctrl+Shift+V arrive.
+  // Focus la search bar quand le raccourci global Ctrl+Alt+V arrive.
   useEffect(() => {
     if (pendingFocusAt === 0) return;
     inputRef.current?.focus();
@@ -284,7 +287,7 @@ export function ClipboardPage({ onClose }: Props) {
 
       <div className="clipboard-hint">
         <i className="fa-solid fa-keyboard" />
-        <span className="ck">Ctrl + Shift + V</span> ouvre cette page rapidement
+        <span className="ck">Ctrl + Alt + V</span> ouvre cette page rapidement
         depuis n'importe où.
       </div>
 

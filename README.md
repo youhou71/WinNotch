@@ -41,6 +41,8 @@ Suivi des **limites d'usage Pro / Max** sur les fenêtres glissantes **5 h** et 
 
 Card dashboard avec 2 jauges horizontales (vert < 70 < orange < 90 < rouge), countdown vers le prochain reset, badge plan (`Pro / Team`, `Max 5× / Team+`, `Max 20×`) et **mini-sparkline 24 h** alimenté par un ring buffer local (288 points × 5 min).
 
+**Projection de tenue** : à partir de la vélocité de consommation (moyenne glissante pondérée sur le ring buffer), le module estime si une fenêtre sera épuisée **avant son reset** et l'affiche (« 5 h épuisé dans ~38 min », « 7 j épuisé jeu. 16:00 ») avec une **ligne pointillée** prolongeant la sparkline. Une **alerte de rythme** (toast distinct des seuils absolus) prévient au franchissement.
+
 Toasts à chaque franchissement de seuil (par défaut 70 / 85 / 95 %), dédupliqués jusqu'au reset suivant, filtrés en Ne pas Déranger.
 
 **Source de données** : un wrapper statusline WinNotch (`resources/winnotch-statusline.cjs`) installable depuis Settings, qui patche `~/.claude/settings.json` de manière idempotente. À chaque turn de Claude Code, le wrapper écrit les `rate_limits` dans `~/.claude/winnotch-usage.json`. Si l'utilisateur avait déjà un statusline custom, WinNotch passe en **mode wrap** (la commande d'origine est invoquée en suivant — aucune perte de fonctionnalité). Tant que le wrapper n'a pas tourné une première fois, le module retombe sur un fallback de parsing local des `.jsonl` qui donne une estimation grossière selon le plan saisi.
@@ -72,7 +74,7 @@ Historique du presse-papier chiffré localement (DPAPI), avec détection automat
 - **Codes couleur** (`#fff`, `rgb()`, `hsl()`) → swatch visuel.
 - **Chemins Windows** (`C:\…`, UNC) → bouton « Ouvrir dans Explorer ».
 
-Recherche, épinglage, masquage automatique des secrets détectés (tokens, passwords). Limite par défaut 50 entrées non-épinglées (configurable jusqu'à 200). Raccourci global `Ctrl + Shift + V` pour ouvrir directement la card avec focus sur la recherche.
+Recherche, épinglage, masquage automatique des secrets détectés (tokens, passwords). Limite par défaut 50 entrées non-épinglées (configurable jusqu'à 200). Raccourci global `Ctrl + Alt + V` pour ouvrir directement la card avec focus sur la recherche.
 
 ### VPN
 Détecte les sessions VPN actives sur la machine — **ProtonVPN**, **NordVPN**, **OpenVPN**, **WireGuard** et les VPN configurés dans Windows (PPTP / L2TP / SSTP / IKEv2). Chip bouclier cyan dans le notch rétracté quand une connexion est active (visible même en Ne pas Déranger — c'est un état système). Card compacte dans le dashboard avec le client + nom de connexion + pays (optionnel) + durée de session. Toast à chaque transition connexion / déconnexion.
@@ -96,7 +98,9 @@ Réutilise l'authentification du module **Prochains rendez-vous** (mêmes tokens
 **Couplage DND bidirectionnel** (activé par défaut, désactivable dans Settings → Teams) : `Ctrl+Shift+D` bascule aussi ton statut Teams en DoNotDisturb (et inversement, un Teams DoNotDisturb détecté par le polling active le DND WinNotch). Un filtre anti-écho de 30 s évite les boucles entre l'écriture locale et la lecture du tick suivant.
 
 ### Imprimante 3D (Bambu)
-Suivi d'un print Bambu Lab **série P1** (P1P / P1S) en local, **lecture seule**. Chip imprimante dans le notch rétracté pendant une impression (`42 %` + ETA), qui vire au rouge si une erreur HMS est active. Card dans le dashboard : barre de progression + temps restant + couche X/Y + nom du fichier, températures buse / lit, bobines AMS (couleur + type + % restant, slot actif surligné), et erreurs HMS en rouge avec lien direct vers le wiki Bambu.
+Suivi d'un print Bambu Lab **série P1** (P1P / P1S) en local, **lecture seule**. Chip imprimante dans le notch rétracté pendant une impression (`42 %` + ETA), qui vire au rouge si une erreur HMS est active. Card dans le dashboard : barre de progression + temps restant + couche X/Y + nom du fichier, températures buse / lit, bobines AMS (couleur + type + % restant, slot actif surligné), et erreurs HMS en rouge avec lien direct vers le wiki Bambu. Hors impression, la card affiche un **résumé de la dernière impression** (terminée / échec + durée + fichier).
+
+**Notifications** (toast-only, jamais d'auto-expand, filtré en Ne pas Déranger) : **fin d'impression** (avec la durée, « Impression terminée · 4h12 »), **échec**, **erreur HMS grave**, et **filament bas** quand une bobine AMS passe sous 10 % (nécessite le suivi RFID — sinon le % est inconnu et aucune alerte n'est émise). Le premier rapport reçu sert de **baseline silencieuse** : aucun faux « terminée » au démarrage. Réglable dans Settings → Imprimante 3D → Notifications.
 
 Deux **modes de connexion** (au choix dans Settings → Imprimante 3D) :
 
@@ -122,9 +126,22 @@ Champ de recherche en haut du dashboard. Deux familles de comportement :
 |---|---|---|
 | `?` | Aide | Affiche un panneau récapitulatif des préfixes, détections et raccourcis disponibles selon les modules actifs |
 | `-` | Tâche | Ajoute la tâche à la liste |
+| `=` | Calc & Convert | Évalue un calcul ou une conversion inline ; `Entrée` copie le résultat |
 | `>` | Claude Code | Lance `claude "<prompt>"` dans un nouveau terminal Windows |
 | `/` | VS Code | Liste les workspaces récents, ouvre via `code <path>` |
 | `vs` | Visual Studio | Liste les solutions `.sln`/`.slnx`, ouvre via l'association de fichier |
+
+#### Mode `=` (Calc & Convert)
+
+Calcul et conversion **100 % hors-ligne** (aucune dépendance, aucun réseau) :
+
+- **Arithmétique** : `(1920/3)*2`, `2**16`, `-2**2`, `100 % 7`, décimaux et notation scientifique. Opérateurs `+ - * / % **`, parenthèses, moins unaire.
+- **Bases** : `0xFF to dec`, `255 to hex`, `0b1010 to oct`, ou un littéral seul (`0xFF`) qui affiche dec/hex/bin/oct.
+- **Longueurs CSS** : `20px to rem` (base 16 px) — px/rem/em/pt/pc/in/cm/mm.
+- **Tailles de données** : `1.5MB to KB` — décimal (`KB` = 1000) et binaire (`KiB` = 1024).
+- **Epoch ↔ date** : `1700000000 to date`, `2024-01-01 to epoch`.
+
+Le résultat (et chaque ligne secondaire) dispose d'un bouton Copier ; `Entrée` copie le résultat principal. *(Devises hors scope — nécessiteraient le réseau.)*
 
 ### Détection de contenu live
 
@@ -137,6 +154,11 @@ Quand le contenu tapé ou collé ressemble à un type connu, le dashboard bascul
 | JWT (`xxx.yyy.zzz`) | Header + payload décodés + expiration | Copier le token · Copier décodé |
 | Couleur (`#fff`, `rgb()`, `hsl()`) | Swatch + équivalents | Copier HEX · RGB · HSL |
 | Chemin Windows (`C:\…`, UNC) | Basename + chemin complet | Ouvrir dans Explorer · Copier |
+| UUID (RFC 4122) | Version détectée | Copier minuscules · MAJUSCULES |
+| Hash hex (32/40/64) | Label MD5 / SHA-1 / SHA-256 | Copier |
+| Timestamp Unix (10/13 chiffres) | Date locale + UTC + relatif | Copier ISO · epoch s/ms |
+
+Ces détections sont **passives et partagées** : elles s'appliquent aussi bien à la saisie de la search bar qu'aux entrées de l'historique du presse-papier. Une chaîne opaque jugée sensible (token, clé) n'est **jamais** décodée passivement.
 
 Auto-focus à l'ouverture du notch.
 
@@ -147,7 +169,7 @@ Auto-focus à l'ouverture du notch.
 | Raccourci | Action |
 |---|---|
 | `Ctrl + Shift + Space` | Toggle collapsed / expanded (global, depuis n'importe quelle app) |
-| `Ctrl + Shift + V` | Ouvre le notch sur la card Clipboard avec focus sur la recherche (global) |
+| `Ctrl + Alt + V` | Ouvre le notch sur la card Clipboard avec focus sur la recherche (global) |
 | `Ctrl + Shift + D` | Toggle Ne pas Déranger (global) |
 | `Esc` | Back contextuel (cf. ci-dessous) |
 | Bouton souris **Précédent** (XButton1) | Idem `Esc` |

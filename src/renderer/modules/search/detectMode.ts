@@ -9,6 +9,7 @@
  *  - `/`   → mode VS Code (workspaces récents)
  *  - `vs`  → mode Visual Studio (solutions récentes)
  *  - `-`   → mode Tâches (ajout rapide)
+ *  - `=`   → mode Calc & Convert (calcul / conversion inline)
  *
  * 2. **Détection de contenu live** (la search bar regarde ce qui est tapé/
  *    collé et propose une vue adaptée si elle reconnaît un type). Cf.
@@ -18,6 +19,9 @@
  *  - JWT  → header + payload décodés + indicateur d'expiration
  *  - Color → swatch + équivalents hex/rgb/hsl
  *  - Path → bouton "Ouvrir dans Explorer"
+ *  - UUID → version + Copier minuscules/MAJUSCULES
+ *  - Hash → label MD5/SHA-1/SHA-256 + Copier
+ *  - Epoch → date locale + UTC + relatif + Copier ISO
  *
  * Renvoie `payload` (la partie après le préfixe pour les modes 1, ou la
  * query complète pour les modes 2) pour que l'appelant n'ait pas à
@@ -56,6 +60,8 @@ export function detectMode(query: string): DetectedMode | null {
       return { mode: 'vscode', payload: query.slice(1).trim() };
     case '-':
       return { mode: 'task', payload: query.slice(1).trim() };
+    case '=':
+      return { mode: 'calc', payload: query.slice(1).trim() };
     case '?':
       return { mode: 'help', payload: query.slice(1).trim() };
   }
@@ -103,6 +109,12 @@ export const MODE_META: Record<
     color: '#34d399',
     placeholder: 'Ajouter une tâche rapide…',
   },
+  calc: {
+    label: 'Calc',
+    icon: 'fa-solid fa-calculator',
+    color: '#fbbf24',
+    placeholder: '(1920/3)*2 · 20px to rem · 1.5MB to KB · 0xFF to dec · 1700000000 to date',
+  },
   help: {
     label: 'Aide',
     icon: 'fa-regular fa-circle-question',
@@ -137,6 +149,24 @@ export const MODE_META: Record<
     label: 'Chemin',
     icon: 'fa-regular fa-folder',
     color: '#34d399',
+    placeholder: '',
+  },
+  uuid: {
+    label: 'UUID',
+    icon: 'fa-solid fa-fingerprint',
+    color: '#c084fc',
+    placeholder: '',
+  },
+  hash: {
+    label: 'Hash',
+    icon: 'fa-solid fa-hashtag',
+    color: '#fb923c',
+    placeholder: '',
+  },
+  epoch: {
+    label: 'Epoch',
+    icon: 'fa-solid fa-clock',
+    color: '#38bdf8',
     placeholder: '',
   },
 };

@@ -170,3 +170,34 @@
   border-radius: 3px;
   font-size: 10px;
 }
+
+/* ──────────────────────────────────────────────────────────────────
+ *  Projection de tenue (Lot 1 #3) — ligne sous les jauges
+ * ────────────────────────────────────────────────────────────────── */
+.cu-projection {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.cu-projection i {
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.cu-projection span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cu-projection-warn {
+  color: #fb923c;
+}
+
+.cu-projection-ok {
+  color: var(--txt-faint);
+}

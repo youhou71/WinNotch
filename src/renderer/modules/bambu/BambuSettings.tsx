@@ -43,6 +43,25 @@ export function BambuSettings() {
 
       {cfg.mode === 'lan' ? <BambuLanSettings /> : <BambuCloudSettings />}
 
+      <SettingsSection title="Notifications">
+        <SettingsToggleRow
+          icon="fa-solid fa-circle-check"
+          iconColor="#00ae42"
+          label="Fin / échec d'impression"
+          description="Toast quand une impression se termine (avec sa durée), échoue, ou en cas d'erreur HMS grave. Filtré en Ne pas Déranger."
+          value={cfg.notifyPrint}
+          onChange={(next) => void patchModuleConfig('bambu', { notifyPrint: next })}
+        />
+        <SettingsToggleRow
+          icon="fa-solid fa-bahai"
+          iconColor="#fbbf24"
+          label="Filament bas"
+          description="Toast quand une bobine AMS passe sous 10 % restant. Nécessite le suivi RFID de la bobine (sinon le % est inconnu)."
+          value={cfg.notifyFilament}
+          onChange={(next) => void patchModuleConfig('bambu', { notifyFilament: next })}
+        />
+      </SettingsSection>
+
       <SettingsSection title="Affichage">
         <SettingsToggleRow
           icon="fa-solid fa-print"

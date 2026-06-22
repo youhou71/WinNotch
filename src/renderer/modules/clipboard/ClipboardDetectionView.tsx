@@ -38,6 +38,12 @@ export function ClipboardDetectionView({ detection, onAfterAction }: Props) {
       return <ColorDetection detection={detection} />;
     case 'path':
       return <PathDetection detection={detection} onAfterAction={onAfterAction} />;
+    case 'uuid':
+      return <UuidDetection detection={detection} />;
+    case 'hash':
+      return <HashDetection detection={detection} />;
+    case 'epoch':
+      return <EpochDetection detection={detection} />;
     default:
       return null;
   }
@@ -378,6 +384,123 @@ function PathDetection({
           <i className="fa-regular fa-copy" />
           Copier
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────── UUID ───────────── */
+function UuidDetection({ detection }: { detection: TextDetectionResult }) {
+  const lower =
+    typeof detection.meta.lower === 'string'
+      ? detection.meta.lower
+      : detection.text.toLowerCase();
+  const upper =
+    typeof detection.meta.upper === 'string'
+      ? detection.meta.upper
+      : detection.text.toUpperCase();
+  const version =
+    typeof detection.meta.version === 'number' ? detection.meta.version : null;
+  const copyToast = useCopyToast();
+
+  return (
+    <div className="cb-det-view">
+      <div className="cb-det-head">
+        <i className="fa-solid fa-fingerprint cb-det-icon" data-color="#c084fc" />
+        <div className="cb-det-head-text">
+          <div className="cb-det-title">UUID{version ? ` v${version}` : ''}</div>
+          <div className="cb-det-sub cb-det-sub-mono">{lower}</div>
+        </div>
+      </div>
+      <div className="cb-det-actions">
+        <button
+          type="button"
+          className="cb-det-btn is-primary"
+          onClick={() => copyToast(lower, 'UUID minuscules')}
+        >
+          <i className="fa-regular fa-copy" />
+          Copier minuscules
+        </button>
+        <button
+          type="button"
+          className="cb-det-btn"
+          onClick={() => copyToast(upper, 'UUID MAJUSCULES')}
+        >
+          <i className="fa-regular fa-copy" />
+          Copier MAJUSCULES
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────── Hash ───────────── */
+function HashDetection({ detection }: { detection: TextDetectionResult }) {
+  const algo = typeof detection.meta.algo === 'string' ? detection.meta.algo : 'Hash';
+  const bits = typeof detection.meta.bits === 'number' ? detection.meta.bits : null;
+  const value = detection.text;
+  const copyToast = useCopyToast();
+
+  return (
+    <div className="cb-det-view">
+      <div className="cb-det-head">
+        <i className="fa-solid fa-hashtag cb-det-icon" data-color="#fb923c" />
+        <div className="cb-det-head-text">
+          <div className="cb-det-title">{algo}</div>
+          <div className="cb-det-sub">
+            {bits ? `${bits} bits · ` : ''}
+            {value.length} caractères hex
+          </div>
+        </div>
+      </div>
+      <div className="cb-det-color-grid">
+        <CopyRow
+          label={algo}
+          value={value}
+          onCopy={() => copyToast(value, algo)}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ───────────── Epoch ───────────── */
+function EpochDetection({ detection }: { detection: TextDetectionResult }) {
+  const epochMs =
+    typeof detection.meta.epochMs === 'number' ? detection.meta.epochMs : NaN;
+  const copyToast = useCopyToast();
+
+  if (Number.isNaN(epochMs)) return null;
+  const d = new Date(epochMs);
+  const iso = d.toISOString();
+  const local = d.toLocaleString('fr-FR', {
+    dateStyle: 'full',
+    timeStyle: 'medium',
+  });
+  const rel = relativeFromNow(iso);
+  const sec = Math.floor(epochMs / 1000);
+
+  return (
+    <div className="cb-det-view">
+      <div className="cb-det-head">
+        <i className="fa-solid fa-clock cb-det-icon" data-color="#38bdf8" />
+        <div className="cb-det-head-text">
+          <div className="cb-det-title">{local}</div>
+          <div className="cb-det-sub">{rel.text}</div>
+        </div>
+      </div>
+      <div className="cb-det-color-grid">
+        <CopyRow label="UTC ISO" value={iso} onCopy={() => copyToast(iso, 'ISO')} />
+        <CopyRow
+          label="Epoch (s)"
+          value={String(sec)}
+          onCopy={() => copyToast(String(sec), 'Epoch secondes')}
+        />
+        <CopyRow
+          label="Epoch (ms)"
+          value={String(epochMs)}
+          onCopy={() => copyToast(String(epochMs), 'Epoch ms')}
+        />
       </div>
     </div>
   );

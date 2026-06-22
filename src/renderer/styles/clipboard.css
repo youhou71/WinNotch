@@ -68,7 +68,7 @@
 /* ───────────── Page Clipboard (plein dashboard) ─────────────
  * Pattern visuel calqué sur .tasks-view : vraie page (pas card), avec
  * header, hint bar, recherche, puis liste. Ouverte via le bouton 📋
- * de la search bar ou via Ctrl+Shift+V.
+ * de la search bar ou via Ctrl+Alt+V.
  */
 /* Pas de `flex: 1; min-height: 0` : la vue prend sa hauteur naturelle,
  * le scroll est unifié sur `.dashboard`. Cf. mêmes raisons que
@@ -684,6 +684,66 @@
 .cb-det-icon[data-color='#34d399'] {
   color: #34d399;
   background: rgba(52, 211, 153, 0.1);
+}
+
+/* Mode `=` (Calc & Convert) */
+.cb-det-icon[data-color='#fbbf24'] {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+/* Détections dev passives : UUID / Hash / Epoch */
+.cb-det-icon[data-color='#c084fc'] {
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.1);
+}
+
+.cb-det-icon[data-color='#fb923c'] {
+  color: #fb923c;
+  background: rgba(251, 146, 60, 0.1);
+}
+
+.cb-det-icon[data-color='#38bdf8'] {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+
+/* Preview compact (liste clipboard) pour UUID / Hash / Epoch */
+.cb-dev-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cb-dev-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.cb-dev-icon[data-color='#c084fc'] {
+  color: #c084fc;
+}
+.cb-dev-icon[data-color='#fb923c'] {
+  color: #fb923c;
+}
+.cb-dev-icon[data-color='#38bdf8'] {
+  color: #38bdf8;
+}
+
+.cb-dev-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt, #f4f4f5);
+  white-space: nowrap;
+}
+
+.cb-dev-meta {
+  font-size: 11px;
+  color: var(--txt-mute, rgba(244, 244, 245, 0.45));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cb-det-color-swatch {

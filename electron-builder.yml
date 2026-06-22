@@ -87,7 +87,8 @@ extraResources:
 #  - @nut-tree-fork/libnut-win32 : binaire N-API prebuilt (touches média).
 #    Validé chargeable tel quel sous l'ABI Electron — pas de rebuild.
 #  - better-sqlite3 : prebuild Electron déjà fourni via prebuild-install.
-#  - loudness : pas natif (wrappe PowerShell).
+#  - loudness : embarque un .exe prebuilt (pas de module N-API à rebuilder) ;
+#    dépaqueté via asarUnpack pour pouvoir être spawné (cf. audio/volume.ts).
 #
 # Aucun n'a besoin de rebuild contre l'ABI Electron. Si un futur module
 # natif l'exige, lancer manuellement `npm run rebuild-natives` avant

@@ -73,6 +73,7 @@ const INITIAL_STATE: BambuState = {
   bedTarget: null,
   amsTrays: [],
   hms: [],
+  lastPrint: null,
   lastUpdateAt: 0,
 };
 
@@ -80,6 +81,14 @@ let currentState: BambuState = { ...INITIAL_STATE };
 
 /** Sous-objet `print` accumulé (les P1 envoient des deltas — on fusionne). */
 let printReport: Record<string, unknown> = {};
+
+/**
+ * Horodatage (ms) du début du print en cours, ou `null`. Posé uniquement
+ * sur une transition vers RUNNING depuis un état de FIN/repos connu (pas
+ * depuis `Unknown` = boot, ni `PAUSE` = reprise) — sinon la durée serait
+ * fausse pour un print déjà en cours au démarrage.
+ */
+let printStartedAt: number | null = null;
 
 let client: MqttClient | null = null;
 
@@ -300,6 +309,37 @@ function deriveState(): void {
   ) as BambuGcodeState;
 
   const percent = num(r.mc_percent);
+  const fileName = str(r.subtask_name) || str(r.gcode_file);
+
+  // Détection de transition (avant d'écraser `currentState`).
+  const prevGcode = currentState.gcodeState;
+  const wasPrinting = PRINTING_STATES.includes(prevGcode);
+  let lastPrint = currentState.lastPrint;
+
+  // Début de print : seulement depuis un état de fin/repos CONNU (jamais
+  // `Unknown` = boot, ni `PAUSE` = reprise) pour que la durée soit fiable.
+  if (
+    gcodeState === 'RUNNING' &&
+    (prevGcode === 'IDLE' ||
+      prevGcode === 'PREPARE' ||
+      prevGcode === 'FINISH' ||
+      prevGcode === 'FAILED')
+  ) {
+    printStartedAt = Date.now();
+  }
+
+  // Fin de print : transition d'un état d'impression vers FINISH/FAILED.
+  if (wasPrinting && (gcodeState === 'FINISH' || gcodeState === 'FAILED')) {
+    lastPrint = {
+      fileName: currentState.fileName || fileName,
+      outcome: gcodeState === 'FINISH' ? 'finished' : 'failed',
+      finishedAt: Date.now(),
+      durationMin: printStartedAt
+        ? Math.round((Date.now() - printStartedAt) / 60_000)
+        : null,
+    };
+    printStartedAt = null;
+  }
 
   setState({
     gcodeState,
@@ -309,7 +349,7 @@ function deriveState(): void {
     remainingMin: num(r.mc_remaining_time),
     layerCur: num(r.layer_num),
     layerTotal: num(r.total_layer_num),
-    fileName: str(r.subtask_name) || str(r.gcode_file),
+    fileName,
     speedLevel: num(r.spd_lvl),
     nozzleTemp: num(r.nozzle_temper),
     nozzleTarget: num(r.nozzle_target_temper),
@@ -317,6 +357,7 @@ function deriveState(): void {
     bedTarget: num(r.bed_target_temper),
     amsTrays: parseAmsTrays(r),
     hms: parseHmsArray(r.hms),
+    lastPrint,
     lastUpdateAt: Date.now(),
   });
 }

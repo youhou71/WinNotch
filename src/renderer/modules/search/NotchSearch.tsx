@@ -10,6 +10,7 @@
  *
  * Modes :
  *  - `-`  (tâche) : Enter ajoute via SettingsContext
+ *  - `=`  (calc) : évaluation inline, Enter copie le résultat
  *  - `>`  (Claude) : Enter lance le CLI dans un nouveau terminal
  *  - `/`  (VS Code) : liste des workspaces récents, ↑↓ navigation, Enter ouvre
  *  - `vs` (VS) : liste des solutions scannées, ↑↓ navigation, Enter ouvre
@@ -17,6 +18,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SearchResult } from '../../../shared/types';
 import { detectMode, MODE_META } from './detectMode';
+import { evaluateCalc } from '../../../shared/calc';
 import { SearchResultsPanel } from './SearchResultsPanel';
 import { useTasksContext } from '../tasks/TasksContext';
 import { useToast } from '../toast/ToastContext';
@@ -205,6 +207,23 @@ export function NotchSearch({
         await openItem(item);
         return;
       }
+      case 'calc': {
+        // Entrée copie le résultat (sans fermer : l'utilisateur peut
+        // enchaîner / ajuster son calcul).
+        const res = evaluateCalc(payload);
+        if (!res || !res.ok || !res.copyText) return;
+        const ok = await navigator.clipboard
+          .writeText(res.copyText)
+          .then(() => true)
+          .catch(() => false);
+        pushToast({
+          icon: ok ? 'fa-solid fa-check' : 'fa-solid fa-triangle-exclamation',
+          iconColor: ok ? '#34d399' : '#ef4444',
+          name: 'Calc',
+          message: ok ? `${res.result} copié` : 'Échec de la copie',
+        });
+        return;
+      }
       case 'url': {
         const url = detected.detection?.text;
         if (!url) return;
@@ -290,7 +309,7 @@ export function NotchSearch({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={meta?.placeholder ?? 'Rechercher · "?" pour l\'aide · "-", ">", "/", "vs"…'}
+          placeholder={meta?.placeholder ?? 'Rechercher · "?" pour l\'aide · "-", "=", ">", "/", "vs"…'}
           spellCheck={false}
           autoComplete="off"
         />
@@ -317,7 +336,7 @@ export function NotchSearch({
             onClick={() => onClipboardClick()}
             aria-label="Presse-papier"
             aria-pressed={!!clipboardOpen}
-            title="Presse-papier (Ctrl+Shift+V)"
+            title="Presse-papier (Ctrl+Alt+V)"
           >
             <i className="fa-solid fa-clipboard" />
           </button>

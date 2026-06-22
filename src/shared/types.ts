@@ -141,6 +141,22 @@ export interface BambuHmsEntry {
   wikiUrl: string;
 }
 
+/**
+ * Résumé de la dernière impression terminée ou échouée (observée pendant
+ * que l'app tournait). En mémoire seulement — `null` au démarrage tant
+ * qu'aucune transition print→FINISH/FAILED n'a été vue (garde-fou contre
+ * un faux « terminée » au boot).
+ */
+export interface BambuLastPrint {
+  /** Nom du fichier imprimé. */
+  fileName: string;
+  outcome: 'finished' | 'failed';
+  /** Unix ms de la fin observée. */
+  finishedAt: number;
+  /** Durée en minutes, ou `null` si le début n'a pas été observé (print déjà en cours au boot). */
+  durationMin: number | null;
+}
+
 /** Snapshot complet de l'état imprimante exposé au renderer. */
 export interface BambuState {
   /** État de la connexion MQTT. */
@@ -182,6 +198,11 @@ export interface BambuState {
   amsTrays: BambuAmsTray[];
   /** Erreurs HMS actives. */
   hms: BambuHmsEntry[];
+  /**
+   * Dernière impression terminée / échouée observée (résumé). `null` tant
+   * qu'aucune transition n'a été vue depuis le démarrage. Cf. `BambuLastPrint`.
+   */
+  lastPrint: BambuLastPrint | null;
   /** Timestamp (ms) du dernier rapport reçu, ou 0. */
   lastUpdateAt: number;
 }
@@ -265,7 +286,7 @@ export type Density = 'dense' | 'normal' | 'airy';
 /**
  * Identifiants des modules qui rendent une tuile dans le dashboard étendu.
  * Sous-ensemble strict de `ModuleId` : `clipboard` n'a pas de card (page
- * plein dashboard à la place, ouverte via bouton ou Ctrl+Shift+V).
+ * plein dashboard à la place, ouverte via bouton ou Ctrl+Alt+V).
  */
 export type DashTileId =
   | 'music'
@@ -435,6 +456,12 @@ export interface ModuleConfig {
     thresholdsPct: number[];
     /** Active l'émission des toasts de seuil. */
     notifyThresholds: boolean;
+    /**
+     * Active l'émission des toasts de RYTHME (projection de tenue) : un
+     * toast quand, à la vélocité de conso actuelle, une fenêtre sera
+     * épuisée AVANT son reset. Distinct des seuils absolus.
+     */
+    notifyPace: boolean;
     /** Affiche la card dans le dashboard étendu. */
     showCard: boolean;
   };
@@ -585,6 +612,13 @@ export interface ModuleConfig {
      * la chip n'apparaît que pendant un print pour rester discrète.
      */
     showWhenIdle: boolean;
+    /**
+     * Toasts d'état d'impression : fin (« terminée »), échec (FAILED) et
+     * erreurs HMS graves. Toast-only, jamais d'auto-expand.
+     */
+    notifyPrint: boolean;
+    /** Toast « filament bas » quand une bobine AMS passe sous le seuil (RFID requis). */
+    notifyFilament: boolean;
     /** Afficher la card dans le dashboard étendu. */
     showCard: boolean;
   };
@@ -708,6 +742,7 @@ export const DEFAULT_SETTINGS: Settings = {
       plan: 'unknown',
       thresholdsPct: [70, 85, 95],
       notifyThresholds: true,
+      notifyPace: true,
       showCard: true,
     },
     tasks: {
@@ -755,6 +790,8 @@ export const DEFAULT_SETTINGS: Settings = {
       deviceName: '',
       collapsed: true,
       showWhenIdle: false,
+      notifyPrint: true,
+      notifyFilament: true,
       showCard: true,
     },
   },
@@ -816,24 +853,30 @@ export interface Toast {
  *  - `claude`       (`> …`)
  *  - `vscode`       (`/ …`)
  *  - `visualstudio` (`vs …`)
+ *  - `calc`         (`= …`) — calcul & conversion inline (cf. `shared/calc.ts`)
  *  - `help`         (`? …`) — vue d'aide listant tout ce qu'on peut faire
  *
  * Contenu live (détection automatique du contenu collé/tapé sans préfixe) :
- *  - `url`, `json`, `color`, `jwt`, `path` — chaque type déclenche une
- *    vue plein dashboard avec preview et actions adaptées. Voir
- *    `shared/clipboardDetectors.ts` pour la logique de détection.
+ *  - `url`, `json`, `color`, `jwt`, `path`, `uuid`, `hash`, `epoch` —
+ *    chaque type déclenche une vue plein dashboard avec preview et actions
+ *    adaptées. Voir `shared/clipboardDetectors.ts` pour la logique de
+ *    détection.
  */
 export type SearchMode =
   | 'claude'
   | 'vscode'
   | 'visualstudio'
   | 'task'
+  | 'calc'
   | 'help'
   | 'url'
   | 'json'
   | 'color'
   | 'jwt'
-  | 'path';
+  | 'path'
+  | 'uuid'
+  | 'hash'
+  | 'epoch';
 
 /* ─────────────────────────────────────────────────────────────────────
  *  CLAUDE CODE
@@ -934,6 +977,21 @@ export interface ClaudeUsageWindow {
 }
 
 /**
+ * Projection de tenue d'une fenêtre, calculée à partir de la vélocité de
+ * consommation (moyenne glissante pondérée sur le ring buffer).
+ */
+export interface ClaudeUsageProjection {
+  /** Vitesse de conso lissée, en points de % par heure (≥ 0). */
+  velocityPctPerHour: number;
+  /**
+   * Timestamp Unix (ms) de l'épuisement (100%) projeté à ce rythme,
+   * UNIQUEMENT s'il tombe avant le reset de la fenêtre. `null` sinon
+   * (« tenu jusqu'au reset » ou vélocité négligeable).
+   */
+  exhaustAt: number | null;
+}
+
+/**
  * État courant du module `claude.usage`. Émis par le service main à chaque
  * tick de polling. Le ring buffer `sparkline` est persisté en local pour
  * survivre aux redémarrages.
@@ -947,6 +1005,14 @@ export interface ClaudeUsageState {
    * dans la card étendue.
    */
   sparkline: number[];
+  /**
+   * Projection de tenue par fenêtre (vélocité + épuisement projeté).
+   * Calculée côté main à partir des ring buffers persistés.
+   */
+  projection: {
+    fiveH: ClaudeUsageProjection;
+    weekly: ClaudeUsageProjection;
+  };
   /** Tier saisi par l'utilisateur dans Settings → Claude → Limites d'usage. */
   plan: ClaudeUsagePlan;
   /** True si le wrapper statusline WinNotch est installé dans `~/.claude/settings.json`. */
@@ -1577,11 +1643,14 @@ export interface SearchResult {
  *
  * Le pipeline de détection (cf. `main/modules/clipboard/detectors/index.ts`)
  * essaie chaque détecteur dans cet ordre et retourne au premier match :
- * `image` > `jwt` > `url` > `json` > `color` > `path` > `text` (fallback).
+ * `image` > `jwt` > `url` > `json` > `color` > `path` > `uuid` > `hash` >
+ * `epoch` > `text` (fallback).
  *
  * L'ordre est important : un JWT peut contenir des points qui pourraient
  * être confondus avec une URL, donc JWT passe en premier ; un JSON court
- * peut contenir `#fff` mais n'est pas une couleur globale, etc.
+ * peut contenir `#fff` mais n'est pas une couleur globale, etc. `hash`
+ * cède la priorité à une chaîne opaque jugée sensible (pas de décodage
+ * passif d'un secret).
  */
 export type ClipboardEntryType =
   | 'image'
@@ -1590,6 +1659,9 @@ export type ClipboardEntryType =
   | 'json'
   | 'color'
   | 'path'
+  | 'uuid'
+  | 'hash'
+  | 'epoch'
   | 'text';
 
 /**
@@ -1608,6 +1680,9 @@ export type ClipboardEntryType =
  *  - json  : `{ pretty: string; isArray: boolean; length: number }`
  *  - image : `{ width: number; height: number; bytes: number }`
  *  - path  : `{ isDir?: boolean; exists?: boolean }`
+ *  - uuid  : `{ version: number; upper: string; lower: string }`
+ *  - hash  : `{ algo: 'MD5' | 'SHA-1' | 'SHA-256'; bits: number }`
+ *  - epoch : `{ epochMs: number; unit: 'seconds' | 'milliseconds' }`
  *  - text  : `{}`
  */
 export interface ClipboardEntry {
@@ -1915,7 +1990,7 @@ export const IpcChannel = {
   ClipboardChange: 'clipboard:change',
   /**
    * Main → renderer : demande d'afficher la card Clipboard avec focus
-   * sur la recherche (déclenché par le raccourci global Ctrl+Shift+V).
+   * sur la recherche (déclenché par le raccourci global Ctrl+Alt+V).
    */
   ClipboardFocusCard: 'clipboard:focusCard',
 
@@ -2346,7 +2421,7 @@ export interface NotchApi {
     onChange: (cb: (state: ClipboardState) => void) => () => void;
     /**
      * S'abonne à la demande d'affichage de la card avec focus sur la
-     * recherche (raccourci global Ctrl+Shift+V).
+     * recherche (raccourci global Ctrl+Alt+V).
      */
     onFocusCard: (cb: () => void) => () => void;
   };

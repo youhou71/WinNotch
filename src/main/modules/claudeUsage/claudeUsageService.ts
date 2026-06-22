@@ -32,6 +32,7 @@ import {
 import { getNotchWindow } from '../../window/notchWindow';
 import { readStatuslineCache } from './statuslineReader';
 import { estimateUsageFromJsonl } from './jsonlParser';
+import { projectWindow } from './projection';
 import {
   installStatusline,
   isClaudeInstalled,
@@ -67,6 +68,12 @@ const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
  */
 interface ClaudeUsageStore {
   claudeUsageSparkline?: number[];
+  /**
+   * Ring buffer parallèle du `percent` hebdomadaire (même cadence 5 min).
+   * Sert uniquement au calcul de vélocité/projection de la fenêtre 7 j
+   * (non exposé au renderer — la card n'affiche que la sparkline 5 h).
+   */
+  claudeUsageSparklineWeekly?: number[];
   claudeUsageLastSparkAt?: number;
   /**
    * Numéro de version interne du ring buffer sparkline. Incrémenté à chaque
@@ -92,6 +99,7 @@ const auxStore = new Store<ClaudeUsageStore>({
   name: 'claude-usage',
   defaults: {
     claudeUsageSparkline: new Array(SPARKLINE_SIZE).fill(0),
+    claudeUsageSparklineWeekly: new Array(SPARKLINE_SIZE).fill(0),
     claudeUsageLastSparkAt: 0,
     claudeUsageSparkVersion: SPARKLINE_DATA_VERSION,
   },
@@ -107,14 +115,24 @@ function migrateSparklineIfNeeded(): void {
   const storedVersion = auxStore.get('claudeUsageSparkVersion') ?? 0;
   if (storedVersion >= SPARKLINE_DATA_VERSION) return;
   auxStore.set('claudeUsageSparkline', new Array(SPARKLINE_SIZE).fill(0));
+  auxStore.set('claudeUsageSparklineWeekly', new Array(SPARKLINE_SIZE).fill(0));
   auxStore.set('claudeUsageLastSparkAt', 0);
   auxStore.set('claudeUsageSparkVersion', SPARKLINE_DATA_VERSION);
   console.log(
-    `[claudeUsage] migration sparkline v${storedVersion} → v${SPARKLINE_DATA_VERSION} : ring buffer purgé`,
+    `[claudeUsage] migration sparkline v${storedVersion} → v${SPARKLINE_DATA_VERSION} : ring buffers purgés`,
   );
 }
 
 migrateSparklineIfNeeded();
+
+/**
+ * Buffer hebdo en mémoire (miroir persisté dans `auxStore`). Tenu hors du
+ * `ClaudeUsageState` car le renderer n'en a pas besoin (seule la projection
+ * dérivée lui est poussée). Initialisé APRÈS la migration (qui peut le purger).
+ */
+let weeklySpark: number[] = normaliseSparkline(
+  auxStore.get('claudeUsageSparklineWeekly') ?? new Array(SPARKLINE_SIZE).fill(0),
+);
 
 function emptyState(): ClaudeUsageState {
   const now = Date.now();
@@ -125,6 +143,10 @@ function emptyState(): ClaudeUsageState {
     fiveH: { percent: 0, resetsAt: now + FIVE_HOURS_MS, source: 'estimated' },
     weekly: { percent: 0, resetsAt: now + SEVEN_DAYS_MS, source: 'estimated' },
     sparkline: normaliseSparkline(sparkline),
+    projection: {
+      fiveH: { velocityPctPerHour: 0, exhaustAt: null },
+      weekly: { velocityPctPerHour: 0, exhaustAt: null },
+    },
     plan: 'unknown',
     statuslineInstalled: false,
     claudeInstalled: false,
@@ -156,19 +178,32 @@ function broadcast(): void {
   win.webContents.send(IpcChannel.ClaudeUsageChange, currentState);
 }
 
-function pushSparklineIfDue(percent5h: number): number[] {
+/** Pousse une valeur en fin de ring buffer (taille fixe SPARKLINE_SIZE). */
+function pushPoint(buffer: number[], value: number): number[] {
+  const next = buffer.slice(1);
+  next.push(value);
+  while (next.length < SPARKLINE_SIZE) next.unshift(0);
+  while (next.length > SPARKLINE_SIZE) next.shift();
+  return next;
+}
+
+/**
+ * Pousse les DEUX ring buffers (5 h + 7 j) si la borne de 5 min est
+ * franchie. Met à jour `weeklySpark` (effet de bord) et retourne le buffer
+ * 5 h (exposé dans le state). Cadence partagée → un seul `lastSparkAt`.
+ */
+function pushSparklineIfDue(percent5h: number, percent7d: number): number[] {
   const now = Date.now();
   const lastAt = auxStore.get('claudeUsageLastSparkAt') ?? 0;
   if (now - lastAt < SPARK_BUCKET_MS) return currentState.sparkline;
 
-  const next = currentState.sparkline.slice(1);
-  next.push(percent5h);
-  while (next.length < SPARKLINE_SIZE) next.unshift(0);
-  while (next.length > SPARKLINE_SIZE) next.shift();
+  const next5 = pushPoint(currentState.sparkline, percent5h);
+  weeklySpark = pushPoint(weeklySpark, percent7d);
 
-  auxStore.set('claudeUsageSparkline', next);
+  auxStore.set('claudeUsageSparkline', next5);
+  auxStore.set('claudeUsageSparklineWeekly', weeklySpark);
   auxStore.set('claudeUsageLastSparkAt', now);
-  return next;
+  return next5;
 }
 
 async function tick(): Promise<void> {
@@ -234,12 +269,31 @@ async function tick(): Promise<void> {
       }
     }
 
-    const sparkline = pushSparklineIfDue(fiveH.percent);
+    const sparkline = pushSparklineIfDue(fiveH.percent, weekly.percent);
+
+    const projNow = Date.now();
+    const projection = {
+      fiveH: projectWindow(
+        fiveH.percent,
+        fiveH.resetsAt,
+        sparkline,
+        projNow,
+        SPARK_BUCKET_MS,
+      ),
+      weekly: projectWindow(
+        weekly.percent,
+        weekly.resetsAt,
+        weeklySpark,
+        projNow,
+        SPARK_BUCKET_MS,
+      ),
+    };
 
     currentState = {
       fiveH,
       weekly,
       sparkline,
+      projection,
       plan: cfg.plan,
       statuslineInstalled,
       claudeInstalled,

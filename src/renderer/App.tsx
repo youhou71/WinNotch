@@ -37,6 +37,7 @@ import { ClaudeProvider } from './modules/claude/ClaudeContext';
 import { useClaudeCompletionToasts } from './modules/claude/useClaudeCompletionToasts';
 import { ClaudeUsageProvider } from './modules/claudeUsage/ClaudeUsageContext';
 import { useClaudeUsageThresholdToasts } from './modules/claudeUsage/useClaudeUsageThresholdToasts';
+import { useClaudeUsagePaceToast } from './modules/claudeUsage/useClaudeUsagePaceToast';
 import { GitLabProvider } from './modules/gitlab/GitLabContext';
 import { useGitLabReviewToasts } from './modules/gitlab/useGitLabReviewToasts';
 import { useGitLabIssueToasts } from './modules/gitlab/useGitLabIssueToasts';
@@ -46,6 +47,7 @@ import { useVpnToasts } from './modules/vpn/useVpnToasts';
 import { TeamsProvider } from './modules/teams/TeamsContext';
 import { SystemProvider } from './modules/system/SystemContext';
 import { BambuProvider } from './modules/bambu/BambuContext';
+import { useBambuToasts } from './modules/bambu/useBambuToasts';
 import { AudioProvider } from './modules/audio/AudioContext';
 import { SearchProvider, useSearchContext } from './modules/search/SearchContext';
 import { TasksProvider } from './modules/tasks/TasksContext';
@@ -103,6 +105,8 @@ function AppInner() {
   useClaudeCompletionToasts();
   // Toasts à chaque franchissement de seuil 5h / 7d sur les limites Claude.
   useClaudeUsageThresholdToasts();
+  // Toast de RYTHME : prévient quand une fenêtre sera épuisée avant son reset.
+  useClaudeUsagePaceToast();
   // Détecte les nouvelles MR assignées en review et émet un toast par
   // nouvelle assignation (sous réserve du toggle moduleConfig.gitlab.notify.mr).
   useGitLabReviewToasts();
@@ -113,7 +117,9 @@ function AppInner() {
   useUpdateToasts();
   // Toasts à chaque connexion / déconnexion VPN détectée par le polling.
   useVpnToasts();
-  // Le raccourci global Ctrl+Shift+V incrémente `pendingFocusAt` côté
+  // Toasts Bambu : fin / échec d'impression, HMS grave, filament bas (toast-only).
+  useBambuToasts();
+  // Le raccourci global Ctrl+Alt+V incrémente `pendingFocusAt` côté
   // clipboard ; on force alors le passage en expanded pour que la page
   // (auto-ouverte par useClipboard) soit visible.
   const { pendingFocusAt, closePage: closeClipboardPage } =

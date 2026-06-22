@@ -1,20 +1,29 @@
 /**
- * Wrapper sur le package `loudness` pour lire/écrire le volume système.
+ * Lecture/écriture du volume système via le binaire bundlé par `loudness`.
  *
- * `loudness` embarque un petit binaire natif Windows
+ * `loudness` embarque un petit binaire Windows
  * (`adjust_get_current_system_volume_vista_plus.exe`) qui parle directement
  * à l'API Windows Core Audio. Pas de dépendance utilisateur (pas besoin
- * d'installer un module PowerShell, pas d'admin).
+ * d'installer un module PowerShell, pas d'admin). Protocole du binaire
+ * (cf. `loudness/impl/windows/index.js`) :
+ *   - sans argument            → stdout `"<volume> <muted>"`
+ *   - argument `"<n>"`         → règle le volume à n
+ *   - argument `mute`/`unmute` → coupe / réactive le son
  *
- * Lecture : l'API publique de `loudness` force DEUX spawns pour lire l'état
- * (`getVolume()` + `getMuted()`), alors que le binaire appelé sans argument
- * retourne les deux valeurs dans le même stdout (`"<volume> <muted>"`, cf.
- * `loudness/impl/windows/index.js`). `getVolumeInfo()` exécute donc le
- * binaire directement : UN seul spawn par lecture — c'est le chemin chaud
- * du polling audio (audit perf P2, chaque spawn est scanné par l'AV).
- *
- * Écriture : `setVolume`/`setMuted` restent sur l'API `loudness` (un seul
- * spawn chacun, rien à optimiser).
+ * On appelle ce binaire DIRECTEMENT pour les trois opérations (au lieu de
+ * passer par l'API JS de `loudness`) pour deux raisons :
+ *  1. Lecture : l'API publique force DEUX spawns (`getVolume()` +
+ *     `getMuted()`), alors qu'un appel sans argument retourne les deux
+ *     valeurs d'un coup — UN seul spawn par lecture, c'est le chemin chaud
+ *     du polling audio (audit perf P2, chaque spawn est scanné par l'AV).
+ *  2. Chemin asar : un `.exe` ne peut PAS être spawné depuis l'intérieur
+ *     d'une archive `app.asar` (CreateProcess ne lit pas dans le blob ;
+ *     Electron ne patche que `fs`, pas le spawn de process). En prod, le
+ *     module `loudness` est dépaqueté dans `app.asar.unpacked` mais son
+ *     code interne calcule le chemin du binaire via `__dirname`, qui pointe
+ *     vers le chemin VIRTUEL `…\app.asar\…` → ENOENT silencieux, volume
+ *     bloqué à 0 %. En résolvant nous-mêmes le chemin et en le réécrivant
+ *     vers `.unpacked`, lecture ET écriture visent le fichier réel.
  *
  * Les setters sont tolérants aux pannes : en cas d'erreur, on absorbe
  * plutôt que de propager. `getVolumeInfo()` en revanche THROW en cas
@@ -23,9 +32,8 @@
  */
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { dirname, join } from 'path';
+import { dirname, join, sep } from 'path';
 import { createRequire } from 'module';
-import loudness from 'loudness';
 
 const execFileAsync = promisify(execFile);
 
@@ -37,10 +45,12 @@ export interface VolumeInfo {
 
 /**
  * Résout (une seule fois) le chemin du binaire bundlé par `loudness`.
- * `createRequire` car le bundle main est ESM ; `loudness` est dans
- * `asarUnpack` donc Electron redirige l'exécution vers le fichier réel
- * (`app.asar.unpacked`) en prod — même mécanisme que l'API `loudness`
- * elle-même.
+ * `createRequire` car le bundle main est ESM. En prod le chemin résolu
+ * pointe à l'intérieur de l'asar (`…\app.asar\node_modules\loudness\…`) ;
+ * on le réécrit vers `…\app.asar.unpacked\…` (où electron-builder a
+ * réellement extrait le binaire, cf. `asarUnpack` dans electron-builder.yml)
+ * afin que `CreateProcess` trouve un fichier sur disque. En dev, le chemin
+ * ne contient pas `app.asar` → la réécriture est un no-op.
  */
 let exePath: string | null = null;
 function loudnessExePath(): string {
@@ -49,7 +59,7 @@ function loudnessExePath(): string {
     exePath = join(
       dirname(require.resolve('loudness/impl/windows/index.js')),
       'adjust_get_current_system_volume_vista_plus.exe',
-    );
+    ).replace(`app.asar${sep}`, `app.asar.unpacked${sep}`);
   }
   return exePath;
 }
@@ -76,7 +86,10 @@ export async function getVolumeInfo(): Promise<VolumeInfo> {
 export async function setVolume(level: number): Promise<void> {
   const clamped = Math.max(0, Math.min(100, Math.round(level)));
   try {
-    await loudness.setVolume(clamped);
+    await execFileAsync(loudnessExePath(), [String(clamped)], {
+      windowsHide: true,
+      timeout: 5000,
+    });
   } catch {
     // Échec silencieux : peut arriver si une permission de session
     // Bluetooth/casque est manquante. L'UI reflétera simplement l'état
@@ -87,7 +100,10 @@ export async function setVolume(level: number): Promise<void> {
 /** Active ou coupe le son système. */
 export async function setMuted(muted: boolean): Promise<void> {
   try {
-    await loudness.setMuted(muted);
+    await execFileAsync(loudnessExePath(), [muted ? 'mute' : 'unmute'], {
+      windowsHide: true,
+      timeout: 5000,
+    });
   } catch {
     // Idem setVolume : on absorbe l'erreur pour ne pas casser le polling.
   }

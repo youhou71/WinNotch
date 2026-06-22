@@ -7,7 +7,7 @@
  *  - mutations IPC qui retournent le nouveau state pour réconciliation
  *
  * `pendingFocusAt` est incrémenté à chaque réception de `clipboard:focusCard`
- * (raccourci global Ctrl+Shift+V). Les composants qui veulent réagir
+ * (raccourci global Ctrl+Alt+V). Les composants qui veulent réagir
  * s'abonnent à ce nombre via un `useEffect`.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,7 +21,7 @@ export function useClipboard() {
   /**
    * État global de la page Clipboard. Vit dans le Context (pas dans le
    * composant ExpandedDashboard qui se démonte à chaque collapse) pour
-   * garder une seule source de vérité. Le raccourci Ctrl+Shift+V
+   * garder une seule source de vérité. Le raccourci Ctrl+Alt+V
    * l'ouvre via `onFocusCard`. L'app la ferme automatiquement quand
    * le notch passe en collapsed (cf. AppInner) pour éviter qu'elle
    * réapparaisse à la prochaine ouverture via Ctrl+Shift+Space.

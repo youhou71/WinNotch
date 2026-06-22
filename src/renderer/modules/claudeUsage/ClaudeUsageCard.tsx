@@ -15,9 +15,15 @@
  * le main process — les `resetsAt` ne bougent que rarement.
  */
 import { useEffect, useState } from 'react';
-import type { ClaudeUsagePlan, ClaudeUsageWindow } from '../../../shared/types';
+import type {
+  ClaudeUsagePlan,
+  ClaudeUsageState,
+  ClaudeUsageWindow,
+} from '../../../shared/types';
 import { useClaudeUsageContext } from './ClaudeUsageContext';
 import { Sparkline } from '../system/Sparkline';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface GaugeProps {
   label: string;
@@ -43,6 +49,87 @@ function formatRelative(ms: number): string {
   const d = Math.floor(h / 24);
   const remH = h % 24;
   return remH > 0 ? `${d} j ${remH} h` : `${d} j`;
+}
+
+/**
+ * Formate l'instant d'épuisement projeté : relatif si < 24 h
+ * (« dans 38 min »), sinon jour + heure (« jeu. 16:00 »).
+ */
+function formatExhaust(ts: number, now: number): string {
+  const ms = ts - now;
+  if (ms < DAY_MS) return `dans ${formatRelative(ms)}`;
+  return new Date(ts).toLocaleString('fr-FR', {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Construit la trajectoire pointillée future pour la sparkline 5 h :
+ * échantillonne `percent + vélocité·t` jusqu'à l'épuisement projeté ou le
+ * reset (le plus proche). `null` si rien à projeter.
+ */
+function buildProjectionTrace(
+  percent: number,
+  velocityPctPerHour: number,
+  exhaustAt: number | null,
+  resetsAt: number,
+  now: number,
+): { pts: number[]; fraction: number } | null {
+  if (velocityPctPerHour <= 0) return null;
+  const horizonEnd = Math.min(exhaustAt ?? resetsAt, resetsAt);
+  const horizonMs = horizonEnd - now;
+  if (horizonMs <= 60_000) return null;
+  const STEPS = 8;
+  const pts: number[] = [];
+  for (let i = 1; i <= STEPS; i++) {
+    const tHours = (horizonMs / 3_600_000) * (i / STEPS);
+    pts.push(Math.min(100, percent + velocityPctPerHour * tHours));
+  }
+  // Part de largeur réservée au futur, relative aux 24 h d'historique.
+  const fraction = Math.max(0.12, Math.min(0.45, horizonMs / (DAY_MS + horizonMs)));
+  return { pts, fraction };
+}
+
+/**
+ * Ligne de projection sous les jauges : met en avant les fenêtres qui
+ * seront épuisées AVANT leur reset à la vélocité actuelle ; sinon rassure
+ * (« tenu ») dès qu'un rythme est mesurable.
+ */
+function ProjectionLine({
+  projection,
+  now,
+}: {
+  projection: ClaudeUsageState['projection'];
+  now: number;
+}) {
+  const warn: string[] = [];
+  if (projection.fiveH.exhaustAt)
+    warn.push(`5 h épuisé ${formatExhaust(projection.fiveH.exhaustAt, now)}`);
+  if (projection.weekly.exhaustAt)
+    warn.push(`7 j épuisé ${formatExhaust(projection.weekly.exhaustAt, now)}`);
+
+  if (warn.length > 0) {
+    return (
+      <div className="cu-projection cu-projection-warn">
+        <i className="fa-solid fa-bolt" />
+        <span>{warn.join(' · ')}</span>
+      </div>
+    );
+  }
+  if (
+    projection.fiveH.velocityPctPerHour >= 0.5 ||
+    projection.weekly.velocityPctPerHour >= 0.5
+  ) {
+    return (
+      <div className="cu-projection cu-projection-ok">
+        <i className="fa-solid fa-check" />
+        <span>Tenu jusqu'au reset</span>
+      </div>
+    );
+  }
+  return null;
 }
 
 function planBadge(plan: ClaudeUsagePlan): string {
@@ -123,6 +210,8 @@ export function ClaudeUsageCard() {
       <Gauge label="5 h" window={state.fiveH} now={now} />
       <Gauge label="7 j" window={state.weekly} now={now} />
 
+      <ProjectionLine projection={state.projection} now={now} />
+
       {(() => {
         const showInstallWarn = !state.statuslineInstalled;
         const showEstimatedWarn =
@@ -130,6 +219,13 @@ export function ClaudeUsageCard() {
           (state.fiveH.source === 'estimated' ||
             state.weekly.source === 'estimated');
         const hasWarn = showInstallWarn || showEstimatedWarn;
+        const trace = buildProjectionTrace(
+          state.fiveH.percent,
+          state.projection.fiveH.velocityPctPerHour,
+          state.projection.fiveH.exhaustAt,
+          state.fiveH.resetsAt,
+          now,
+        );
         return (
           <div className={'cu-card-foot' + (hasWarn ? ' has-warn' : '')}>
             <Sparkline
@@ -139,6 +235,8 @@ export function ClaudeUsageCard() {
               width={120}
               height={18}
               stretch
+              projection={trace?.pts}
+              projectionFraction={trace?.fraction}
             />
             <span className="cu-card-foot-label">24 h</span>
             {showInstallWarn && (

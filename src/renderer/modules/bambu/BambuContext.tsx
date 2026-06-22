@@ -42,6 +42,7 @@ const EMPTY_STATE: BambuState = {
   bedTarget: null,
   amsTrays: [],
   hms: [],
+  lastPrint: null,
   lastUpdateAt: 0,
 };
 

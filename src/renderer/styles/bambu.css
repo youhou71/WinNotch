@@ -126,6 +126,31 @@
   color: var(--txt-dim);
 }
 
+/* Résumé « dernière impression » (état repos). */
+.bambu-last {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--txt-dim);
+  min-width: 0;
+}
+
+.bambu-last i {
+  color: var(--bambu-color, #00ae42);
+  flex-shrink: 0;
+}
+
+.bambu-last.is-failed i {
+  color: #ef4444;
+}
+
+.bambu-last-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Progression. */
 .bambu-progress {
   display: flex;

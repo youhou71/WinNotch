@@ -72,7 +72,7 @@ export const SETTINGS_MODULES: ModuleMeta[] = [
     icon: 'fa-solid fa-clipboard',
     color: '#a78bfa',
     description:
-      'Historique chiffré, détection URL/JSON/couleur/image, Ctrl+Shift+V.',
+      'Historique chiffré, détection URL/JSON/couleur/image, Ctrl+Alt+V.',
   },
   {
     id: 'vpn',

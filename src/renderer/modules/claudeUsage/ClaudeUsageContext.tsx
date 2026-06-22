@@ -34,6 +34,10 @@ function emptyState(): ClaudeUsageState {
     fiveH: { percent: 0, resetsAt: now + FIVE_HOURS_MS, source: 'estimated' },
     weekly: { percent: 0, resetsAt: now + SEVEN_DAYS_MS, source: 'estimated' },
     sparkline: new Array(SPARKLINE_SIZE).fill(0),
+    projection: {
+      fiveH: { velocityPctPerHour: 0, exhaustAt: null },
+      weekly: { velocityPctPerHour: 0, exhaustAt: null },
+    },
     plan: 'unknown',
     statuslineInstalled: false,
     claudeInstalled: false,

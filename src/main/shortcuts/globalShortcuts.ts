@@ -3,6 +3,7 @@
  *
  *  - Ctrl + Shift + D     : toggle DND (Ne pas déranger)
  *  - Ctrl + Shift + Space : toggle collapsed/expanded du notch
+ *  - Ctrl + Alt + V       : ouvre la card Clipboard (focus search)
  *
  * Note : Escape **ne peut pas** être enregistré via globalShortcut
  * (Electron le refuse explicitement), et on ne l'intercepte pas non plus
@@ -24,7 +25,7 @@ import { setNotchMode } from './altPeek';
 
 const SHORTCUT_DND = 'CommandOrControl+Shift+D';
 const SHORTCUT_TOGGLE = 'CommandOrControl+Shift+Space';
-const SHORTCUT_CLIPBOARD = 'CommandOrControl+Shift+V';
+const SHORTCUT_CLIPBOARD = 'CommandOrControl+Alt+V';
 
 function tryRegister(accelerator: string, handler: () => void, label: string): void {
   const ok = globalShortcut.register(accelerator, handler);
@@ -55,7 +56,7 @@ export function registerGlobalShortcuts(): void {
     win.webContents.focus();
   }, 'toggle Notch');
 
-  // Ctrl+Shift+V : signale au renderer d'afficher la card Clipboard.
+  // Ctrl+Alt+V : signale au renderer d'afficher la card Clipboard.
   // C'est le renderer qui force le passage en expanded + focus sur la
   // search bar de la card (pas de ShellToggleNotch ici, qui rétracterait
   // le notch s'il est déjà ouvert). Même pattern de focus système que

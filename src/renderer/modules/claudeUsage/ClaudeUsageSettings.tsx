@@ -85,6 +85,16 @@ export function ClaudeUsageSettings() {
             void patchModuleConfig('claude.usage', { notifyThresholds: next })
           }
         />
+        <SettingsToggleRow
+          icon="fa-solid fa-bolt"
+          iconColor="#fb923c"
+          label="Alerte de rythme"
+          description="Prévient quand, à la vitesse de consommation actuelle, une fenêtre sera épuisée AVANT son reset (ex. « 5 h épuisé dans ~38 min »). Distincte des seuils absolus."
+          value={cfg.notifyPace}
+          onChange={(next) =>
+            void patchModuleConfig('claude.usage', { notifyPace: next })
+          }
+        />
       </SettingsSection>
 
       <SettingsSection title="Polling">

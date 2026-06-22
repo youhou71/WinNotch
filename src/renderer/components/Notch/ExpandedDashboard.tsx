@@ -41,6 +41,7 @@ import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
 import { NotchSearch } from '../../modules/search/NotchSearch';
 import { detectMode } from '../../modules/search/detectMode';
 import { SearchHelp } from '../../modules/search/SearchHelp';
+import { CalcView } from '../../modules/search/CalcView';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 
@@ -122,6 +123,7 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
   const inSearch = !!detected;
   const inTaskMode = detected?.mode === 'task';
   const inHelpMode = detected?.mode === 'help';
+  const inCalcMode = detected?.mode === 'calc';
   // Mode "détection live" (URL/JSON/JWT/color/path tapé dans la search bar).
   // Le pipeline shared remplit `detection` dans ces cas, et on rend la
   // vue plein dashboard correspondante à la place du dashboard normal.
@@ -293,7 +295,7 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
         )}
 
         {/* Page Clipboard plein dashboard, ouverte via bouton search bar
-            ou raccourci global Ctrl+Shift+V. Chargée en lazy. */}
+            ou raccourci global Ctrl+Alt+V. Chargée en lazy. */}
         {clipboardOpen && !inSearch && !settingsOpen && !gitlabPanelOpen && !gitlocalPanelOpen && (
           <Suspense fallback={<DashboardLoader />}>
             <ClipboardPage onClose={closeClipboard} />
@@ -306,6 +308,9 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
 
         {/* Mode `?` (aide) : doc filtrée selon les modules actifs. */}
         {inHelpMode && <SearchHelp />}
+
+        {/* Mode `=` (calc & convert) : évaluation inline + bouton Copier. */}
+        {inCalcMode && <CalcView expr={detected?.payload ?? ''} />}
 
         {/* Mode détection live (URL / JSON / JWT / color / path tapé dans
             la search bar). Vue plein dashboard avec preview + actions. */}
