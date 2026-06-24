@@ -26,12 +26,16 @@ import {
   type Density,
   type GitLabState,
   type GitLabUser,
+  type GitLocalAction,
+  type GitLocalActionResult,
   type GitLocalState,
   type Meeting,
   type ModuleConfig,
   type ModuleId,
   type MusicState,
   type NotchApi,
+  type Quicklink,
+  type Snippet,
   type SearchResult,
   type Settings,
   type TeamsActivity,
@@ -172,6 +176,8 @@ const api: NotchApi = {
       ipcRenderer.invoke(IpcChannel.SearchOpenVsCode, path, kind),
     openVs: (path: string) =>
       ipcRenderer.invoke(IpcChannel.SearchOpenVs, path),
+    transform: (op: string, input: string) =>
+      ipcRenderer.invoke(IpcChannel.SearchTransform, op, input),
   },
   claude: {
     list: () => ipcRenderer.invoke(IpcChannel.ClaudeList),
@@ -232,6 +238,8 @@ const api: NotchApi = {
       }>,
     clearCredentials: () => ipcRenderer.invoke(IpcChannel.GitLabClearCredentials),
     refresh: () => ipcRenderer.invoke(IpcChannel.GitLabRefresh),
+    mrDetail: (projectId: number, iid: number) =>
+      ipcRenderer.invoke(IpcChannel.GitLabMrDetail, projectId, iid),
     onChange: (cb: (state: GitLabState) => void) => {
       const handler = (_: unknown, state: GitLabState) => cb(state);
       ipcRenderer.on(IpcChannel.GitLabChange, handler);
@@ -249,6 +257,13 @@ const api: NotchApi = {
         via?: 'sln' | 'vscode';
         error?: string;
       }>,
+    action: (path: string, action: GitLocalAction, arg?: string) =>
+      ipcRenderer.invoke(
+        IpcChannel.GitLocalAction,
+        path,
+        action,
+        arg,
+      ) as Promise<GitLocalActionResult>,
     onChange: (cb: (state: GitLocalState) => void) => {
       const handler = (_: unknown, state: GitLocalState) => cb(state);
       ipcRenderer.on(IpcChannel.GitLocalChange, handler);
@@ -439,6 +454,10 @@ const api: NotchApi = {
       ipcRenderer.invoke(IpcChannel.SettingsSetAutoStart, enabled),
     setDashboardLayout: (layout: DashTile[]) =>
       ipcRenderer.invoke(IpcChannel.SettingsSetDashboardLayout, layout),
+    setQuicklinks: (links: Quicklink[]) =>
+      ipcRenderer.invoke(IpcChannel.SettingsSetQuicklinks, links),
+    setSnippets: (snippets: Snippet[]) =>
+      ipcRenderer.invoke(IpcChannel.SettingsSetSnippets, snippets),
     onChange: (cb: (state: Settings) => void) => {
       const handler = (_: unknown, state: Settings) => cb(state);
       ipcRenderer.on(IpcChannel.SettingsChange, handler);

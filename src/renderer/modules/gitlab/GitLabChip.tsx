@@ -31,6 +31,8 @@ export function GitLabChip() {
   const issues = state.watchedIssues;
   const toReview = state.toReview;
   const mine = state.mine;
+  // MR « mine » dont le pipeline a échoué — signal distinct des issues.
+  const mineFailed = mine.filter((m) => m.pipelineStatus === 'failed');
 
   return (
     <NotchTooltip
@@ -86,6 +88,24 @@ export function GitLabChip() {
             </>
           )}
 
+          {mineFailed.length > 0 && (
+            <>
+              <div className="tt-sub" style={{ color: '#f87171', fontWeight: 600 }}>
+                <i className="fa-solid fa-circle-xmark" /> {mineFailed.length} pipeline
+                {mineFailed.length > 1 ? 's' : ''} cassé{mineFailed.length > 1 ? 's' : ''}
+              </div>
+              <ul className="tt-list">
+                {mineFailed.slice(0, 3).map((m) => (
+                  <li key={m.id} className="tt-row">
+                    <span className="tt-title">{m.title}</span>
+                    <span className="tt-sub">{m.reference}</span>
+                  </li>
+                ))}
+              </ul>
+              {mine.length > 0 && <div className="tt-divider" />}
+            </>
+          )}
+
           {mine.length > 0 && (
             <>
               <div className="tt-sub" style={{ fontWeight: 600 }}>
@@ -115,6 +135,13 @@ export function GitLabChip() {
       <div className="chip chip-gitlab">
         <div className="logo-stack">
           <i className="fa-brands fa-gitlab gitlab-glyph" />
+          {mineFailed.length > 0 && (
+            <span
+              className="gitlab-badge-pipeline"
+              aria-label={`${mineFailed.length} pipeline(s) cassé(s) sur mes MR`}
+              title={`${mineFailed.length} pipeline(s) cassé(s)`}
+            />
+          )}
           {issues.length > 0 ? (
             <span
               className="count-badge gitlab-badge gitlab-badge-issues"

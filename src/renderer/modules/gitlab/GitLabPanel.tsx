@@ -15,11 +15,18 @@
  * Clic sur une ligne → `shell.openExternal(webUrl)` ouvre dans le
  * navigateur par défaut.
  */
-import { useEffect, useRef, useState } from 'react';
-import type { GitLabIssue, GitLabMr } from '../../../shared/types';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import type { GitLabIssue, GitLabMr, GitLabMrDetail } from '../../../shared/types';
 import { useGitLabContext } from './GitLabContext';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { NotchTooltip } from '../../components/Tooltip/NotchTooltip';
+import { pipelineMeta, fetchMrDetailCached } from './pipeline';
+
+const GITLAB_TT_ACCENT: CSSProperties = {
+  '--tt-accent': '#fc6d26',
+  '--tt-accent-fade': 'rgba(252, 109, 38, 0.18)',
+} as CSSProperties;
 
 function relativeAge(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -62,25 +69,127 @@ function IssueRow({ issue }: { issue: GitLabIssue }) {
   );
 }
 
-function MrRow({ mr, showAuthor }: { mr: GitLabMr; showAuthor: boolean }) {
+/** Contenu du tooltip détail d'une MR (pipeline, jobs, threads, approbations). */
+function MrTooltipContent({
+  mr,
+  loading,
+  detail,
+}: {
+  mr: GitLabMr;
+  loading: boolean;
+  detail: GitLabMrDetail | null;
+}) {
+  const pm = pipelineMeta(detail?.pipelineStatus ?? mr.pipelineStatus);
+  const threads = detail?.unresolvedThreads ?? 0;
   return (
-    <button
-      type="button"
-      className="gl-mr"
-      onClick={() => void window.notch.shell.openExternal(mr.webUrl)}
-      title={mr.reference}
+    <div className="tt-body">
+      <div className="tt-head">
+        <i className="fa-brands fa-gitlab" />
+        <span>{mr.reference}</span>
+      </div>
+      <div className="gl-tt-title">{mr.title}</div>
+      {pm && (
+        <div className="tt-sub" style={{ color: pm.color, fontWeight: 600 }}>
+          <i className={'fa-solid ' + pm.icon} /> {pm.label}
+        </div>
+      )}
+      {detail && !detail.error && (
+        <div className="tt-meta">
+          <span className="tt-meta-pill tt-meta-pill-dim">
+            {threads} thread{threads > 1 ? 's' : ''} non résolu{threads > 1 ? 's' : ''}
+          </span>
+          {detail.approvalsRequired !== null && (
+            <span className="tt-meta-pill tt-meta-pill-dim">
+              {detail.approvalsLeft && detail.approvalsLeft > 0
+                ? `${detail.approvalsLeft} approbation${detail.approvalsLeft > 1 ? 's' : ''} manquante${detail.approvalsLeft > 1 ? 's' : ''}`
+                : 'approuvée'}
+            </span>
+          )}
+        </div>
+      )}
+      {detail && detail.failedJobs.length > 0 && (
+        <div className="tt-sub" style={{ color: '#f87171' }}>
+          jobs : {detail.failedJobs.join(', ')}
+        </div>
+      )}
+      {loading && !detail && (
+        <div className="tt-sub">
+          <i className="fa-solid fa-circle-notch fa-spin" /> chargement…
+        </div>
+      )}
+      {detail?.error && (
+        <div className="tt-sub" style={{ color: '#f87171' }}>
+          détail indisponible
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MrRow({ mr, showAuthor }: { mr: GitLabMr; showAuthor: boolean }) {
+  const [detail, setDetail] = useState<GitLabMrDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+
+  // Survol : fetch débouncé (250 ms) du détail, mémoïsé (TTL 60 s) → évite
+  // les requêtes sur un simple passage de souris.
+  const onEnter = () => {
+    if (timer.current) clearTimeout(timer.current);
+    if (!detail) setLoading(true);
+    timer.current = setTimeout(() => {
+      void fetchMrDetailCached(mr.projectId, mr.iid).then((d) => {
+        setDetail(d);
+        setLoading(false);
+      });
+    }, 250);
+  };
+  const onLeave = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+
+  const pm = pipelineMeta(mr.pipelineStatus);
+
+  return (
+    <NotchTooltip
+      accentStyle={GITLAB_TT_ACCENT}
+      content={<MrTooltipContent mr={mr} loading={loading} detail={detail} />}
     >
-      <div className="gl-mr-main">
-        <span className="gl-mr-ref">{mr.reference}</span>
-        <span className="gl-mr-title">{mr.title}</span>
-      </div>
-      <div className="gl-mr-meta">
-        {showAuthor && <span className="gl-mr-author">{mr.authorName}</span>}
-        {showAuthor && <span className="dot">·</span>}
-        <span className="gl-mr-age">{relativeAge(mr.updatedAt)}</span>
-        {statusBadge(mr)}
-      </div>
-    </button>
+      <button
+        type="button"
+        className="gl-mr"
+        onClick={() => void window.notch.shell.openExternal(mr.webUrl)}
+        onMouseEnter={onEnter}
+        onMouseLeave={onLeave}
+        title={mr.reference}
+      >
+        <div className="gl-mr-main">
+          <span className="gl-mr-ref">{mr.reference}</span>
+          <span className="gl-mr-title">{mr.title}</span>
+        </div>
+        <div className="gl-mr-meta">
+          {showAuthor && <span className="gl-mr-author">{mr.authorName}</span>}
+          {showAuthor && <span className="dot">·</span>}
+          <span className="gl-mr-age">{relativeAge(mr.updatedAt)}</span>
+          {pm && (
+            <i
+              className={'fa-solid ' + pm.icon + ' gl-mr-pipe'}
+              style={{ color: pm.color }}
+              title={pm.label}
+            />
+          )}
+          {statusBadge(mr)}
+        </div>
+      </button>
+    </NotchTooltip>
   );
 }
 

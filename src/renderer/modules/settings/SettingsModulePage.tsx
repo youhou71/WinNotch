@@ -1224,6 +1224,22 @@ function GitLocalSettings() {
           onChange={(v) => void patchModuleConfig('gitlocal', { pollMs: v })}
         />
       </SettingsSection>
+
+      <SettingsSection
+        title="Actions Git (avancé)"
+        description="Actions sûres déclenchables depuis le panel d'un repo : Fetch (récupère les refs distantes), Stash (met de côté les modifs, réversible), nouvelle branche locale. Aucun commit, aucun push, aucune opération destructive. Désactivé par défaut."
+      >
+        <SettingsToggleRow
+          icon="fa-solid fa-bolt"
+          iconColor="#f97316"
+          label="Activer les actions Git dans le panel"
+          description="Affiche Fetch / Stash / nouvelle branche sous chaque repo. Opt-in."
+          value={cfg.actionsEnabled}
+          onChange={(next) =>
+            void patchModuleConfig('gitlocal', { actionsEnabled: next })
+          }
+        />
+      </SettingsSection>
     </>
   );
 }

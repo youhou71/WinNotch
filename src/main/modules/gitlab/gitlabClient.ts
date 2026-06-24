@@ -11,7 +11,12 @@
  * (scope `read_api` suffisant). Les URLs sont construites à partir de
  * `instanceUrl` saisi par l'utilisateur dans les Settings.
  */
-import type { GitLabIssue, GitLabMr, GitLabUser } from '../../../shared/types';
+import type {
+  GitLabIssue,
+  GitLabMr,
+  GitLabMrDetail,
+  GitLabUser,
+} from '../../../shared/types';
 
 /** Erreurs explicites pour que le service puisse les renvoyer au renderer. */
 export class GitLabAuthError extends Error {
@@ -173,6 +178,8 @@ function normalizeMr(raw: RawMr): GitLabMr {
     draft: raw.draft,
     hasConflicts: raw.has_conflicts,
     detailedMergeStatus: raw.detailed_merge_status ?? '',
+    // Pré-fetché séparément côté service pour les MR « mine » (cf. #9).
+    pipelineStatus: null,
   };
 }
 
@@ -214,6 +221,134 @@ export async function fetchMrsAuthored(
     sort: 'desc',
   });
   return raws.map(normalizeMr);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  Pipeline + détail MR (Lot 3 #9)
+ * ─────────────────────────────────────────────────────────────────── */
+
+interface RawPipeline {
+  id: number;
+  status: string;
+  web_url: string;
+}
+
+/**
+ * Statut du dernier pipeline d'une MR (ou `null` si aucun pipeline / appel
+ * en échec). Utilisé au poll pour les MR « mine » (badge + toast).
+ * Tolérant : toute erreur → `null` (ne casse pas le refresh global).
+ */
+export async function fetchMrPipelineStatus(
+  instanceUrl: string,
+  token: string,
+  projectId: number,
+  iid: number,
+): Promise<string | null> {
+  try {
+    const arr = await apiFetch<RawPipeline[]>(
+      instanceUrl,
+      token,
+      `/projects/${projectId}/merge_requests/${iid}/pipelines`,
+      { per_page: 1 },
+    );
+    return arr[0]?.status ?? null;
+  } catch {
+    return null;
+  }
+}
+
+interface RawDiscussion {
+  notes?: { resolvable?: boolean; resolved?: boolean }[];
+}
+interface RawApprovals {
+  approvals_required?: number;
+  approvals_left?: number;
+}
+interface RawJob {
+  name: string;
+}
+
+/** Nombre de jobs failed cap pour le tooltip. */
+const FAILED_JOBS_CAP = 6;
+
+/**
+ * Détail enrichi d'une MR pour le tooltip au survol. Chaque source est
+ * isolée (`Promise.allSettled`) : une source en échec (ex. API approvals
+ * Premium → 403) dégrade son champ en `null` sans faire échouer le reste.
+ */
+export async function fetchMrDetail(
+  instanceUrl: string,
+  token: string,
+  projectId: number,
+  iid: number,
+): Promise<GitLabMrDetail> {
+  const base = `/projects/${projectId}/merge_requests/${iid}`;
+  const [discRes, apprRes, pipeRes] = await Promise.allSettled([
+    apiFetch<RawDiscussion[]>(instanceUrl, token, `${base}/discussions`, {
+      per_page: 100,
+    }),
+    apiFetch<RawApprovals>(instanceUrl, token, `${base}/approvals`),
+    apiFetch<RawPipeline[]>(instanceUrl, token, `${base}/pipelines`, {
+      per_page: 1,
+    }),
+  ]);
+
+  // Threads non résolus : une discussion compte si au moins une de ses
+  // notes est résoluble ET non résolue.
+  let unresolvedThreads = 0;
+  if (discRes.status === 'fulfilled') {
+    for (const d of discRes.value) {
+      if (d.notes?.some((n) => n.resolvable && !n.resolved)) unresolvedThreads++;
+    }
+  }
+
+  const approvalsRequired =
+    apprRes.status === 'fulfilled' ? apprRes.value.approvals_required ?? null : null;
+  const approvalsLeft =
+    apprRes.status === 'fulfilled' ? apprRes.value.approvals_left ?? null : null;
+
+  const pipeline =
+    pipeRes.status === 'fulfilled' ? pipeRes.value[0] ?? null : null;
+  const pipelineStatus = pipeline?.status ?? null;
+  const pipelineWebUrl = pipeline?.web_url ?? null;
+
+  // Jobs échoués : 1 appel supplémentaire uniquement si le pipeline a échoué.
+  let failedJobs: string[] = [];
+  if (pipeline && pipeline.status === 'failed') {
+    try {
+      const jobs = await apiFetch<RawJob[]>(
+        instanceUrl,
+        token,
+        `/projects/${projectId}/pipelines/${pipeline.id}/jobs`,
+        { scope: 'failed', per_page: 100 },
+      );
+      failedJobs = jobs.map((j) => j.name).slice(0, FAILED_JOBS_CAP);
+    } catch {
+      failedJobs = [];
+    }
+  }
+
+  // Échec global = les trois sources principales ont échoué (probable
+  // problème réseau / token), on remonte un message pour le tooltip.
+  const allFailed =
+    discRes.status === 'rejected' &&
+    apprRes.status === 'rejected' &&
+    pipeRes.status === 'rejected';
+  const error = allFailed
+    ? discRes.reason instanceof Error
+      ? discRes.reason.message
+      : 'Détail indisponible'
+    : null;
+
+  return {
+    pipelineStatus,
+    pipelineWebUrl,
+    failedJobs,
+    unresolvedThreads,
+    approvalsRequired,
+    approvalsLeft,
+    error,
+  };
 }
 
 /* ─────────────────────────────────────────────────────────────────────

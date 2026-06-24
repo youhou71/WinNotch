@@ -28,6 +28,10 @@ interface Props {
   onSelectModule: (id: ModuleId) => void;
   /** Ouvre la page "Disposition du dashboard" (drag-and-drop des tuiles). */
   onOpenLayout: () => void;
+  /** Ouvre la page "Quicklinks & bangs" (mode `!` de la search bar). */
+  onOpenQuicklinks: () => void;
+  /** Ouvre la page "Snippets" (mode `:` de la search bar). */
+  onOpenSnippets: () => void;
 }
 
 /**
@@ -53,7 +57,12 @@ function groupModules(modules: ModuleMeta[]): {
   return { groups, standalone };
 }
 
-export function SettingsHome({ onSelectModule, onOpenLayout }: Props) {
+export function SettingsHome({
+  onSelectModule,
+  onOpenLayout,
+  onOpenQuicklinks,
+  onOpenSnippets,
+}: Props) {
   const { settings, setDensity, setModule, toggleDnd, setAutoStart } =
     useSettingsContext();
   const { push: pushToast } = useToast();
@@ -154,6 +163,25 @@ export function SettingsHome({ onSelectModule, onOpenLayout }: Props) {
           label="Quitter WinNotch"
           description="Ferme l'application. Aucun processus ne reste actif en arrière-plan."
           onClick={() => window.notch.shell.quit()}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Recherche">
+        <SettingsRow
+          icon="fa-solid fa-bolt"
+          iconColor="#22d3ee"
+          label="Quicklinks & bangs"
+          description="Raccourcis web déclenchés par « ! » dans la barre de recherche (ex. !npm vite)."
+          onClick={onOpenQuicklinks}
+          right={<i className="fa-solid fa-chevron-right settings-chevron" />}
+        />
+        <SettingsRow
+          icon="fa-solid fa-paste"
+          iconColor="#34d399"
+          label="Snippets"
+          description="Modèles de texte à placeholders, déclenchés par « : » dans la barre (ex. :sig)."
+          onClick={onOpenSnippets}
+          right={<i className="fa-solid fa-chevron-right settings-chevron" />}
         />
       </SettingsSection>
 

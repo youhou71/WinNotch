@@ -42,6 +42,7 @@ import { NotchSearch } from '../../modules/search/NotchSearch';
 import { detectMode } from '../../modules/search/detectMode';
 import { SearchHelp } from '../../modules/search/SearchHelp';
 import { CalcView } from '../../modules/search/CalcView';
+import { GenView } from '../../modules/search/GenView';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 
@@ -124,6 +125,7 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
   const inTaskMode = detected?.mode === 'task';
   const inHelpMode = detected?.mode === 'help';
   const inCalcMode = detected?.mode === 'calc';
+  const inGenMode = detected?.mode === 'gen';
   // Mode "détection live" (URL/JSON/JWT/color/path tapé dans la search bar).
   // Le pipeline shared remplit `detection` dans ces cas, et on rend la
   // vue plein dashboard correspondante à la place du dashboard normal.
@@ -311,6 +313,9 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
 
         {/* Mode `=` (calc & convert) : évaluation inline + bouton Copier. */}
         {inCalcMode && <CalcView expr={detected?.payload ?? ''} />}
+
+        {/* Mode `;` (utilitaires dev) : uuid / base64 / hash / casse. */}
+        {inGenMode && <GenView expr={detected?.payload ?? ''} />}
 
         {/* Mode détection live (URL / JSON / JWT / color / path tapé dans
             la search bar). Vue plein dashboard avec preview + actions. */}

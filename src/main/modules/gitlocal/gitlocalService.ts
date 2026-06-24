@@ -32,6 +32,8 @@ import { simpleGit } from 'simple-git';
 import {
   DEFAULT_SETTINGS,
   IpcChannel,
+  type GitLocalAction,
+  type GitLocalActionResult,
   type GitLocalRepo,
   type GitLocalState,
   type Settings,
@@ -401,6 +403,90 @@ async function openRepo(
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+ *  Actions Git sûres (opt-in) — Lot 3 #10
+ * ─────────────────────────────────────────────────────────────────── */
+
+/** Timeout dur d'une action (anti-hang réseau / verrou). */
+const ACTION_TIMEOUT_MS = 20_000;
+
+/** Sous-ensemble sûr pour un nom de branche (validé avant `checkout -b`). */
+const BRANCH_NAME_RE = /^[A-Za-z0-9._/-]+$/;
+
+/**
+ * Env des actions : `gitEnv()` (clés dangereuses retirées + OPTIONAL_LOCKS)
+ * PLUS `GIT_TERMINAL_PROMPT=0` → git échoue VITE au lieu de bloquer sur une
+ * invite d'identifiants (HTTPS) ou de passphrase SSH (combiné au strip de
+ * GIT_ASKPASS/SSH_ASKPASS, aucune invite interactive n'est possible). C'est
+ * ce qui rend `fetch` sûr : au pire un toast d'erreur, jamais un freeze.
+ */
+function actionEnv(): NodeJS.ProcessEnv {
+  return { ...gitEnv(), GIT_TERMINAL_PROMPT: '0' };
+}
+
+/**
+ * Exécute une action Git SÛRE sur un repo. Refusée si les actions sont
+ * désactivées (opt-in) ou si `path` n'est pas un repo connu du dernier
+ * scan (empêche le renderer de faire tourner git dans un dossier arbitraire).
+ * Re-scanne toujours après (la nouvelle branche / le stash doivent se
+ * refléter immédiatement).
+ */
+async function runRepoAction(
+  path: string,
+  action: GitLocalAction,
+  arg?: string,
+): Promise<GitLocalActionResult> {
+  const cfg = store.get('moduleConfig').gitlocal;
+  if (!cfg.actionsEnabled) {
+    return { ok: false, error: 'Actions Git désactivées (Réglages → Git local).' };
+  }
+  if (!currentState.repos.some((r) => r.path === path)) {
+    return { ok: false, error: 'Repo inconnu.' };
+  }
+
+  // Timeout dur via les options du constructeur (anti-hang) + env épuré.
+  const git = simpleGit(path, {
+    timeout: { block: ACTION_TIMEOUT_MS },
+  }).env(actionEnv());
+
+  try {
+    switch (action) {
+      case 'fetch':
+        await git.fetch(['--prune']);
+        return { ok: true, message: 'Fetch terminé (refs distantes à jour).' };
+      case 'stash':
+        await git.stash(['push', '-u', '-m', 'WinNotch']);
+        return {
+          ok: true,
+          message: 'Modifications mises de côté (git stash, réversible via « git stash pop »).',
+        };
+      case 'branch': {
+        const name = (arg ?? '').trim();
+        if (
+          !name ||
+          name.length > 200 ||
+          !BRANCH_NAME_RE.test(name) ||
+          name.includes('..') ||
+          name.startsWith('/') ||
+          name.endsWith('/') ||
+          name.endsWith('.lock')
+        ) {
+          return { ok: false, error: 'Nom de branche invalide.' };
+        }
+        await git.checkoutLocalBranch(name);
+        return { ok: true, message: `Branche « ${name} » créée et active.` };
+      }
+      default:
+        return { ok: false, error: 'Action inconnue.' };
+    }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    // Reflète le nouvel état (branche courante, uncommitted après stash…).
+    void refreshOnce({ forceScan: true });
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
  *  Enregistrement
  * ─────────────────────────────────────────────────────────────────── */
 
@@ -412,6 +498,11 @@ export function registerGitLocalIpc(): void {
   ipcMain.handle(IpcChannel.GitLocalRefresh, () => refreshOnce({ forceScan: true }));
   ipcMain.handle(IpcChannel.GitLocalOpenRepo, (_e, path: string) =>
     openRepo(path),
+  );
+  ipcMain.handle(
+    IpcChannel.GitLocalAction,
+    (_e, path: string, action: GitLocalAction, arg?: string) =>
+      runRepoAction(path, action, arg),
   );
 
   subscribeConfigChanges();

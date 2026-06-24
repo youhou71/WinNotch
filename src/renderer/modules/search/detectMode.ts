@@ -10,6 +10,9 @@
  *  - `vs`  → mode Visual Studio (solutions récentes)
  *  - `-`   → mode Tâches (ajout rapide)
  *  - `=`   → mode Calc & Convert (calcul / conversion inline)
+ *  - `!`   → mode Bang (quicklinks / recherches web)
+ *  - `;`   → mode Gen (utilitaires dev : uuid, base64, hash, casse)
+ *  - `:`   → mode Snippet (insertion de snippets à placeholders)
  *
  * 2. **Détection de contenu live** (la search bar regarde ce qui est tapé/
  *    collé et propose une vue adaptée si elle reconnaît un type). Cf.
@@ -62,6 +65,12 @@ export function detectMode(query: string): DetectedMode | null {
       return { mode: 'task', payload: query.slice(1).trim() };
     case '=':
       return { mode: 'calc', payload: query.slice(1).trim() };
+    case '!':
+      return { mode: 'bang', payload: query.slice(1).trimStart() };
+    case ';':
+      return { mode: 'gen', payload: query.slice(1).trimStart() };
+    case ':':
+      return { mode: 'snippet', payload: query.slice(1).trimStart() };
     case '?':
       return { mode: 'help', payload: query.slice(1).trim() };
   }
@@ -114,6 +123,24 @@ export const MODE_META: Record<
     icon: 'fa-solid fa-calculator',
     color: '#fbbf24',
     placeholder: '(1920/3)*2 · 20px to rem · 1.5MB to KB · 0xFF to dec · 1700000000 to date',
+  },
+  bang: {
+    label: 'Bang',
+    icon: 'fa-solid fa-bolt',
+    color: '#22d3ee',
+    placeholder: 'npm vite · mdn fetch · gh electron · alias requête…',
+  },
+  gen: {
+    label: 'Outils',
+    icon: 'fa-solid fa-wand-magic-sparkles',
+    color: '#a78bfa',
+    placeholder: 'uuid · b64 texte · sha256 texte · case fooBar…',
+  },
+  snippet: {
+    label: 'Snippet',
+    icon: 'fa-solid fa-paste',
+    color: '#34d399',
+    placeholder: 'Filtrer les snippets… ↑↓ puis Entrée pour copier',
   },
   help: {
     label: 'Aide',

@@ -11,6 +11,9 @@
  * Modes :
  *  - `-`  (tâche) : Enter ajoute via SettingsContext
  *  - `=`  (calc) : évaluation inline, Enter copie le résultat
+ *  - `!`  (bang) : quicklinks / recherches web, ↑↓ navigation, Enter ouvre
+ *  - `;`  (gen) : utilitaires dev (uuid/base64/hash/casse), boutons Copier
+ *  - `:`  (snippet) : insertion de snippets à placeholders, Enter copie
  *  - `>`  (Claude) : Enter lance le CLI dans un nouveau terminal
  *  - `/`  (VS Code) : liste des workspaces récents, ↑↓ navigation, Enter ouvre
  *  - `vs` (VS) : liste des solutions scannées, ↑↓ navigation, Enter ouvre
@@ -19,8 +22,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SearchResult } from '../../../shared/types';
 import { detectMode, MODE_META } from './detectMode';
 import { evaluateCalc } from '../../../shared/calc';
+import {
+  ddgBangUrl,
+  matchQuicklinks,
+  resolveQuicklink,
+  splitBangInput,
+} from '../../../shared/quicklinks';
+import { matchSnippets, resolveSnippet } from '../../../shared/snippets';
 import { SearchResultsPanel } from './SearchResultsPanel';
+import { BangResultsPanel, type BangItem } from './BangResultsPanel';
+import { SnippetResultsPanel } from './SnippetResultsPanel';
 import { useTasksContext } from '../tasks/TasksContext';
+import { useSettingsContext } from '../settings/SettingsContext';
 import { useToast } from '../toast/ToastContext';
 
 interface Props {
@@ -53,6 +66,7 @@ export function NotchSearch({
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { add: addTask } = useTasksContext();
+  const { settings } = useSettingsContext();
   const { push: pushToast } = useToast();
 
   // Résultats bruts chargés via IPC selon le mode actif.
@@ -112,6 +126,52 @@ export function NotchSearch({
     );
   }, [items, payload]);
 
+  // Items du mode `!` (quicklinks résolus + repli DuckDuckGo). Calculés
+  // localement depuis la config — aucun IPC.
+  const bangItems = useMemo<BangItem[]>(() => {
+    if (mode !== 'bang') return [];
+    const { alias, query: q } = splitBangInput(payload);
+    const hostOf = (url: string): string => {
+      try {
+        return new URL(url).host;
+      } catch {
+        return url;
+      }
+    };
+    const items: BangItem[] = matchQuicklinks(settings.quicklinks, alias).map((ql) => {
+      const url = resolveQuicklink(ql.url, q);
+      return {
+        alias: ql.alias,
+        label: ql.label ?? ql.alias,
+        host: hostOf(url),
+        query: q,
+        url,
+      };
+    });
+    // Repli DuckDuckGo : alias tapé sans correspondance exacte locale.
+    const exact = settings.quicklinks.some(
+      (ql) => ql.alias.toLowerCase() === alias.toLowerCase(),
+    );
+    if (alias && !exact) {
+      items.push({
+        alias,
+        label: `!${alias} via DuckDuckGo`,
+        host: 'duckduckgo.com',
+        query: q,
+        url: ddgBangUrl(alias, q),
+        ddg: true,
+      });
+    }
+    return items;
+  }, [mode, payload, settings.quicklinks]);
+
+  // Snippets filtrés (mode `:`). Le body brut sert d'aperçu ; la résolution
+  // des placeholders + la copie se font à la sélection.
+  const snippetItems = useMemo(
+    () => (mode === 'snippet' ? matchSnippets(settings.snippets, payload) : []),
+    [mode, payload, settings.snippets],
+  );
+
   // Reset de la sélection à chaque changement de query — sinon on
   // conserverait un index hors-bornes.
   useEffect(() => {
@@ -119,6 +179,35 @@ export function NotchSearch({
   }, [query]);
 
   const showResultsPanel = mode === 'vscode' || mode === 'visualstudio';
+
+  /**
+   * Résout les placeholders d'un snippet (`{clipboard}` lu en direct,
+   * `{date}`/`{uuid}`…) puis copie le résultat. La valeur résolue n'est
+   * jamais affichée — seul un toast de confirmation est émis.
+   */
+  const copySnippet = async (snippet: { name: string; body: string }) => {
+    let clip = '';
+    try {
+      clip = await navigator.clipboard.readText();
+    } catch {
+      clip = '';
+    }
+    const resolved = resolveSnippet(snippet.body, { clipboard: clip, date: new Date() });
+    const ok = await navigator.clipboard
+      .writeText(resolved)
+      .then(() => true)
+      .catch(() => false);
+    pushToast({
+      icon: ok ? 'fa-solid fa-paste' : 'fa-solid fa-triangle-exclamation',
+      iconColor: ok ? '#34d399' : '#ef4444',
+      name: 'Snippet',
+      message: ok ? `« ${snippet.name} » copié` : 'Échec de la copie',
+    });
+    if (ok) {
+      setQuery('');
+      onAfterAction?.();
+    }
+  };
 
   /** Ouvre l'item sélectionné via le bon backend (VS Code ou VS). */
   const openItem = async (item: SearchResult) => {
@@ -224,6 +313,35 @@ export function NotchSearch({
         });
         return;
       }
+      case 'snippet': {
+        const item = snippetItems[selIdx];
+        if (!item) return;
+        await copySnippet(item);
+        return;
+      }
+      case 'bang': {
+        const item = bangItems[selIdx];
+        if (!item) return;
+        const res = await window.notch.shell.openExternal(item.url);
+        if (res.ok) {
+          pushToast({
+            icon: 'fa-solid fa-bolt',
+            iconColor: '#22d3ee',
+            name: 'Bang',
+            message: `Ouvert · ${item.label}`,
+          });
+          setQuery('');
+          onAfterAction?.();
+        } else {
+          pushToast({
+            icon: 'fa-solid fa-triangle-exclamation',
+            iconColor: '#ef4444',
+            name: 'Bang',
+            message: res.error ?? "Échec de l'ouverture",
+          });
+        }
+        return;
+      }
       case 'url': {
         const url = detected.detection?.text;
         if (!url) return;
@@ -273,17 +391,25 @@ export function NotchSearch({
     }
   };
 
-  /** Navigation clavier ↑↓ dans le panel de résultats. */
+  /** Navigation clavier ↑↓ dans le panel de résultats (vscode/vs ou bang). */
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       void handleEnter();
       return;
     }
-    if (!showResultsPanel || filteredItems.length === 0) return;
+    const navLen =
+      mode === 'bang'
+        ? bangItems.length
+        : mode === 'snippet'
+          ? snippetItems.length
+          : showResultsPanel
+            ? filteredItems.length
+            : 0;
+    if (navLen === 0) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelIdx((i) => Math.min(filteredItems.length - 1, i + 1));
+      setSelIdx((i) => Math.min(navLen - 1, i + 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelIdx((i) => Math.max(0, i - 1));
@@ -309,7 +435,7 @@ export function NotchSearch({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={meta?.placeholder ?? 'Rechercher · "?" pour l\'aide · "-", "=", ">", "/", "vs"…'}
+          placeholder={meta?.placeholder ?? 'Rechercher · "?" pour l\'aide · "-", "=", "!", ";", ":", ">", "/", "vs"…'}
           spellCheck={false}
           autoComplete="off"
         />
@@ -361,6 +487,49 @@ export function NotchSearch({
           onPick={(idx) => {
             const item = filteredItems[idx];
             if (item) void openItem(item);
+          }}
+        />
+      )}
+
+      {mode === 'snippet' && (
+        <SnippetResultsPanel
+          items={snippetItems}
+          selIdx={selIdx}
+          onSelect={(idx) => setSelIdx(idx)}
+          onPick={(idx) => {
+            const item = snippetItems[idx];
+            if (item) void copySnippet(item);
+          }}
+        />
+      )}
+
+      {mode === 'bang' && (
+        <BangResultsPanel
+          items={bangItems}
+          selIdx={selIdx}
+          onSelect={(idx) => setSelIdx(idx)}
+          onPick={(idx) => {
+            const item = bangItems[idx];
+            if (!item) return;
+            void window.notch.shell.openExternal(item.url).then((res) => {
+              if (res.ok) {
+                pushToast({
+                  icon: 'fa-solid fa-bolt',
+                  iconColor: '#22d3ee',
+                  name: 'Bang',
+                  message: `Ouvert · ${item.label}`,
+                });
+                setQuery('');
+                onAfterAction?.();
+              } else {
+                pushToast({
+                  icon: 'fa-solid fa-triangle-exclamation',
+                  iconColor: '#ef4444',
+                  name: 'Bang',
+                  message: res.error ?? "Échec de l'ouverture",
+                });
+              }
+            });
           }}
         />
       )}

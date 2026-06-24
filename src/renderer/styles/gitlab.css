@@ -450,3 +450,35 @@
 .gl-settings-actions .settings-link-btn.primary:hover:not(:disabled) {
   filter: brightness(1.08);
 }
+
+/* ───────────── Pipeline (Lot 3 #9) ───────────── */
+
+/* Pastille « pipeline cassé sur une de mes MR » — coin bas-gauche du
+   logo-stack pour ne pas chevaucher le count-badge (issues/reviews) en
+   haut-droite. Distincte des issues critiques. */
+.chip-gitlab .gitlab-badge-pipeline {
+  position: absolute;
+  bottom: -2px;
+  left: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 1.5px var(--surface-1, #16181d);
+}
+
+/* Icône de statut pipeline en fin de ligne MR (panel). */
+.gl-mr-pipe {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* Titre de MR dans le tooltip détail. */
+.gl-tt-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt, #f4f4f5);
+  line-height: 1.3;
+  max-width: 260px;
+  white-space: normal;
+}
