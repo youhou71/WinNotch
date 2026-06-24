@@ -26,6 +26,8 @@ import {
   type Density,
   type GitLabState,
   type GitLabUser,
+  type GitLocalAction,
+  type GitLocalActionResult,
   type GitLocalState,
   type Meeting,
   type ModuleConfig,
@@ -236,6 +238,8 @@ const api: NotchApi = {
       }>,
     clearCredentials: () => ipcRenderer.invoke(IpcChannel.GitLabClearCredentials),
     refresh: () => ipcRenderer.invoke(IpcChannel.GitLabRefresh),
+    mrDetail: (projectId: number, iid: number) =>
+      ipcRenderer.invoke(IpcChannel.GitLabMrDetail, projectId, iid),
     onChange: (cb: (state: GitLabState) => void) => {
       const handler = (_: unknown, state: GitLabState) => cb(state);
       ipcRenderer.on(IpcChannel.GitLabChange, handler);
@@ -253,6 +257,13 @@ const api: NotchApi = {
         via?: 'sln' | 'vscode';
         error?: string;
       }>,
+    action: (path: string, action: GitLocalAction, arg?: string) =>
+      ipcRenderer.invoke(
+        IpcChannel.GitLocalAction,
+        path,
+        action,
+        arg,
+      ) as Promise<GitLocalActionResult>,
     onChange: (cb: (state: GitLocalState) => void) => {
       const handler = (_: unknown, state: GitLocalState) => cb(state);
       ipcRenderer.on(IpcChannel.GitLocalChange, handler);

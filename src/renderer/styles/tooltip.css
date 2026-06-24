@@ -15,7 +15,10 @@
   --tt-accent-fade: rgba(244, 244, 245, 0.12);
   position: fixed;
   transform: translateX(-50%);
-  z-index: 1000;
+  /* Au-dessus du `.notch` (z-index 9999) : en dashboard étendu (ex. tooltip
+     détail d'une MR GitLab) la bulle se superpose au notch et serait sinon
+     masquée derrière. Reste sous les toasts (10001). */
+  z-index: 10000;
   pointer-events: none;
   background: rgba(20, 22, 28, 0.92);
   backdrop-filter: blur(14px);

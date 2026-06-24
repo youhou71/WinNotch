@@ -378,6 +378,12 @@ export interface ModuleConfig {
      * "dirty" (uncommitted > 0 OU ahead > 0).
      */
     collapsed: boolean;
+    /**
+     * Active les actions Git SÛRES dans le panel (Fetch / Stash / nouvelle
+     * branche locale). Opt-in, **défaut OFF** (invariant §0 : écriture
+     * opt-in). Jamais de commit ni de force-push ; même `push` est exclu.
+     */
+    actionsEnabled: boolean;
     /** Afficher la card dans le dashboard étendu. */
     showCard: boolean;
   };
@@ -764,6 +770,7 @@ export const DEFAULT_SETTINGS: Settings = {
       ignorePatterns: ['node_modules', 'dist', 'out', 'bin', 'obj', '.next', '.vs'],
       pollMs: 60_000,
       collapsed: true,
+      actionsEnabled: false,
       showCard: true,
     },
     'claude.live': {
@@ -1128,6 +1135,37 @@ export interface GitLabMr {
    * fin que le simple `merge_status`.
    */
   detailedMergeStatus: string;
+  /**
+   * Statut du dernier pipeline de la MR (`success`, `failed`, `running`,
+   * `pending`, `canceled`, `skipped`, `manual`…) ou `null` si aucun /
+   * non pré-fetché. Pré-fetché côté main uniquement pour les MR « mine »
+   * (badge + toast pipeline) ; `null` pour les MR à reviewer (le détail
+   * est récupéré à la demande au survol). Cf. Lot 3 #9.
+   */
+  pipelineStatus: string | null;
+}
+
+/**
+ * Détail enrichi d'une MR, récupéré À LA DEMANDE au survol (IPC
+ * `gitlab:mrDetail`, débouncé + caché côté renderer). Chaque champ dégrade
+ * en `null` si l'appel correspondant échoue (ex. API approvals en édition
+ * Premium uniquement) — jamais d'exception remontée au renderer.
+ */
+export interface GitLabMrDetail {
+  /** Statut du dernier pipeline, ou `null`. */
+  pipelineStatus: string | null;
+  /** URL web du pipeline (pour un futur clic), ou `null`. */
+  pipelineWebUrl: string | null;
+  /** Noms des jobs échoués (plafonné), vide si pipeline OK / inconnu. */
+  failedJobs: string[];
+  /** Nombre de threads de discussion non résolus. */
+  unresolvedThreads: number;
+  /** Approbations requises, ou `null` si l'API approvals est indisponible. */
+  approvalsRequired: number | null;
+  /** Approbations manquantes (`approvals_left`), ou `null`. */
+  approvalsLeft: number | null;
+  /** Message d'erreur si la récupération globale a échoué (sinon `null`). */
+  error: string | null;
 }
 
 /**
@@ -1214,6 +1252,22 @@ export interface GitLocalRepo {
    * `null` si la lecture s'est bien passée.
    */
   error: string | null;
+}
+
+/**
+ * Action Git locale SÛRE déclenchable depuis le panel (opt-in) :
+ *  - `fetch`  : `git fetch --prune` (non destructif).
+ *  - `stash`  : `git stash push -u` (réversible via `git stash pop`).
+ *  - `branch` : `git checkout -b <nom>` (crée + bascule, pas de perte).
+ * Jamais de commit / push / force-push (cf. invariant §0).
+ */
+export type GitLocalAction = 'fetch' | 'stash' | 'branch';
+
+/** Résultat d'une action Git locale. `message` pour le toast de succès. */
+export interface GitLocalActionResult {
+  ok: boolean;
+  message?: string;
+  error?: string;
 }
 
 /**
@@ -1990,6 +2044,8 @@ export const IpcChannel = {
   GitLabClearCredentials: 'gitlab:clearCredentials',
   /** Renderer → main (invoke) : force un refresh immédiat (skip l'attente du tick). */
   GitLabRefresh: 'gitlab:refresh',
+  /** Renderer → main (invoke) : détail enrichi d'une MR au survol (threads/jobs/approbations). */
+  GitLabMrDetail: 'gitlab:mrDetail',
   /** Main → renderer : push d'un nouveau GitLabState (polling ou save). */
   GitLabChange: 'gitlab:change',
 
@@ -2006,6 +2062,12 @@ export const IpcChannel = {
    * fichier. Sinon → VS Code (`code <path>`).
    */
   GitLocalOpenRepo: 'gitlocal:openRepo',
+  /**
+   * Renderer → main (invoke) : exécute une action Git SÛRE sur un repo
+   * (fetch / stash / nouvelle branche). Refusé si `actionsEnabled` est OFF
+   * ou si le chemin n'est pas un repo connu. Cf. `GitLocalAction`.
+   */
+  GitLocalAction: 'gitlocal:action',
   /** Main → renderer : push d'un nouveau GitLocalState (polling ou refresh). */
   GitLocalChange: 'gitlocal:change',
 
@@ -2271,6 +2333,12 @@ export interface NotchApi {
     clearCredentials: () => Promise<void>;
     /** Force un refresh immédiat. Le main pousse aussi un GitLabChange. */
     refresh: () => Promise<GitLabState>;
+    /**
+     * Détail enrichi d'une MR (threads non résolus, jobs échoués,
+     * approbations, pipeline) récupéré à la demande au survol. Ne throw
+     * jamais : les champs indisponibles dégradent en `null`/0.
+     */
+    mrDetail: (projectId: number, iid: number) => Promise<GitLabMrDetail>;
     /** S'abonne au push de GitLabState (polling). */
     onChange: (cb: (state: GitLabState) => void) => () => void;
   };
@@ -2287,6 +2355,16 @@ export interface NotchApi {
     openRepo: (
       path: string,
     ) => Promise<{ ok: boolean; via?: 'sln' | 'vscode'; error?: string }>;
+    /**
+     * Exécute une action Git sûre (fetch / stash / branch). `arg` = nom de
+     * branche pour `branch`. Ne throw jamais ; refuse si actions désactivées
+     * ou repo inconnu. Le main re-scanne après l'action.
+     */
+    action: (
+      path: string,
+      action: GitLocalAction,
+      arg?: string,
+    ) => Promise<GitLocalActionResult>;
     /** S'abonne au push de GitLocalState (polling ou refresh). */
     onChange: (cb: (state: GitLocalState) => void) => () => void;
   };

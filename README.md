@@ -52,12 +52,16 @@ Polling configurable de 10 s à 5 min (défaut 30 s).
 ### GitLab
 Suit les **MR à reviewer**, **mes MR ouvertes**, et **issues critiques non assignées** (labels surveillés, ex. `Severity::Critique`). Chip avec badge rouge pulse pour les issues à prendre. Dashboard compact à 3 chiffres, panel plein dashboard au clic, clic sur une ligne ouvre dans le navigateur. Toasts pour les nouvelles MR assignées et les nouvelles issues critiques.
 
+**Détail au survol + pipelines** : dans le panel, survoler une MR affiche un tooltip enrichi (statut pipeline, jobs échoués, threads non résolus, approbations manquantes) — récupéré à la demande, débouncé et caché 60 s. Le statut pipeline de **mes MR** est pré-chargé à chaque poll : une pastille rouge distincte apparaît sur la chip quand un de mes pipelines est cassé, et un toast « Pipeline échoué » est émis sur transition (à activer dans Réglages → GitLab → notifications pipelines). *(Le décompte +/− lignes est reporté — pas d'API GitLab économique.)*
+
 Configuration : URL d'instance + Personal Access Token (scope `read_api`), chiffré localement.
 
 ### Git local
 Scanne des dossiers racines configurés pour trouver les repos Git locaux et rappelle passivement ceux qui ont des modifs non poussées. Card compacte avec deux totaux (`dirty` / `repos`), panel plein dashboard listant chaque repo avec branche, fichiers non commités, commits ahead/behind. Chip discrète dans le notch rétracté quand au moins un repo est sale.
 
 Clic sur un repo : auto-détection — un `.sln`/`.slnx` à la racine ouvre **Visual Studio** (association de fichier Windows), sinon **VS Code** (`code -n <path>`).
+
+**Actions Git sûres (opt-in, désactivé par défaut)** : une fois activées dans Réglages → Git local → Actions Git, chaque repo du panel expose **Fetch** (`git fetch --prune`), **Stash** (`git stash push -u`, réversible, si modifs locales) et **nouvelle branche** locale (`git checkout -b`, saisie inline). Mini-confirmation avant Stash / branche, toast de résultat, re-scan immédiat. **Jamais** de commit, push ou opération destructive. Garde-fous : git ne peut pas bloquer sur une invite d'identifiants (`GIT_TERMINAL_PROMPT=0` + timeout 20 s), et les actions ne s'exécutent que sur un repo issu du dernier scan.
 
 Configuration : liste de dossiers racines à scanner, profondeur du scan, patterns ignorés, fréquence de rescan (défaut 60 s). Dépend de `git` dans le PATH.
 

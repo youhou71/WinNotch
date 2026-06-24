@@ -425,3 +425,78 @@
   cursor: default;
   color: #f97316;
 }
+
+/* ───────────── Actions Git sûres (opt-in, Lot 3 #10) ───────────── */
+.gloc-repo-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.gloc-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px 2px 10px;
+  opacity: 0.55;
+  transition: opacity 140ms ease;
+}
+
+/* Plus visibles au survol de la ligne, et toujours quand une confirmation
+   / saisie est en cours. */
+.gloc-repo-wrap:hover .gloc-actions,
+.gloc-actions-confirm {
+  opacity: 1;
+}
+
+.gloc-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  font-size: 11px;
+  border-radius: 7px;
+  color: var(--txt-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.gloc-action-btn:hover:not(:disabled) {
+  color: var(--txt, #f4f4f5);
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.3);
+}
+
+.gloc-action-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.gloc-action-btn.is-go {
+  color: #fff;
+  background: rgba(249, 115, 22, 0.9);
+  border-color: rgba(249, 115, 22, 0.9);
+}
+
+.gloc-actions-q {
+  font-size: 11px;
+  color: var(--txt-dim);
+}
+
+.gloc-branch-input {
+  flex: 1;
+  min-width: 120px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family:
+    ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--txt, #f4f4f5);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  border-radius: 7px;
+  outline: none;
+}

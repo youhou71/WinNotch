@@ -25,11 +25,14 @@ import { getNotchWindow } from '../../window/notchWindow';
 import {
   fetchCurrentUser,
   fetchIssuesByLabel,
+  fetchMrDetail,
+  fetchMrPipelineStatus,
   fetchMrsAuthored,
   fetchMrsToReview,
   GitLabAuthError,
   GitLabNetworkError,
 } from './gitlabClient';
+import type { GitLabMrDetail } from '../../../shared/types';
 import { broadcastSettings } from '../settings/settingsService';
 
 /** Borne minimale pour `pollMs` (sécurité contre une config trop agressive). */
@@ -159,11 +162,27 @@ async function refreshOnce(): Promise<GitLabState> {
       .filter((l) => l.length > 0)
       .map((label) => fetchIssuesByLabel(cfg.url, token, label));
 
-    const [toReview, mine, issueGroups] = await Promise.all([
+    const [toReview, mineRaw, issueGroups] = await Promise.all([
       fetchMrsToReview(cfg.url, token, cfg.account.id),
       fetchMrsAuthored(cfg.url, token, cfg.account.id),
       Promise.all(labelFetches),
     ]);
+
+    // Pré-fetch du statut pipeline pour les MR « mine » uniquement (badge
+    // collapsed + toast « pipeline échoué »). Les MR à reviewer récupèrent
+    // leur détail à la demande au survol. `fetchMrPipelineStatus` absorbe
+    // ses propres erreurs (→ null), donc ne casse pas le refresh.
+    const mine = await Promise.all(
+      mineRaw.map(async (mr) => ({
+        ...mr,
+        pipelineStatus: await fetchMrPipelineStatus(
+          cfg.url,
+          token,
+          mr.projectId,
+          mr.iid,
+        ),
+      })),
+    );
 
     const dedup = new Map<number, GitLabState['watchedIssues'][number]>();
     for (const group of issueGroups) {
@@ -335,6 +354,28 @@ export function registerGitLabIpc(): void {
     handleClearCredentials(),
   );
   ipcMain.handle(IpcChannel.GitLabRefresh, () => refreshOnce());
+  ipcMain.handle(
+    IpcChannel.GitLabMrDetail,
+    async (_e, projectId: number, iid: number): Promise<GitLabMrDetail> => {
+      const cfg = store.get('moduleConfig').gitlab;
+      const token = readToken();
+      const empty: GitLabMrDetail = {
+        pipelineStatus: null,
+        pipelineWebUrl: null,
+        failedJobs: [],
+        unresolvedThreads: 0,
+        approvalsRequired: null,
+        approvalsLeft: null,
+        error: null,
+      };
+      if (!cfg.url || !token) return { ...empty, error: 'Non configuré' };
+      try {
+        return await fetchMrDetail(cfg.url, token, projectId, iid);
+      } catch (err) {
+        return { ...empty, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
 
   subscribeConfigChanges();
 

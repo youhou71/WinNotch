@@ -41,6 +41,7 @@ import { useClaudeUsagePaceToast } from './modules/claudeUsage/useClaudeUsagePac
 import { GitLabProvider } from './modules/gitlab/GitLabContext';
 import { useGitLabReviewToasts } from './modules/gitlab/useGitLabReviewToasts';
 import { useGitLabIssueToasts } from './modules/gitlab/useGitLabIssueToasts';
+import { useGitLabPipelineToasts } from './modules/gitlab/useGitLabPipelineToasts';
 import { GitLocalProvider } from './modules/gitlocal/GitLocalContext';
 import { VpnProvider } from './modules/vpn/VpnContext';
 import { useVpnToasts } from './modules/vpn/useVpnToasts';
@@ -113,6 +114,8 @@ function AppInner() {
   // Détecte les nouvelles issues correspondant à un label surveillé
   // (Severity::Critique, etc.) et émet un toast par nouvelle issue.
   useGitLabIssueToasts();
+  // Toast « pipeline échoué » sur une de mes MR (moduleConfig.gitlab.notify.pipelines).
+  useGitLabPipelineToasts();
   // Toasts aux transitions du flux d'update (available / downloaded / error).
   useUpdateToasts();
   // Toasts à chaque connexion / déconnexion VPN détectée par le polling.

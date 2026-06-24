@@ -9,6 +9,9 @@ versioning [SemVer](https://semver.org/lang/fr/).
 
 ### Added
 
+- **Git local — actions sûres opt-in** *(Roadmap Lot 3 #10)* — une fois activées (Réglages → Git local → Actions Git, **désactivé par défaut**), chaque repo du panel expose **Fetch** (`git fetch --prune`), **Stash** (`git stash push -u`, réversible) et **nouvelle branche** locale (`git checkout -b`), avec mini-confirmation / saisie inline, toast et re-scan immédiat. **Jamais** de commit, push ou opération destructive. Garde-fous : actions refusées si l'opt-in est OFF ou si le repo n'est pas issu du dernier scan ; `GIT_TERMINAL_PROMPT=0` + timeout 20 s empêchent tout blocage sur une invite d'identifiants.
+- **GitLab — détail MR au survol + badge pipeline** *(Roadmap Lot 3 #9)* — dans le panel, survoler une MR affiche un tooltip enrichi (statut pipeline, jobs échoués, threads non résolus, approbations manquantes), récupéré à la demande via le nouvel IPC `gitlab:mrDetail` (débouncé 250 ms + cache TTL 60 s, sources isolées en `Promise.allSettled` → dégradation gracieuse si l'API approvals est Premium). Le statut pipeline de **mes MR** est pré-chargé au poll (`pipelineStatus` sur `GitLabMr`) : pastille rouge distincte sur la chip collapsed quand un pipeline est cassé, et toast « Pipeline échoué » sur transition (toggle `notify.pipelines`, désactivé par défaut). *(Décompte +/− lignes reporté — pas d'API GitLab économique.)*
+
 - **Mode `=` (Calc & Convert) dans la search bar** *(Roadmap Lot 1 #1)* — un préfixe `=` bascule la barre en calculette/convertisseur **100 % hors-ligne** (moteur pur `shared/calc.ts`, tokenizer + shunting-yard maison, zéro dépendance) :
   - arithmétique `(1920/3)*2`, `2**16`, `-2**2`, `100 % 7`, décimaux / notation scientifique (`+ - * / % **`, parenthèses, moins unaire) ;
   - bases `0xFF to dec` / `255 to hex` / littéral seul `0xFF` → dec/hex/bin/oct ;
