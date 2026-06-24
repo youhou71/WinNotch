@@ -44,6 +44,7 @@ import { useGitLabIssueToasts } from './modules/gitlab/useGitLabIssueToasts';
 import { useGitLabPipelineToasts } from './modules/gitlab/useGitLabPipelineToasts';
 import { GitLocalProvider } from './modules/gitlocal/GitLocalContext';
 import { VpnProvider } from './modules/vpn/VpnContext';
+import { PrivacyProvider } from './modules/privacy/PrivacyContext';
 import { useVpnToasts } from './modules/vpn/useVpnToasts';
 import { TeamsProvider } from './modules/teams/TeamsContext';
 import { SystemProvider } from './modules/system/SystemContext';
@@ -171,6 +172,7 @@ export function App() {
               <GitLabProvider>
                 <GitLocalProvider>
                   <VpnProvider>
+                    <PrivacyProvider>
                     <TeamsProvider>
                       <SystemProvider>
                         <BambuProvider>
@@ -182,6 +184,7 @@ export function App() {
                         </BambuProvider>
                       </SystemProvider>
                     </TeamsProvider>
+                    </PrivacyProvider>
                   </VpnProvider>
                 </GitLocalProvider>
               </GitLabProvider>

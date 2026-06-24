@@ -49,6 +49,7 @@ import {
   stopGitLocal,
 } from './modules/gitlocal/gitlocalService';
 import { registerVpnIpc, stopVpn } from './modules/vpn/vpnService';
+import { registerPrivacyIpc, stopPrivacy } from './modules/privacy/privacyService';
 import { registerTeamsIpc, stopTeams } from './modules/teams/teamsService';
 import { registerBambuIpc, stopBambu } from './modules/bambu/bambuService';
 import {
@@ -115,6 +116,8 @@ app.whenReady().then(async () => {
   } else {
     console.log('[WinNotch] Module VPN désactivé (WINNOTCH_DISABLE_VPN=1)');
   }
+  // Témoin caméra/micro (self-guard via WINNOTCH_DISABLE_PRIVACY en interne).
+  registerPrivacyIpc();
   if (process.env.WINNOTCH_DISABLE_TEAMS !== '1') {
     registerTeamsIpc();
   } else {
@@ -202,6 +205,7 @@ app.on('window-all-closed', () => {
   stopGitLab();
   stopGitLocal();
   stopVpn();
+  stopPrivacy();
   stopTeams();
   stopSystem();
   stopBambu();
@@ -228,6 +232,7 @@ app.on('before-quit', () => {
   stopGitLab();
   stopGitLocal();
   stopVpn();
+  stopPrivacy();
   stopTeams();
   stopSystem();
   stopBambu();

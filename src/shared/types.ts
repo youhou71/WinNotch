@@ -250,7 +250,8 @@ export type ModuleId =
   | 'vpn'
   | 'teams'
   | 'system'
-  | 'bambu';
+  | 'bambu'
+  | 'privacy';
 
 /**
  * Identifiant d'une famille (groupe) de modules. Une famille regroupe
@@ -628,6 +629,12 @@ export interface ModuleConfig {
     /** Afficher la card dans le dashboard étendu. */
     showCard: boolean;
   };
+  privacy: {
+    /** Fréquence de relecture du registre cam/micro (ms). Min 2000, défaut 4000. */
+    pollMs: number;
+    /** Afficher la pastille dans le notch rétracté quand cam/micro est actif. */
+    collapsed: boolean;
+  };
 }
 
 /**
@@ -737,6 +744,7 @@ export const DEFAULT_SETTINGS: Settings = {
     // d'accès LAN) avant de pouvoir se connecter. On n'active pas un module
     // qui afficherait un état « non configuré » d'office.
     bambu: false,
+    privacy: true,
   },
   moduleConfig: {
     music: {
@@ -836,6 +844,10 @@ export const DEFAULT_SETTINGS: Settings = {
       notifyPrint: true,
       notifyFilament: true,
       showCard: true,
+    },
+    privacy: {
+      pollMs: 4_000,
+      collapsed: true,
     },
   },
   // Layout par défaut — reproduit l'agencement historique :
@@ -1360,6 +1372,30 @@ export interface VpnState {
    * Erreur globale du dernier tick (PowerShell introuvable, timeout, etc.).
    * `null` quand le dernier tick s'est bien passé.
    */
+  lastError: string | null;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  PRIVACY (témoin caméra / micro)
+ * ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * État du témoin de confidentialité — quelle(s) app(s) utilisent
+ * actuellement la webcam / le micro (lu dans `CapabilityAccessManager`,
+ * 100 % local). Exposé via `privacy:getState` + push `privacy:change`.
+ */
+export interface PrivacyState {
+  /** True si au moins une app capture actuellement la webcam. */
+  camActive: boolean;
+  /** True si au moins une app capture actuellement le micro. */
+  micActive: boolean;
+  /** Noms (lisibles) des apps utilisant la webcam. */
+  camApps: string[];
+  /** Noms (lisibles) des apps utilisant le micro. */
+  micApps: string[];
+  /** Unix ms du dernier check terminé. */
+  lastCheckAt: number;
+  /** Erreur du dernier check (PowerShell indispo, registre illisible), ou `null`. */
   lastError: string | null;
 }
 
@@ -2126,6 +2162,13 @@ export const IpcChannel = {
   /** Main → renderer : push d'un nouveau VpnState (polling ou refresh). */
   VpnChange: 'vpn:change',
 
+  /** Renderer → main (invoke) : retourne le PrivacyState courant (cam/micro). */
+  PrivacyGetState: 'privacy:getState',
+  /** Renderer → main (invoke) : force un check cam/micro immédiat. */
+  PrivacyRefresh: 'privacy:refresh',
+  /** Main → renderer : push d'un nouveau PrivacyState. */
+  PrivacyChange: 'privacy:change',
+
   /** Renderer → main (invoke) : retourne le TeamsState courant. */
   TeamsGetState: 'teams:getState',
   /**
@@ -2375,6 +2418,14 @@ export interface NotchApi {
     refresh: () => Promise<VpnState>;
     /** S'abonne au push de VpnState (polling ou refresh). */
     onChange: (cb: (state: VpnState) => void) => () => void;
+  };
+  privacy: {
+    /** Snapshot du témoin caméra / micro (apps actives + erreurs). */
+    getState: () => Promise<PrivacyState>;
+    /** Force un check cam/micro immédiat. */
+    refresh: () => Promise<PrivacyState>;
+    /** S'abonne au push de PrivacyState. */
+    onChange: (cb: (state: PrivacyState) => void) => () => void;
   };
   teams: {
     /** Snapshot complet de l'état Teams Presence (availability + activity). */

@@ -106,6 +106,14 @@ export const SETTINGS_MODULES: ModuleMeta[] = [
     description:
       "Statut d'impression Bambu Lab P1 en LAN (MQTT) : progression, températures, AMS, erreurs HMS.",
   },
+  {
+    id: 'privacy',
+    label: 'Confidentialité (cam/micro)',
+    icon: 'fa-solid fa-video',
+    color: '#ef4444',
+    description:
+      'Pastille rouge quand une app utilise la webcam ou le micro (lecture locale du registre Windows). Aucun réseau.',
+  },
 ];
 
 export const MODULE_META_BY_ID: Record<ModuleId, ModuleMeta> =

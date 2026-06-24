@@ -98,6 +98,7 @@ export function SettingsModulePage({ moduleId, onBack }: Props) {
       {moduleId === 'teams' && <TeamsSettings />}
       {moduleId === 'system' && <SystemSettings />}
       {moduleId === 'bambu' && <BambuSettings />}
+      {moduleId === 'privacy' && <PrivacySettings />}
     </>
   );
 }
@@ -1544,6 +1545,51 @@ function VpnSettings() {
           <strong>OpenVPN</strong>, <strong>WireGuard</strong>, et les VPN
           configurés dans Windows (PPTP / L2TP / SSTP / IKEv2). Module
           read-only : aucune action n'est exposée (pas de connect / disconnect).
+        </div>
+      </SettingsSection>
+    </>
+  );
+}
+
+function PrivacySettings() {
+  const { settings, patchModuleConfig } = useSettingsContext();
+  const cfg = settings.moduleConfig.privacy;
+
+  return (
+    <>
+      <SettingsSection title="Affichage">
+        <SettingsToggleRow
+          icon="fa-solid fa-minimize"
+          iconColor="#ef4444"
+          label="Afficher la pastille dans le notch rétracté"
+          description="Pastille rouge (icône caméra / micro) quand une app capture la webcam ou le micro. Toujours visible, même en Ne pas Déranger — c'est un signal de sécurité."
+          value={cfg.collapsed}
+          onChange={(next) =>
+            void patchModuleConfig('privacy', { collapsed: next })
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Détection">
+        <SettingsSliderRow
+          icon="fa-solid fa-clock-rotate-left"
+          iconColor="#ef4444"
+          label="Fréquence de relecture"
+          description="Intervalle entre deux lectures du registre cam/micro. Plus court = pastille plus réactive."
+          value={cfg.pollMs}
+          min={2_000}
+          max={30_000}
+          step={1_000}
+          formatValue={(v) => `${Math.round(v / 1000)} s`}
+          onChange={(v) => void patchModuleConfig('privacy', { pollMs: v })}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="À propos">
+        <div className="settings-empty">
+          Lit le registre Windows <code>CapabilityAccessManager</code> (HKCU) :
+          aucune capture, aucun réseau, aucune donnée stockée. Module
+          read-only — il signale seulement quelle app utilise l'appareil.
         </div>
       </SettingsSection>
     </>

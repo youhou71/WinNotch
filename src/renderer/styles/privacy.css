@@ -1,0 +1,48 @@
+/*
+ * privacy.css — chip « confidentialité » (témoin caméra / micro).
+ *
+ * Chip rouge compacte affichée uniquement quand cam/micro est actif.
+ * Icône(s) caméra et/ou micro + petite pastille pulsante.
+ */
+.chip-privacy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  position: relative;
+  color: #f87171;
+}
+
+.chip-privacy .privacy-glyph {
+  font-size: 13px;
+}
+
+/* Petite pastille rouge pulsante — signal "capture en cours". Halo
+   pré-peint (box-shadow statique) animé en opacity uniquement
+   (compositor-only, pas de repaint par frame). */
+.chip-privacy .privacy-dot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  flex-shrink: 0;
+}
+
+.chip-privacy .privacy-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
+  animation: privacy-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes privacy-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}

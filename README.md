@@ -85,6 +85,11 @@ Détecte les sessions VPN actives sur la machine — **ProtonVPN**, **NordVPN**,
 
 Read-only : aucune action exposée (pas de connect / disconnect). Le module observe l'état via `Get-NetAdapter` + `Get-VpnConnection` + scan de processus, sans toucher à la session. Résolution du pays best-effort via `ipapi.co` (cache 6 h, désactivable).
 
+### Confidentialité (témoin caméra / micro)
+Pastille rouge (icône caméra / micro + point pulsant) dans le notch rétracté **quand une application utilise actuellement la webcam ou le micro**, avec un tooltip listant les apps concernées. Visible même en Ne pas Déranger — c'est un signal de sécurité, particulièrement utile en partage d'écran / présentation. Au repos, rien ne s'affiche.
+
+**100 % local, read-only** : lecture du registre Windows `CapabilityAccessManager\ConsentStore` (HKCU) — une app est « en cours » quand son `LastUsedTimeStop` vaut 0. Aucune capture, aucun réseau, aucune donnée stockée.
+
 ### Système live (CPU / RAM / Réseau)
 Module toujours actif, lecture seule. Chip dans le notch rétracté avec un **mini-sparkline** (60 dernières secondes) + pourcentage de la métrique choisie (CPU par défaut, ou RAM, ou NET — configurable). Couleur dynamique vert → or → rouge selon des seuils raisonnables (CPU/RAM : 50 % / 80 % ; NET : 1 Mb/s / 10 Mb/s). Visible même en mode Ne pas Déranger — c'est un état système.
 

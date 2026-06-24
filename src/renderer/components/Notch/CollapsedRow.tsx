@@ -20,6 +20,8 @@ import { GitLocalChip } from '../../modules/gitlocal/GitLocalChip';
 import { useGitLocalContext } from '../../modules/gitlocal/GitLocalContext';
 import { VpnChip } from '../../modules/vpn/VpnChip';
 import { useVpnContext } from '../../modules/vpn/VpnContext';
+import { PrivacyChip } from '../../modules/privacy/PrivacyChip';
+import { usePrivacyContext } from '../../modules/privacy/PrivacyContext';
 import { TeamsChip } from '../../modules/teams/TeamsChip';
 import { SystemChip } from '../../modules/system/SystemChip';
 import { BambuChip } from '../../modules/bambu/BambuChip';
@@ -36,6 +38,7 @@ export function CollapsedRow() {
   const { state: gitlab } = useGitLabContext();
   const { state: gitlocal } = useGitLocalContext();
   const { state: vpn } = useVpnContext();
+  const { state: privacy } = usePrivacyContext();
   const { state: bambu } = useBambuContext();
   const { state: clipboard } = useClipboardContext();
   const { settings, toggleDnd } = useSettingsContext();
@@ -139,6 +142,16 @@ export function CollapsedRow() {
     bambuCfg.collapsed &&
     (bambu.isPrinting || bambuCfg.showWhenIdle);
 
+  // La chip Confidentialité : module activé + autorisée en collapsed + cam
+  // OU micro actif. JAMAIS masquée en DND — un témoin de capture cam/micro
+  // est un signal de sécurité qu'on veut voir en permanence, surtout en
+  // présentation. La chip se cache d'elle-même au repos (rien d'actif).
+  const privacyCfg = settings.moduleConfig.privacy;
+  const privacyEnabled =
+    settings.modules.privacy &&
+    privacyCfg.collapsed &&
+    (privacy.camActive || privacy.micActive);
+
   return (
     <div
       className="collapsed-row"
@@ -198,6 +211,10 @@ export function CollapsedRow() {
         {/* Bambu — état d'impression, jamais masqué par DND : surveiller un
             long print prime sur le mode "ne pas déranger". */}
         {bambuEnabled && <BambuChip />}
+        {/* Confidentialité (cam/micro) — état de sécurité, jamais masqué par
+            DND : on veut toujours savoir si un appareil capture, surtout en
+            présentation. */}
+        {privacyEnabled && <PrivacyChip />}
       </div>
     </div>
   );

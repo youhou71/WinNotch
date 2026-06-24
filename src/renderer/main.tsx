@@ -32,6 +32,7 @@ import './styles/claudeUsage.css';
 import './styles/gitlab.css';
 import './styles/gitlocal.css';
 import './styles/vpn.css';
+import './styles/privacy.css';
 import './styles/teams.css';
 import './styles/system.css';
 import './styles/bambu.css';
