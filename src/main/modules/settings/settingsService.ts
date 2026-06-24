@@ -29,9 +29,13 @@ import {
   type Density,
   type ModuleConfig,
   type ModuleId,
+  type Quicklink,
   type SetAutoStartResult,
   type Settings,
+  type Snippet,
 } from '../../../shared/types';
+import { isValidQuicklink } from '../../../shared/quicklinks';
+import { isValidSnippet } from '../../../shared/snippets';
 import {
   createAutostartTask,
   isAutostartTaskRegistered,
@@ -115,6 +119,8 @@ function mergeDefaults(): void {
     moduleConfig: store.get('moduleConfig'),
     autoStart: store.get('autoStart'),
     dashboardLayout: store.get('dashboardLayout'),
+    quicklinks: store.get('quicklinks'),
+    snippets: store.get('snippets'),
   };
 
   store.set('dnd', current.dnd ?? DEFAULT_SETTINGS.dnd);
@@ -123,6 +129,20 @@ function mergeDefaults(): void {
   store.set('modules', { ...DEFAULT_SETTINGS.modules, ...(current.modules ?? {}) });
   store.set('autoStart', current.autoStart ?? DEFAULT_SETTINGS.autoStart);
   store.set('dashboardLayout', mergeDashboardLayout(current.dashboardLayout));
+  // `quicklinks` absent (install pré-Lot 2) → défaut ; sinon revalidé.
+  store.set(
+    'quicklinks',
+    current.quicklinks === undefined
+      ? DEFAULT_SETTINGS.quicklinks
+      : mergeQuicklinks(current.quicklinks),
+  );
+  // Idem `snippets`.
+  store.set(
+    'snippets',
+    current.snippets === undefined
+      ? DEFAULT_SETTINGS.snippets
+      : mergeSnippets(current.snippets),
+  );
 
   // Shallow merge par section : suffisant tant qu'on n'a pas de configs
   // imbriquées profondes (gitlab.account est plat, par exemple).
@@ -287,6 +307,50 @@ function mergeDashboardLayout(stored: DashTile[] | undefined): DashTile[] {
   return cleaned;
 }
 
+/**
+ * Valide une liste de quicklinks venue du store ou du renderer : ne garde
+ * que les entrées bien formées (alias non vide + url http(s)), normalise
+ * l'alias en minuscules, déduplique par alias (première gagne). Liste
+ * absente/non-tableau → défaut. Tableau vide accepté (l'utilisateur a le
+ * droit de tout supprimer).
+ */
+function mergeQuicklinks(stored: Quicklink[] | undefined): Quicklink[] {
+  if (!Array.isArray(stored)) return DEFAULT_SETTINGS.quicklinks;
+  const seen = new Set<string>();
+  const cleaned: Quicklink[] = [];
+  for (const q of stored) {
+    if (!q || typeof q !== 'object' || !isValidQuicklink(q)) continue;
+    const alias = q.alias.trim().toLowerCase();
+    if (seen.has(alias)) continue;
+    seen.add(alias);
+    cleaned.push({
+      alias,
+      url: q.url.trim(),
+      ...(q.label && q.label.trim() ? { label: q.label.trim() } : {}),
+    });
+  }
+  return cleaned;
+}
+
+/**
+ * Valide une liste de snippets : entrées bien formées (name + body non
+ * vides), dédup par nom (insensible à la casse, première gagne). Liste
+ * absente → défaut ; tableau vide accepté.
+ */
+function mergeSnippets(stored: Snippet[] | undefined): Snippet[] {
+  if (!Array.isArray(stored)) return DEFAULT_SETTINGS.snippets;
+  const seen = new Set<string>();
+  const cleaned: Snippet[] = [];
+  for (const s of stored) {
+    if (!s || typeof s !== 'object' || !isValidSnippet(s)) continue;
+    const key = s.name.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cleaned.push({ name: s.name.trim(), body: s.body });
+  }
+  return cleaned;
+}
+
 // Migration au boot — idempotente.
 mergeDefaults();
 
@@ -300,6 +364,8 @@ function getAll(): Settings {
     moduleConfig: store.get('moduleConfig'),
     autoStart: store.get('autoStart'),
     dashboardLayout: store.get('dashboardLayout'),
+    quicklinks: mergeQuicklinks(store.get('quicklinks')),
+    snippets: mergeSnippets(store.get('snippets')),
   };
 }
 
@@ -461,6 +527,22 @@ function setDashboardLayout(layout: DashTile[]): Settings {
   return state;
 }
 
+/** Persiste la liste des quicklinks (validée + dédupliquée côté main). */
+function setQuicklinks(links: Quicklink[]): Settings {
+  store.set('quicklinks', mergeQuicklinks(links));
+  const state = getAll();
+  broadcast(state);
+  return state;
+}
+
+/** Persiste la liste des snippets (validée + dédupliquée côté main). */
+function setSnippets(snippets: Snippet[]): Settings {
+  store.set('snippets', mergeSnippets(snippets));
+  const state = getAll();
+  broadcast(state);
+  return state;
+}
+
 /**
  * Réconcilie l'état système avec le store au démarrage.
  *
@@ -548,5 +630,13 @@ export function registerSettingsIpc(): void {
   ipcMain.handle(
     IpcChannel.SettingsSetDashboardLayout,
     (_e, layout: DashTile[]) => setDashboardLayout(layout),
+  );
+  ipcMain.handle(
+    IpcChannel.SettingsSetQuicklinks,
+    (_e, links: Quicklink[]) => setQuicklinks(links),
+  );
+  ipcMain.handle(
+    IpcChannel.SettingsSetSnippets,
+    (_e, snippets: Snippet[]) => setSnippets(snippets),
   );
 }

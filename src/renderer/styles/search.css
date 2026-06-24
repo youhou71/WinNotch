@@ -432,3 +432,86 @@
   color: var(--txt, #f4f4f5);
   white-space: nowrap;
 }
+
+/* ──────────────────────────────────────────────────────────────────
+ *  Mode `!` (Quicklinks / bangs) — réutilise `.search-results`/`.search-row`
+ * ────────────────────────────────────────────────────────────────── */
+.bang-row {
+  align-items: center;
+  gap: 10px;
+}
+
+.bang-alias {
+  flex-shrink: 0;
+  min-width: 38px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  font-family:
+    ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.bang-row-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--txt-dim);
+  opacity: 0.7;
+}
+
+.bang-row.sel .bang-row-icon {
+  opacity: 1;
+  color: #22d3ee;
+}
+
+/* Aide du mode `;` (liste verticale de commandes). */
+.gen-help-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ *  Mode `:` (Snippets) — réutilise `.search-results`/`.search-row`
+ * ────────────────────────────────────────────────────────────────── */
+.snippet-row {
+  align-items: center;
+  gap: 10px;
+}
+
+.snippet-name {
+  flex-shrink: 0;
+  min-width: 48px;
+  max-width: 120px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  font-family:
+    ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.snippet-preview {
+  font-family:
+    ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+}
+
+.snippet-row-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--txt-dim);
+  opacity: 0.7;
+}
+
+.snippet-row.sel .snippet-row-icon {
+  opacity: 1;
+  color: #34d399;
+}

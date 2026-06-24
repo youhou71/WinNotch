@@ -19,8 +19,10 @@ import {
   type Density,
   type ModuleConfig,
   type ModuleId,
+  type Quicklink,
   type SetAutoStartResult,
   type Settings,
+  type Snippet,
 } from '../../../shared/types';
 
 interface SettingsContextValue {
@@ -34,6 +36,8 @@ interface SettingsContextValue {
   ) => Promise<Settings>;
   setAutoStart: (enabled: boolean) => Promise<SetAutoStartResult>;
   setDashboardLayout: (layout: DashTile[]) => Promise<Settings>;
+  setQuicklinks: (links: Quicklink[]) => Promise<Settings>;
+  setSnippets: (snippets: Snippet[]) => Promise<Settings>;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -109,6 +113,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return next;
   }, []);
 
+  const setQuicklinks = useCallback(async (links: Quicklink[]) => {
+    setSettings((s) => ({ ...s, quicklinks: links }));
+    const next = await window.notch.settings.setQuicklinks(links);
+    setSettings(next);
+    return next;
+  }, []);
+
+  const setSnippets = useCallback(async (snippets: Snippet[]) => {
+    setSettings((s) => ({ ...s, snippets }));
+    const next = await window.notch.settings.setSnippets(snippets);
+    setSettings(next);
+    return next;
+  }, []);
+
   const patchModuleConfig = useCallback(
     async <K extends ModuleId>(id: K, patch: Partial<ModuleConfig[K]>) => {
       // Update optimiste : merge dans l'état local avant la réponse IPC.
@@ -136,6 +154,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         patchModuleConfig,
         setAutoStart,
         setDashboardLayout,
+        setQuicklinks,
+        setSnippets,
       }}
     >
       {children}

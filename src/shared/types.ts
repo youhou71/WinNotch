@@ -632,6 +632,32 @@ export interface ModuleConfig {
  * champs absents — utile pour les évolutions de schéma : ajouter un
  * champ dans la maquette ne casse pas une installation existante.
  */
+/**
+ * Un quicklink / web bang de la search bar (mode `!`). `alias` est tapé
+ * après `!` ; `url` est un template où `{}` (ou `{query}`) marque la
+ * requête. Cf. `shared/quicklinks.ts`.
+ */
+export interface Quicklink {
+  /** Alias tapé après `!` (minuscules, ex. `npm`, `mdn`, `gl`). */
+  alias: string;
+  /** Template d'URL http(s) — `{}`/`{query}` = emplacement de la requête. */
+  url: string;
+  /** Libellé d'affichage optionnel (défaut : l'alias). */
+  label?: string;
+}
+
+/**
+ * Un snippet de la search bar (mode `:`). `name` sert au filtre + à
+ * l'affichage ; `body` peut contenir des placeholders résolus à la copie
+ * (`{clipboard}`, `{date}`, `{uuid}`…). Cf. `shared/snippets.ts`.
+ */
+export interface Snippet {
+  /** Nom court (clé de filtre + libellé). */
+  name: string;
+  /** Contenu multi-ligne avec placeholders éventuels. */
+  body: string;
+}
+
 export interface Settings {
   /** Mode "Ne pas déranger" : masque chips droite + bloque toasts. */
   dnd: boolean;
@@ -657,6 +683,16 @@ export interface Settings {
    * conservent leur slot dans le layout pour la réactivation.
    */
   dashboardLayout: DashTile[];
+  /**
+   * Quicklinks / web bangs de la search bar (mode `!`). Éditables dans
+   * Settings → Recherche → Quicklinks. Cf. `shared/quicklinks.ts`.
+   */
+  quicklinks: Quicklink[];
+  /**
+   * Snippets de la search bar (mode `:`). Éditables dans Settings →
+   * Recherche → Snippets. Cf. `shared/snippets.ts`.
+   */
+  snippets: Snippet[];
 }
 
 /**
@@ -816,6 +852,21 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: 'system', cols: 12 },
     { id: 'bambu', cols: 6 },
   ],
+  // Quicklinks par défaut — génériques orientés dev. L'utilisateur ajoute
+  // ses propres alias (instance GitLab d'entreprise, Sentry…) dans Settings.
+  quicklinks: [
+    { alias: 'g', url: 'https://www.google.com/search?q={}', label: 'Google' },
+    { alias: 'npm', url: 'https://www.npmjs.com/search?q={}', label: 'npm' },
+    { alias: 'mdn', url: 'https://developer.mozilla.org/en-US/search?q={}', label: 'MDN' },
+    { alias: 'so', url: 'https://stackoverflow.com/search?q={}', label: 'Stack Overflow' },
+    { alias: 'gh', url: 'https://github.com/search?q={}&type=repositories', label: 'GitHub' },
+  ],
+  // Snippets par défaut — démontrent les placeholders. L'utilisateur édite.
+  snippets: [
+    { name: 'lgtm', body: 'LGTM ✅ — relu le {date}, bon pour moi.' },
+    { name: 'quote', body: '> {clipboard}' },
+    { name: 'sig', body: 'Cordialement,\n— {date}' },
+  ],
 };
 
 /**
@@ -868,6 +919,9 @@ export type SearchMode =
   | 'visualstudio'
   | 'task'
   | 'calc'
+  | 'bang'
+  | 'gen'
+  | 'snippet'
   | 'help'
   | 'url'
   | 'json'
@@ -1807,6 +1861,10 @@ export const IpcChannel = {
    * DashTileId valide, pas de doublons).
    */
   SettingsSetDashboardLayout: 'settings:setDashboardLayout',
+  /** Renderer → main (invoke) : remplace la liste des quicklinks (validée côté main). */
+  SettingsSetQuicklinks: 'settings:setQuicklinks',
+  /** Renderer → main (invoke) : remplace la liste des snippets (validée côté main). */
+  SettingsSetSnippets: 'settings:setSnippets',
   /** Main → renderer : push de Settings (ex. toggle DND via raccourci global). */
   SettingsChange: 'settings:change',
 
@@ -1853,6 +1911,8 @@ export const IpcChannel = {
   SearchOpenVsCode: 'search:openVsCode',
   /** Renderer → main (invoke) : ouvre une solution Visual Studio (`start <path>`). */
   SearchOpenVs: 'search:openVs',
+  /** Renderer → main (invoke) : transforme une chaîne (hash crypto Node) pour le mode `;`. */
+  SearchTransform: 'search:transform',
 
   /** Renderer → main (invoke) : démarre le flow OAuth pour un provider. Retourne le compte créé. */
   MeetingsConnect: 'meetings:connect',
@@ -2138,6 +2198,14 @@ export interface NotchApi {
     openVsCode: (path: string, kind: SearchResult['kind']) => Promise<{ ok: boolean; error?: string }>;
     /** Ouvre une solution Visual Studio (association de fichier .sln/.slnx). */
     openVs: (path: string) => Promise<{ ok: boolean; error?: string }>;
+    /**
+     * Transforme une chaîne via le main (hash crypto Node) pour le mode `;`.
+     * `op` ∈ md5 / sha1 / sha256 / sha512. Retourne le digest hex.
+     */
+    transform: (
+      op: string,
+      input: string,
+    ) => Promise<{ ok: boolean; output?: string; error?: string }>;
   };
   claude: {
     /** Liste agrégée des sessions Claude Code actuellement détectées. */
@@ -2481,6 +2549,10 @@ export interface NotchApi {
      * inchangé.
      */
     setDashboardLayout: (layout: DashTile[]) => Promise<Settings>;
+    /** Remplace la liste des quicklinks (validée + dédupliquée côté main). */
+    setQuicklinks: (links: Quicklink[]) => Promise<Settings>;
+    /** Remplace la liste des snippets (validée + dédupliquée côté main). */
+    setSnippets: (snippets: Snippet[]) => Promise<Settings>;
     /** S'abonne aux changements de Settings (ex. toggle DND via raccourci global). */
     onChange: (cb: (state: Settings) => void) => () => void;
   };

@@ -127,6 +127,9 @@ Champ de recherche en haut du dashboard. Deux familles de comportement :
 | `?` | Aide | Affiche un panneau récapitulatif des préfixes, détections et raccourcis disponibles selon les modules actifs |
 | `-` | Tâche | Ajoute la tâche à la liste |
 | `=` | Calc & Convert | Évalue un calcul ou une conversion inline ; `Entrée` copie le résultat |
+| `!` | Quicklinks & bangs | Raccourcis web (`!npm vite`, `!mdn fetch`) ; ↑↓ pour naviguer, `Entrée` ouvre. Repli DuckDuckGo si l'alias est inconnu |
+| `;` | Utilitaires dev | UUID, base64, hash, conversion de casse ; un bouton Copier par sortie |
+| `:` | Snippets | Insère un modèle de texte à placeholders (`{clipboard}`/`{date}`/`{uuid}`) ; ↑↓ pour naviguer, `Entrée` copie |
 | `>` | Claude Code | Lance `claude "<prompt>"` dans un nouveau terminal Windows |
 | `/` | VS Code | Liste les workspaces récents, ouvre via `code <path>` |
 | `vs` | Visual Studio | Liste les solutions `.sln`/`.slnx`, ouvre via l'association de fichier |
@@ -142,6 +145,34 @@ Calcul et conversion **100 % hors-ligne** (aucune dépendance, aucun réseau) :
 - **Epoch ↔ date** : `1700000000 to date`, `2024-01-01 to epoch`.
 
 Le résultat (et chaque ligne secondaire) dispose d'un bouton Copier ; `Entrée` copie le résultat principal. *(Devises hors scope — nécessiteraient le réseau.)*
+
+#### Mode `!` (Quicklinks & bangs)
+
+Raccourcis web ouverts dans le navigateur. Tape `!alias requête` : `!npm vite`, `!mdn fetch`, `!gh electron`, `!so async rust`… Les alias sont des **templates d'URL** où `{}` marque l'emplacement de la requête, éditables dans **Réglages → Recherche → Quicklinks** (un par ligne : `alias url [| libellé]`). Quelques alias dev sont fournis par défaut (`g`, `npm`, `mdn`, `so`, `gh`) ; ajoute les tiens (instance GitLab d'entreprise, Sentry, etc.).
+
+Si l'alias tapé ne correspond à aucun quicklink, un **repli DuckDuckGo** est proposé (`!alias …` via la base de bangs de DDG). `↑↓` navigue, `Entrée` (ou clic) ouvre.
+
+#### Mode `;` (Utilitaires dev)
+
+Boîte à outils développeur **hors-ligne**. Tape `;commande [texte]` :
+
+- `;uuid` — génère un UUID v4 (bouton Régénérer).
+- `;b64 <texte>` / `;b64d <base64>` — encode / décode base64 (UTF-8).
+- `;url <texte>` / `;urld <texte>` — encode / décode URL.
+- `;case <texte>` — affiche toutes les casses (camelCase, PascalCase, snake_case, kebab-case, CONSTANT_CASE).
+- `;md5` / `;sha1` / `;sha256` / `;sha512` `<texte>` — hash (calculé côté main via Node crypto).
+
+Chaque sortie a un bouton Copier. Le décodage base64 n'est disponible **que** derrière ce sigil (jamais en détection passive, pour ne pas interférer avec le masquage des chaînes sensibles).
+
+#### Mode `:` (Snippets)
+
+Insère des modèles de texte. Tape `:` (puis un filtre) pour lister tes snippets, `↑↓` pour naviguer, `Entrée` (ou clic) pour **copier** le snippet — ses **placeholders** sont résolus à la copie :
+
+- `{clipboard}` — contenu actuel du presse-papier ;
+- `{date}` / `{time}` / `{datetime}` — date/heure locale ;
+- `{uuid}` — un UUID v4 (nouveau par occurrence).
+
+Les snippets sont éditables dans **Réglages → Recherche → Snippets** (une ligne par snippet : `nom contenu`, le nom est le premier mot ; saut de ligne dans le contenu = `\n`). La valeur de `{clipboard}` (potentiellement un secret) n'est **jamais** affichée à l'écran : seul le body brut est listé, la résolution se fait au moment de la copie.
 
 ### Détection de contenu live
 
@@ -193,6 +224,7 @@ Drilldown accessible via l'icône engrenage de la search bar :
 
 - **Apparence** : densité du dashboard (dense / normal / aéré) et **disposition** (éditeur WYSIWYG : déplacer et redimensionner les tuiles directement sur le vrai dashboard).
 - **Système** : démarrage automatique avec Windows, bouton « Quitter WinNotch » pour fermer l'application.
+- **Recherche** : éditeurs des **Quicklinks & bangs** (`!`) et des **Snippets** (`:`).
 - **Notifications** : toggle Ne pas Déranger.
 - **À propos** : version installée, état des mises à jour, bouton "Vérifier".
 - **Modules** : activer/désactiver chaque module, configuration détaillée par module (en drilldown).

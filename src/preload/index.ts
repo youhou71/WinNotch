@@ -32,6 +32,8 @@ import {
   type ModuleId,
   type MusicState,
   type NotchApi,
+  type Quicklink,
+  type Snippet,
   type SearchResult,
   type Settings,
   type TeamsActivity,
@@ -172,6 +174,8 @@ const api: NotchApi = {
       ipcRenderer.invoke(IpcChannel.SearchOpenVsCode, path, kind),
     openVs: (path: string) =>
       ipcRenderer.invoke(IpcChannel.SearchOpenVs, path),
+    transform: (op: string, input: string) =>
+      ipcRenderer.invoke(IpcChannel.SearchTransform, op, input),
   },
   claude: {
     list: () => ipcRenderer.invoke(IpcChannel.ClaudeList),
@@ -439,6 +443,10 @@ const api: NotchApi = {
       ipcRenderer.invoke(IpcChannel.SettingsSetAutoStart, enabled),
     setDashboardLayout: (layout: DashTile[]) =>
       ipcRenderer.invoke(IpcChannel.SettingsSetDashboardLayout, layout),
+    setQuicklinks: (links: Quicklink[]) =>
+      ipcRenderer.invoke(IpcChannel.SettingsSetQuicklinks, links),
+    setSnippets: (snippets: Snippet[]) =>
+      ipcRenderer.invoke(IpcChannel.SettingsSetSnippets, snippets),
     onChange: (cb: (state: Settings) => void) => {
       const handler = (_: unknown, state: Settings) => cb(state);
       ipcRenderer.on(IpcChannel.SettingsChange, handler);

@@ -60,6 +60,24 @@ const PREFIX_ITEMS: DocItem[] = [
       'Calcul (« (1920/3)*2 », « 2**16 ») et conversions (« 20px to rem », « 1.5MB to KB », « 0xFF to dec », « 1700000000 to date »). Entrée copie le résultat.',
   },
   {
+    symbol: '!',
+    label: 'Quicklinks & bangs',
+    description:
+      'Raccourcis web : « !npm vite », « !mdn fetch », « !gh electron ». Alias éditables dans Réglages → Recherche ; repli DuckDuckGo si l\'alias est inconnu. ↑↓ pour naviguer, Entrée ouvre.',
+  },
+  {
+    symbol: ';',
+    label: 'Utilitaires dev',
+    description:
+      'UUID, base64 (« ;b64 », « ;b64d »), hash (« ;sha256 », « ;md5 »), conversion de casse (« ;case fooBar »). Un bouton Copier par sortie.',
+  },
+  {
+    symbol: ':',
+    label: 'Snippets',
+    description:
+      'Insère un modèle de texte (réponse type, signature…) avec placeholders {clipboard}/{date}/{uuid} résolus à la copie. ↑↓ pour naviguer, Entrée copie. Éditables dans Réglages → Recherche.',
+  },
+  {
     symbol: '>',
     label: 'Lance Claude',
     description:

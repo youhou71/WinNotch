@@ -12,9 +12,31 @@
  */
 import { ipcMain } from 'electron';
 import { spawn } from 'child_process';
+import { createHash } from 'node:crypto';
 import { IpcChannel, type SearchResult } from '../../../shared/types';
 import { listVsCodeWorkspaces } from './vscodeWorkspaces';
 import { listVsSolutions } from './visualStudioSolutions';
+
+/** Ops de hash autorisées pour `search:transform` (mode `;` de la search bar). */
+const HASH_OPS = new Set(['md5', 'sha1', 'sha256', 'sha512']);
+
+/**
+ * Transforme une chaîne côté main — actuellement uniquement le hash (crypto
+ * Node, indisponible côté renderer pour MD5). Digest hex minuscule.
+ */
+function transform(
+  op: string,
+  input: string,
+): { ok: boolean; output?: string; error?: string } {
+  try {
+    if (HASH_OPS.has(op)) {
+      return { ok: true, output: createHash(op).update(input, 'utf8').digest('hex') };
+    }
+    return { ok: false, error: `Opération inconnue : ${op}` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
 
 function spawnDetached(
   file: string,
@@ -110,4 +132,8 @@ export function registerSearchIpc(): void {
   ipcMain.handle(IpcChannel.SearchOpenVs, async (_e, path: string) => {
     return openVs(path);
   });
+
+  ipcMain.handle(IpcChannel.SearchTransform, (_e, op: string, input: string) =>
+    transform(op, input),
+  );
 }

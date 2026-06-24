@@ -16,6 +16,8 @@ import type { ModuleId } from '../../../shared/types';
 import { SettingsHome } from './SettingsHome';
 import { SettingsModulePage } from './SettingsModulePage';
 import { SettingsLayoutPage } from './SettingsLayoutPage';
+import { SettingsQuicklinksPage } from './SettingsQuicklinksPage';
+import { SettingsSnippetsPage } from './SettingsSnippetsPage';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 
@@ -24,9 +26,11 @@ import { useEscapeKey } from '../../hooks/useEscapeKey';
  *
  *  - `null` → Home
  *  - `'layout'` → page Disposition du dashboard (réordonnancement + largeur)
+ *  - `'quicklinks'` → page Quicklinks & bangs (mode `!` de la search bar)
+ *  - `'snippets'` → page Snippets (mode `:` de la search bar)
  *  - `ModuleId` → page de configuration d'un module
  */
-type SettingsPageId = ModuleId | 'layout';
+type SettingsPageId = ModuleId | 'layout' | 'quicklinks' | 'snippets';
 
 interface Props {
   onClose: () => void;
@@ -69,18 +73,26 @@ export function SettingsView({ onClose }: Props) {
           <SettingsHome
             onSelectModule={(id) => setPage(id)}
             onOpenLayout={() => setPage('layout')}
+            onOpenQuicklinks={() => setPage('quicklinks')}
+            onOpenSnippets={() => setPage('snippets')}
           />
         </>
       )}
       {page === 'layout' && (
         <SettingsLayoutPage onBack={() => setPage(null)} />
       )}
-      {page !== null && page !== 'layout' && (
-        <SettingsModulePage
-          moduleId={page}
-          onBack={() => setPage(null)}
-        />
+      {page === 'quicklinks' && (
+        <SettingsQuicklinksPage onBack={() => setPage(null)} />
       )}
+      {page === 'snippets' && (
+        <SettingsSnippetsPage onBack={() => setPage(null)} />
+      )}
+      {page !== null &&
+        page !== 'layout' &&
+        page !== 'quicklinks' &&
+        page !== 'snippets' && (
+          <SettingsModulePage moduleId={page} onBack={() => setPage(null)} />
+        )}
     </div>
   );
 }
