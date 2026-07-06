@@ -29,6 +29,7 @@ import {
   fetchMrPipelineStatus,
   fetchMrsAuthored,
   fetchMrsToReview,
+  fetchMyReviewedMrIds,
   GitLabAuthError,
   GitLabNetworkError,
 } from './gitlabClient';
@@ -162,11 +163,31 @@ async function refreshOnce(): Promise<GitLabState> {
       .filter((l) => l.length > 0)
       .map((label) => fetchIssuesByLabel(cfg.url, token, label));
 
-    const [toReview, mineRaw, issueGroups] = await Promise.all([
-      fetchMrsToReview(cfg.url, token, cfg.account.id),
-      fetchMrsAuthored(cfg.url, token, cfg.account.id),
-      Promise.all(labelFetches),
-    ]);
+    const [toReviewRaw, mineRaw, issueGroups, reviewedIds] = await Promise.all(
+      [
+        fetchMrsToReview(cfg.url, token, cfg.account.id),
+        fetchMrsAuthored(cfg.url, token, cfg.account.id),
+        Promise.all(labelFetches),
+        // État de reviewer (GraphQL) : ids des MR que j'ai déjà reviewées.
+        // `.catch` local → un échec GraphQL ne fait pas rejeter le Promise.all
+        // (donc pas de lastError parasite) ; on retombe sur la liste complète.
+        fetchMyReviewedMrIds(cfg.url, token, cfg.account.username).catch(
+          (err) => {
+            console.warn(
+              '[gitlab] filtre MR reviewées indisponible (GraphQL):',
+              err,
+            );
+            return new Set<number>();
+          },
+        ),
+      ],
+    );
+
+    // Le filtre REST `reviewer_id` garde les MR tant qu'elles sont ouvertes,
+    // même après ma review → on retire ici celles que j'ai déjà reviewées.
+    const toReview = reviewedIds.size
+      ? toReviewRaw.filter((mr) => !reviewedIds.has(mr.id))
+      : toReviewRaw;
 
     // Pré-fetch du statut pipeline pour les MR « mine » uniquement (badge
     // collapsed + toast « pipeline échoué »). Les MR à reviewer récupèrent

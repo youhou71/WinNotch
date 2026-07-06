@@ -50,7 +50,7 @@ Toasts à chaque franchissement de seuil (par défaut 70 / 85 / 95 %), dédupliq
 Polling configurable de 10 s à 5 min (défaut 30 s).
 
 ### GitLab
-Suit les **MR à reviewer**, **mes MR ouvertes**, et **issues critiques non assignées** (labels surveillés, ex. `Severity::Critique`). Chip avec badge rouge pulse pour les issues à prendre. Dashboard compact à 3 chiffres, panel plein dashboard au clic, clic sur une ligne ouvre dans le navigateur. Toasts pour les nouvelles MR assignées et les nouvelles issues critiques.
+Suit les **MR à reviewer**, **mes MR ouvertes**, et **issues critiques non assignées** (labels surveillés, ex. `Severity::Critique`). Chip avec badge rouge pulse pour les issues à prendre. Dashboard compact à 3 chiffres, panel plein dashboard au clic, clic sur une ligne ouvre dans le navigateur. Toasts pour les nouvelles MR assignées et les nouvelles issues critiques. Une MR **disparaît de « à reviewer » dès que tu as donné ta review** (relue, approuvée ou changements demandés).
 
 **Détail au survol + pipelines** : dans le panel, survoler une MR affiche un tooltip enrichi (statut pipeline, jobs échoués, threads non résolus, approbations manquantes) — récupéré à la demande, débouncé et caché 60 s. Le statut pipeline de **mes MR** est pré-chargé à chaque poll : une pastille rouge distincte apparaît sur la chip quand un de mes pipelines est cassé, et un toast « Pipeline échoué » est émis sur transition (à activer dans Réglages → GitLab → notifications pipelines). *(Le décompte +/− lignes est reporté — pas d'API GitLab économique.)*
 

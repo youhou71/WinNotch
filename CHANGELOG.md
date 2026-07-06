@@ -7,6 +7,10 @@ versioning [SemVer](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **GitLab — les MR déjà reviewées quittent « à reviewer »** — une MR reste dans le compteur « à reviewer » tant qu'elle est ouverte, même après avoir donné sa review (le filtre REST `reviewer_id` ne tient pas compte de l'état de reviewer). WinNotch récupère désormais cet état via une requête GraphQL (`currentUser.reviewRequestedMergeRequests`) et masque les MR dont **mon** état vaut *relue*, *approuvée* ou *changements demandés*. Robuste sur toutes les éditions (pas de dépendance à l'API d'approbations Premium) ; en cas d'indisponibilité du GraphQL, on retombe silencieusement sur la liste complète (aucune régression).
+
 ### Added
 
 - **Confidentialité — témoin caméra / micro** *(Roadmap perso Lot B #6, sans le verrouillage rapide)* — nouveau module read-only : pastille rouge (caméra / micro + point pulsant) dans le notch rétracté quand une app utilise **actuellement** la webcam ou le micro, tooltip listant les apps. Visible même en Ne pas Déranger (signal de sécurité). 100 % local : lecture du registre `CapabilityAccessManager\ConsentStore` (HKCU) via le PowerShell résident, aucun réseau ni stockage. Activé par défaut, polling 4 s configurable. *(Le verrouillage rapide de session n'a pas été retenu.)*
