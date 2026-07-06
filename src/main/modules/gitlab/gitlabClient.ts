@@ -224,6 +224,138 @@ export async function fetchMrsAuthored(
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+ *  État de reviewer (GraphQL) — filtre des MR déjà reviewées
+ * ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * États de reviewer GitLab qui signifient « j'ai donné ma review » : la MR
+ * quitte alors la liste « à reviewer ». Les autres valeurs (`UNREVIEWED`,
+ * `REVIEW_STARTED`, `UNAPPROVED`, ou tout état inconnu d'une future version)
+ * signifient que la balle est encore dans mon camp → on garde la MR.
+ * `REQUESTED_CHANGES` compte comme reviewée : j'ai rendu mon verdict, c'est
+ * à l'auteur de reprendre la main.
+ */
+const REVIEWED_STATES = new Set(['REVIEWED', 'APPROVED', 'REQUESTED_CHANGES']);
+
+/** Forme minimale de la réponse GraphQL qu'on exploite. */
+interface RawReviewStatesResponse {
+  data?: {
+    currentUser?: {
+      reviewRequestedMergeRequests?: {
+        nodes?: {
+          id: string;
+          reviewers?: {
+            nodes?: {
+              username: string;
+              mergeRequestInteraction?: { reviewState?: string | null } | null;
+            }[];
+          } | null;
+        }[];
+      } | null;
+    } | null;
+  };
+  errors?: { message: string }[];
+}
+
+/**
+ * Extrait l'id numérique global depuis un GID GraphQL
+ * (`gid://gitlab/MergeRequest/12345` → `12345`). Renvoie `null` si la forme
+ * n'est pas reconnue (on ignore alors ce nœud plutôt que de risquer un match
+ * hasardeux). Cet id correspond au `GitLabMr.id` REST (id global tous
+ * projets confondus).
+ */
+function parseGid(gid: string): number | null {
+  // `.pop()` sur un GID malformé finissant par `/` renvoie '' → `Number('')`
+  // vaut 0 (et non NaN) : on garde donc le test de chaîne non vide explicite.
+  const tail = gid.split('/').pop();
+  if (!tail) return null;
+  const n = Number(tail);
+  return Number.isInteger(n) ? n : null;
+}
+
+/**
+ * Renvoie l'ensemble des ids globaux de MR où l'utilisateur courant a DÉJÀ
+ * donné sa review.
+ *
+ * Pourquoi GraphQL : l'API REST des listes ne renvoie pas l'état de
+ * reviewer, seulement l'affectation. GitLab n'expose `reviewState` qu'en
+ * GraphQL. Une seule requête couvre toutes les MR, et ça marche sur toutes
+ * les éditions (aucune dépendance aux approbations Premium, contrairement à
+ * `/approvals` qui peut renvoyer 403 sur l'instance CFAST).
+ *
+ * `username` sert à isoler MON état parmi tous les reviewers de la MR. Le
+ * match se fait sur l'id global (entier canonique) plutôt que sur une chaîne
+ * de référence, pour ne pas dépendre d'un formatage identique côté REST.
+ * Toute erreur est levée : l'appelant retombe sur la liste non filtrée
+ * (aucune régression, la MR reste juste visible).
+ */
+export async function fetchMyReviewedMrIds(
+  instanceUrl: string,
+  token: string,
+  username: string,
+): Promise<Set<number>> {
+  const base = normalizeInstance(instanceUrl);
+  const query = `query WinNotchReviewStates {
+    currentUser {
+      reviewRequestedMergeRequests(state: opened) {
+        nodes {
+          id
+          reviewers {
+            nodes {
+              username
+              mergeRequestInteraction { reviewState }
+            }
+          }
+        }
+      }
+    }
+  }`;
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/graphql`, {
+      method: 'POST',
+      headers: {
+        'PRIVATE-TOKEN': token,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+      body: JSON.stringify({ query }),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new GitLabNetworkError(`GraphQL ${base} injoignable : ${msg}`);
+  }
+
+  if (res.status === 401 || res.status === 403) throw new GitLabAuthError();
+  if (!res.ok) {
+    throw new GitLabNetworkError(`GraphQL ${res.status} ${res.statusText}`);
+  }
+
+  // GraphQL répond 200 même sur erreur de requête (champ `errors`) : on la
+  // traite comme un échec pour déclencher le fallback côté service.
+  const body = (await res.json()) as RawReviewStatesResponse;
+  if (body.errors?.length) {
+    throw new GitLabNetworkError(
+      `GraphQL: ${body.errors.map((e) => e.message).join('; ')}`,
+    );
+  }
+
+  const nodes =
+    body.data?.currentUser?.reviewRequestedMergeRequests?.nodes ?? [];
+  const reviewed = new Set<number>();
+  for (const mr of nodes) {
+    const me = mr.reviewers?.nodes?.find((r) => r.username === username);
+    const state = me?.mergeRequestInteraction?.reviewState;
+    if (!state || !REVIEWED_STATES.has(state)) continue;
+    const id = parseGid(mr.id);
+    if (id !== null) reviewed.add(id);
+  }
+  return reviewed;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
  *  Pipeline + détail MR (Lot 3 #9)
  * ─────────────────────────────────────────────────────────────────── */
 
