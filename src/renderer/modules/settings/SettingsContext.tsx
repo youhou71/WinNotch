@@ -38,6 +38,7 @@ interface SettingsContextValue {
   setDashboardLayout: (layout: DashTile[]) => Promise<Settings>;
   setQuicklinks: (links: Quicklink[]) => Promise<Settings>;
   setSnippets: (snippets: Snippet[]) => Promise<Settings>;
+  setSearchRoots: (roots: string[]) => Promise<Settings>;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -127,6 +128,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return next;
   }, []);
 
+  const setSearchRoots = useCallback(async (roots: string[]) => {
+    setSettings((s) => ({ ...s, searchRoots: roots }));
+    const next = await window.notch.settings.setSearchRoots(roots);
+    setSettings(next);
+    return next;
+  }, []);
+
   const patchModuleConfig = useCallback(
     async <K extends ModuleId>(id: K, patch: Partial<ModuleConfig[K]>) => {
       // Update optimiste : merge dans l'état local avant la réponse IPC.
@@ -156,6 +164,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setDashboardLayout,
         setQuicklinks,
         setSnippets,
+        setSearchRoots,
       }}
     >
       {children}

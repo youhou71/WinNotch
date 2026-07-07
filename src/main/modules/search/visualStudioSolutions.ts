@@ -3,23 +3,30 @@
  *
  * Stratégie pragmatique (pas d'accès au MRU officiel de VS qui réside
  * dans un blob encodé dans ApplicationPrivateSettings.xml — fragile entre
- * versions). On scanne le dossier `C:/Projets` à profondeur limitée pour
- * trouver les `*.sln` et `*.slnx` (nouveau format VS 17.x XML simplifié).
+ * versions). On scanne les racines configurées (Réglages → Recherche, défaut
+ * `C:/Projets`) à profondeur limitée pour trouver les `*.sln` et `*.slnx`
+ * (nouveau format VS 17.x XML simplifié). Racines fournies par `searchService`
+ * (ce module reste pur, sans dépendance Electron/Settings).
  *
  * Limites pour éviter d'écraser le système :
  *  - Profondeur max : 5 niveaux
  *  - Limite résultats : 30 (les plus récemment modifiés)
  *  - Skip des dossiers `node_modules`, `bin`, `obj`, `.git`, etc.
- *  - Cache de 60 s pour ne pas re-scanner à chaque keystroke
+ *
+ * Modèle de cache : stale-while-revalidate. `peekVsSolutions()` renvoie
+ * immédiatement le dernier scan connu (même périmé) et `refreshVsSolutions()`
+ * re-scanne en tâche de fond. C'est `searchService` qui orchestre le refresh
+ * et pousse la liste fraîche au renderer — ce module reste pur (aucune
+ * dépendance Electron).
  */
 import { promises as fs } from 'fs';
 import { join, basename, extname } from 'path';
 import type { SearchResult } from '../../../shared/types';
+import { relativeLabel } from './relativeLabel';
 
 const CACHE_TTL_MS = 60_000;
 const MAX_DEPTH = 5;
 const MAX_RESULTS = 30;
-const ROOTS = ['C:/Projets'];
 
 const SKIP_DIRS = new Set([
   'node_modules',
@@ -82,45 +89,44 @@ async function walk(
   }
 }
 
-/**
- * Convertit un timestamp en libellé court "il y a X min/h/j/sem".
- * Garde une cohérence visuelle avec les libellés du prototype.
- */
-function relativeLabel(mtimeMs: number): string {
-  const diff = Date.now() - mtimeMs;
-  const min = Math.floor(diff / 60_000);
-  if (min < 1) return 'à l\'instant';
-  if (min < 60) return `il y a ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `il y a ${h} h`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `il y a ${d} j`;
-  const w = Math.floor(d / 7);
-  if (w < 5) return `il y a ${w} sem`;
-  const mo = Math.floor(d / 30);
-  return `il y a ${mo} mois`;
-}
-
-export async function listVsSolutions(): Promise<SearchResult[]> {
-  if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
-    return cache.results;
-  }
+/** Scan effectif du FS. Ne touche pas au cache — cf. `refreshVsSolutions`. */
+async function scan(roots: string[]): Promise<SearchResult[]> {
   const found: Found[] = [];
-  await Promise.all(ROOTS.map((r) => walk(r, 0, found)));
+  await Promise.all(roots.map((r) => walk(r, 0, found)));
   found.sort((a, b) => b.mtimeMs - a.mtimeMs);
   const sliced = found.slice(0, MAX_RESULTS);
 
-  const results: SearchResult[] = sliced.map((f) => ({
+  return sliced.map((f) => ({
     kind: 'vs-solution',
     name: basename(f.path),
     path: f.path,
     meta: relativeLabel(f.mtimeMs),
   }));
-
-  cache = { at: Date.now(), results };
-  return results;
 }
 
-export function invalidateVsCache(): void {
-  cache = null;
+/**
+ * Renvoie le dernier scan connu de façon synchrone, ou `null` si aucun scan
+ * n'a encore abouti. Volontairement indifférent au TTL : l'appelant affiche
+ * ce cache instantanément puis déclenche un refresh si `isVsCacheStale()`.
+ */
+export function peekVsSolutions(): SearchResult[] | null {
+  return cache ? cache.results : null;
+}
+
+/** `true` si aucun cache ou si le dernier scan a plus de `CACHE_TTL_MS`. */
+export function isVsCacheStale(): boolean {
+  return !cache || Date.now() - cache.at >= CACHE_TTL_MS;
+}
+
+/**
+ * Re-scanne le FS, met à jour le cache interne puis retourne les résultats.
+ * `roots` = racines à parcourir (fournies par `searchService` depuis les
+ * réglages). Racines vides → aucun résultat.
+ */
+export async function refreshVsSolutions(
+  roots: string[],
+): Promise<SearchResult[]> {
+  const results = await scan(roots);
+  cache = { at: Date.now(), results };
+  return results;
 }

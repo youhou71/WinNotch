@@ -18,6 +18,7 @@ import { SettingsModulePage } from './SettingsModulePage';
 import { SettingsLayoutPage } from './SettingsLayoutPage';
 import { SettingsQuicklinksPage } from './SettingsQuicklinksPage';
 import { SettingsSnippetsPage } from './SettingsSnippetsPage';
+import { SettingsSearchRootsPage } from './SettingsSearchRootsPage';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 
@@ -28,9 +29,15 @@ import { useEscapeKey } from '../../hooks/useEscapeKey';
  *  - `'layout'` → page Disposition du dashboard (réordonnancement + largeur)
  *  - `'quicklinks'` → page Quicklinks & bangs (mode `!` de la search bar)
  *  - `'snippets'` → page Snippets (mode `:` de la search bar)
+ *  - `'searchRoots'` → page Dossiers de recherche (modes `vs` et `/`)
  *  - `ModuleId` → page de configuration d'un module
  */
-type SettingsPageId = ModuleId | 'layout' | 'quicklinks' | 'snippets';
+type SettingsPageId =
+  | ModuleId
+  | 'layout'
+  | 'quicklinks'
+  | 'snippets'
+  | 'searchRoots';
 
 interface Props {
   onClose: () => void;
@@ -75,6 +82,7 @@ export function SettingsView({ onClose }: Props) {
             onOpenLayout={() => setPage('layout')}
             onOpenQuicklinks={() => setPage('quicklinks')}
             onOpenSnippets={() => setPage('snippets')}
+            onOpenSearchRoots={() => setPage('searchRoots')}
           />
         </>
       )}
@@ -87,10 +95,14 @@ export function SettingsView({ onClose }: Props) {
       {page === 'snippets' && (
         <SettingsSnippetsPage onBack={() => setPage(null)} />
       )}
+      {page === 'searchRoots' && (
+        <SettingsSearchRootsPage onBack={() => setPage(null)} />
+      )}
       {page !== null &&
         page !== 'layout' &&
         page !== 'quicklinks' &&
-        page !== 'snippets' && (
+        page !== 'snippets' &&
+        page !== 'searchRoots' && (
           <SettingsModulePage moduleId={page} onBack={() => setPage(null)} />
         )}
     </div>

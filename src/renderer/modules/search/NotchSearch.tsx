@@ -86,6 +86,35 @@ export function NotchSearch({
   const mode = detected?.mode ?? null;
   const payload = detected?.payload ?? '';
 
+  // Ref du mode courant : les push background arrivent de façon asynchrone,
+  // on ne remplace la liste que si l'event correspond au mode encore affiché.
+  const modeRef = useRef(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
+  // Abonnement au refresh stale-while-revalidate côté main. Le premier
+  // `listVs*()` renvoie le cache instantanément ; si un scan de fond aboutit
+  // avec un contenu différent, on met la liste à jour en direct.
+  useEffect(() => {
+    const offVsCode = window.notch.search.onVsCodeUpdated((res) => {
+      if (modeRef.current === 'vscode') {
+        setItems(res);
+        setLoading(false);
+      }
+    });
+    const offVs = window.notch.search.onVsUpdated((res) => {
+      if (modeRef.current === 'visualstudio') {
+        setItems(res);
+        setLoading(false);
+      }
+    });
+    return () => {
+      offVsCode();
+      offVs();
+    };
+  }, []);
+
   // Chargement asynchrone des résultats pour les modes qui en exposent.
   // Le mode est l'unique dépendance : tant qu'on reste dans le même mode,
   // on garde les `items` chargés (le filtre se fait localement sur `payload`).

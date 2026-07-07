@@ -66,7 +66,7 @@ import {
   registerSettingsIpc,
   syncAutoStartFromSystem,
 } from './modules/settings/settingsService';
-import { registerSearchIpc } from './modules/search/searchService';
+import { registerSearchIpc, warmSearchCaches } from './modules/search/searchService';
 import { registerShellIpc } from './modules/shell/launchClaude';
 import {
   startFullscreenDetector,
@@ -184,6 +184,11 @@ async function startApp(): Promise<void> {
 
   startMeetingsPolling();
   startFullscreenDetector();
+
+  // Amorce les caches Search (VS Code / VS) en tâche de fond dès le boot :
+  // le 1er `/` ou `vs` de l'utilisateur affiche alors le cache instantanément
+  // au lieu de payer le scan FS / la lecture SQLite à chaud.
+  warmSearchCaches();
 
   // Sur macOS, le clic sur l'icône dock réveille la fenêtre fermée.
   // Windows n'utilise pas ce flux mais on garde le comportement pour

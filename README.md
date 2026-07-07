@@ -143,6 +143,10 @@ Champ de recherche en haut du dashboard. Deux familles de comportement :
 | `/` | VS Code | Liste les workspaces récents, ouvre via `code <path>` |
 | `vs` | Visual Studio | Liste les solutions `.sln`/`.slnx`, ouvre via l'association de fichier |
 
+Les listes `/` et `vs` s'affichent **instantanément** depuis un cache (amorcé dès le démarrage) puis se rafraîchissent en tâche de fond : le scan des dossiers / la lecture des projets récents ne bloque plus la frappe, et la liste se met à jour en direct dès qu'un changement est détecté.
+
+Les **dossiers de recherche** sont configurables dans **Réglages → Recherche → Dossiers** (un chemin par ligne, défaut `C:/Projets`). Ils pilotent les deux modes : ils sont scannés récursivement pour les solutions Visual Studio (`vs`) et servent à filtrer les workspaces récents VS Code (`/`) — seuls ceux situés sous l'une des racines sont affichés (masque les dossiers hors projets, WSL, etc.).
+
 #### Mode `=` (Calc & Convert)
 
 Calcul et conversion **100 % hors-ligne** (aucune dépendance, aucun réseau) :
@@ -401,7 +405,7 @@ Après une création manuelle, ne re-bascule pas le toggle dans l'app (il retent
 - **`@nut-tree-fork/libnut-win32`** — bindings natifs N-API pour l'envoi des touches média (play/pause, suivant, précédent).
 - **`loudness`** — binaire Core Audio bundlé pour le volume système (lecture volume+muted en un seul spawn via `getVolumeInfo`).
 - **`SoundVolumeView.exe`** (NirSoft, bundlé) — énumération + changement du device de sortie. Appelé uniquement à la demande (ouverture du panneau audio, changement de device) avec cache 30 s — plus de spawn périodique.
-- **`better-sqlite3`** — lecture de `state.vscdb` (workspaces VS Code récents).
+- **Workspaces VS Code récents** — dérivés du scan de `%APPDATA%/Code/User/workspaceStorage` (fichiers `workspace.json`, tri par récence), 100 % `fs`, sans dépendance native. Les versions récentes de VS Code (1.10x+) ne stockent plus le MRU dans `state.vscdb`.
 - **Détection `Alt` (mode Peek)** — polling `GetAsyncKeyState` dans le PowerShell résident du détecteur fullscreen (`resources/ps/fullscreen-detector.ps1`). Plus aucun hook clavier global : l'ancien `node-global-key-listener` (WH_KEYBOARD_LL) faisait transiter chaque frappe du PC par l'event loop de l'app, ajoutant de la latence clavier système dès que le main était chargé.
 
 ---

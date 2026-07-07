@@ -121,6 +121,7 @@ function mergeDefaults(): void {
     dashboardLayout: store.get('dashboardLayout'),
     quicklinks: store.get('quicklinks'),
     snippets: store.get('snippets'),
+    searchRoots: store.get('searchRoots'),
   };
 
   store.set('dnd', current.dnd ?? DEFAULT_SETTINGS.dnd);
@@ -142,6 +143,13 @@ function mergeDefaults(): void {
     current.snippets === undefined
       ? DEFAULT_SETTINGS.snippets
       : mergeSnippets(current.snippets),
+  );
+  // `searchRoots` absent (install pré-config) → défaut ; sinon revalidé.
+  store.set(
+    'searchRoots',
+    current.searchRoots === undefined
+      ? DEFAULT_SETTINGS.searchRoots
+      : mergeSearchRoots(current.searchRoots),
   );
 
   // Shallow merge par section : suffisant tant qu'on n'a pas de configs
@@ -351,6 +359,28 @@ function mergeSnippets(stored: Snippet[] | undefined): Snippet[] {
   return cleaned;
 }
 
+/**
+ * Valide les racines de recherche : ne garde que des chaînes non vides
+ * (trimmées), déduplique (comparaison insensible casse/séparateurs). Liste
+ * vide autorisée (l'utilisateur a le droit de tout supprimer → aucun scan VS
+ * + aucun filtre VS Code).
+ */
+function mergeSearchRoots(stored: string[] | undefined): string[] {
+  if (!Array.isArray(stored)) return DEFAULT_SETTINGS.searchRoots;
+  const seen = new Set<string>();
+  const cleaned: string[] = [];
+  for (const raw of stored) {
+    if (typeof raw !== 'string') continue;
+    const root = raw.trim();
+    if (!root) continue;
+    const key = root.replace(/[\\/]+$/, '').toLowerCase().replace(/\\/g, '/');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cleaned.push(root);
+  }
+  return cleaned;
+}
+
 // Migration au boot — idempotente.
 mergeDefaults();
 
@@ -366,7 +396,17 @@ function getAll(): Settings {
     dashboardLayout: store.get('dashboardLayout'),
     quicklinks: mergeQuicklinks(store.get('quicklinks')),
     snippets: mergeSnippets(store.get('snippets')),
+    searchRoots: mergeSearchRoots(store.get('searchRoots')),
   };
+}
+
+/**
+ * Racines de recherche validées — lues par le module Search (searchService)
+ * pour scanner les solutions VS et filtrer les workspaces VS Code. Exporté
+ * plutôt que de coupler searchService à `getAll()` (état complet).
+ */
+export function getSearchRoots(): string[] {
+  return mergeSearchRoots(store.get('searchRoots'));
 }
 
 /** Push l'état au renderer (pour synchroniser après un toggle externe). */
@@ -544,6 +584,19 @@ function setSnippets(snippets: Snippet[]): Settings {
 }
 
 /**
+ * Persiste les racines de recherche (validées côté main) puis notifie le
+ * module Search via `settingsEvents` pour qu'il re-scanne immédiatement
+ * (les deux modes `vs` et `/` dépendent de ces racines).
+ */
+function setSearchRoots(roots: string[]): Settings {
+  store.set('searchRoots', mergeSearchRoots(roots));
+  const state = getAll();
+  broadcast(state);
+  settingsEvents.emit('searchRoots:changed', state.searchRoots);
+  return state;
+}
+
+/**
  * Réconcilie l'état système avec le store au démarrage.
  *
  * Trois cas à gérer :
@@ -638,5 +691,9 @@ export function registerSettingsIpc(): void {
   ipcMain.handle(
     IpcChannel.SettingsSetSnippets,
     (_e, snippets: Snippet[]) => setSnippets(snippets),
+  );
+  ipcMain.handle(
+    IpcChannel.SettingsSetSearchRoots,
+    (_e, roots: string[]) => setSearchRoots(roots),
   );
 }

@@ -706,6 +706,14 @@ export interface Settings {
    * Recherche → Snippets. Cf. `shared/snippets.ts`.
    */
   snippets: Snippet[];
+  /**
+   * Dossiers racines de la recherche projets. Pilotent DEUX modes de la
+   * search bar : le scan des `.sln`/`.slnx` (mode `vs`) ET le filtre des
+   * workspaces récents VS Code (mode `/`, on ne montre que ceux situés sous
+   * l'une de ces racines). Éditables dans Settings → Recherche → Dossiers.
+   * Liste vide = aucun résultat `vs` + aucun filtre `/` (on montre tout).
+   */
+  searchRoots: string[];
 }
 
 /**
@@ -886,6 +894,8 @@ export const DEFAULT_SETTINGS: Settings = {
     { name: 'quote', body: '> {clipboard}' },
     { name: 'sig', body: 'Cordialement,\n— {date}' },
   ],
+  // Racine de recherche par défaut — l'utilisateur ajuste selon ses dossiers.
+  searchRoots: ['C:/Projets'],
 };
 
 /**
@@ -1955,6 +1965,8 @@ export const IpcChannel = {
   SettingsSetQuicklinks: 'settings:setQuicklinks',
   /** Renderer → main (invoke) : remplace la liste des snippets (validée côté main). */
   SettingsSetSnippets: 'settings:setSnippets',
+  /** Renderer → main (invoke) : remplace les dossiers racines de recherche (validés côté main). */
+  SettingsSetSearchRoots: 'settings:setSearchRoots',
   /** Main → renderer : push de Settings (ex. toggle DND via raccourci global). */
   SettingsChange: 'settings:change',
 
@@ -2003,6 +2015,10 @@ export const IpcChannel = {
   SearchOpenVs: 'search:openVs',
   /** Renderer → main (invoke) : transforme une chaîne (hash crypto Node) pour le mode `;`. */
   SearchTransform: 'search:transform',
+  /** Main → renderer (push) : liste des workspaces VS Code rafraîchie en tâche de fond. */
+  SearchVsCodeUpdated: 'search:vscodeUpdated',
+  /** Main → renderer (push) : liste des solutions Visual Studio rafraîchie en tâche de fond. */
+  SearchVsUpdated: 'search:vsUpdated',
 
   /** Renderer → main (invoke) : démarre le flow OAuth pour un provider. Retourne le compte créé. */
   MeetingsConnect: 'meetings:connect',
@@ -2303,6 +2319,14 @@ export interface NotchApi {
     openVsCode: (path: string, kind: SearchResult['kind']) => Promise<{ ok: boolean; error?: string }>;
     /** Ouvre une solution Visual Studio (association de fichier .sln/.slnx). */
     openVs: (path: string) => Promise<{ ok: boolean; error?: string }>;
+    /**
+     * S'abonne au refresh en tâche de fond des workspaces VS Code. Le callback
+     * reçoit la liste fraîche dès qu'un scan de fond aboutit avec un contenu
+     * différent du cache affiché. Retourne une fonction de désabonnement.
+     */
+    onVsCodeUpdated: (cb: (results: SearchResult[]) => void) => () => void;
+    /** Idem pour les solutions Visual Studio (`search:vsUpdated`). */
+    onVsUpdated: (cb: (results: SearchResult[]) => void) => () => void;
     /**
      * Transforme une chaîne via le main (hash crypto Node) pour le mode `;`.
      * `op` ∈ md5 / sha1 / sha256 / sha512. Retourne le digest hex.
@@ -2682,6 +2706,8 @@ export interface NotchApi {
     setQuicklinks: (links: Quicklink[]) => Promise<Settings>;
     /** Remplace la liste des snippets (validée + dédupliquée côté main). */
     setSnippets: (snippets: Snippet[]) => Promise<Settings>;
+    /** Remplace les dossiers racines de recherche (validés + dédupliqués côté main). */
+    setSearchRoots: (roots: string[]) => Promise<Settings>;
     /** S'abonne aux changements de Settings (ex. toggle DND via raccourci global). */
     onChange: (cb: (state: Settings) => void) => () => void;
   };

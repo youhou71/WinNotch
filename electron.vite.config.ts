@@ -3,9 +3,9 @@
  * preload et renderer.
  *
  * `externalizeDepsPlugin()` empêche le bundling des modules natifs ou
- * lourds (electron, loudness, better-sqlite3) ; ils restent
- * chargés via `require` Node à l'exécution. Sans ce plugin, Vite
- * essaierait de bundler le binaire natif et la compilation échouerait.
+ * lourds (electron, loudness) ; ils restent chargés via `require` Node à
+ * l'exécution. Sans ce plugin, Vite essaierait de bundler le binaire natif
+ * et la compilation échouerait.
  *
  * Les alias `@shared` et `@renderer` permettent des imports propres
  * (`import { ... } from '@shared/types'`) plutôt que des chemins relatifs

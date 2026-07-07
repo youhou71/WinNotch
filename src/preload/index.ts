@@ -179,6 +179,20 @@ const api: NotchApi = {
       ipcRenderer.invoke(IpcChannel.SearchOpenVs, path),
     transform: (op: string, input: string) =>
       ipcRenderer.invoke(IpcChannel.SearchTransform, op, input),
+    onVsCodeUpdated: (cb: (results: SearchResult[]) => void) => {
+      const handler = (_: unknown, results: SearchResult[]) => cb(results);
+      ipcRenderer.on(IpcChannel.SearchVsCodeUpdated, handler);
+      return () => {
+        ipcRenderer.off(IpcChannel.SearchVsCodeUpdated, handler);
+      };
+    },
+    onVsUpdated: (cb: (results: SearchResult[]) => void) => {
+      const handler = (_: unknown, results: SearchResult[]) => cb(results);
+      ipcRenderer.on(IpcChannel.SearchVsUpdated, handler);
+      return () => {
+        ipcRenderer.off(IpcChannel.SearchVsUpdated, handler);
+      };
+    },
   },
   claude: {
     list: () => ipcRenderer.invoke(IpcChannel.ClaudeList),
@@ -470,6 +484,8 @@ const api: NotchApi = {
       ipcRenderer.invoke(IpcChannel.SettingsSetQuicklinks, links),
     setSnippets: (snippets: Snippet[]) =>
       ipcRenderer.invoke(IpcChannel.SettingsSetSnippets, snippets),
+    setSearchRoots: (roots: string[]) =>
+      ipcRenderer.invoke(IpcChannel.SettingsSetSearchRoots, roots),
     onChange: (cb: (state: Settings) => void) => {
       const handler = (_: unknown, state: Settings) => cb(state);
       ipcRenderer.on(IpcChannel.SettingsChange, handler);

@@ -32,6 +32,8 @@ interface Props {
   onOpenQuicklinks: () => void;
   /** Ouvre la page "Snippets" (mode `:` de la search bar). */
   onOpenSnippets: () => void;
+  /** Ouvre la page "Dossiers de recherche" (modes `vs` et `/`). */
+  onOpenSearchRoots: () => void;
 }
 
 /**
@@ -62,6 +64,7 @@ export function SettingsHome({
   onOpenLayout,
   onOpenQuicklinks,
   onOpenSnippets,
+  onOpenSearchRoots,
 }: Props) {
   const { settings, setDensity, setModule, toggleDnd, setAutoStart } =
     useSettingsContext();
@@ -181,6 +184,14 @@ export function SettingsHome({
           label="Snippets"
           description="Modèles de texte à placeholders, déclenchés par « : » dans la barre (ex. :sig)."
           onClick={onOpenSnippets}
+          right={<i className="fa-solid fa-chevron-right settings-chevron" />}
+        />
+        <SettingsRow
+          icon="fa-solid fa-folder-tree"
+          iconColor="#a16ce8"
+          label="Dossiers de recherche"
+          description="Racines scannées pour les solutions VS (« vs ») et filtre des workspaces récents VS Code (« / »)."
+          onClick={onOpenSearchRoots}
           right={<i className="fa-solid fa-chevron-right settings-chevron" />}
         />
       </SettingsSection>
