@@ -110,10 +110,12 @@ export function NotchTooltip({ content, children, delayMs = 250, accentStyle }: 
   useLayoutEffect(() => {
     if (!show) return;
     const bottom = bubbleRef.current?.getBoundingClientRect().bottom ?? 0;
-    window.notch.shell.setHeight(
-      Math.ceil(bottom) + TOOLTIP_SHADOW_MARGIN_PX,
-      'tooltip',
-    );
+    const needed = Math.ceil(bottom) + TOOLTIP_SHADOW_MARGIN_PX;
+    // Si la bulle tient déjà dans la fenêtre courante (fréquent en expanded, où
+    // la fenêtre est haute), inutile de pousser la couche 'tooltip' : on évite
+    // un resize — et la recomposition DWM associée — superflu.
+    if (needed <= window.innerHeight) return;
+    window.notch.shell.setHeight(needed, 'tooltip');
   }, [show, pos, content]);
 
   // Libère la réserve à la fermeture (transition show → false) et au mount.

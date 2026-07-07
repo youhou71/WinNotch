@@ -82,13 +82,43 @@ const SHRINK_DELAY_MS = 760;
  */
 const HEIGHT_EPSILON = 2;
 
+/**
+ * Au-delà de ce delta, une montée est un « gros saut » (ouverture
+ * collapsed→expanded) appliquée immédiatement pour ne jamais clipper le
+ * contenu. En-deçà, c'est un raffinement de mesure → coalescé (cf. growTimer).
+ */
+const BIG_GROW_PX = 120;
+
+/** Fenêtre de coalescence des raffinements de croissance (≈ 2 frames). */
+const GROW_COALESCE_MS = 32;
+
 let notchWindow: BrowserWindow | null = null;
 
 /** Hauteur actuellement appliquée à la fenêtre (px). */
 let currentHeight = INITIAL_HEIGHT;
 
+/**
+ * Dernier rectangle réellement passé à `setBounds`. Sert à sauter les
+ * `setBounds` redondants (rectangle identique) : sur une fenêtre
+ * `transparent: true` (layered), chaque resize/repositionnement force DWM à
+ * réallouer la surface de composition — coûteux et source de saccades
+ * système (curseur, scroll) sans pic CPU/GPU. Notamment,
+ * `display-metrics-changed` se déclenche aussi sur des changements de
+ * DPI/échelle/profil couleur qui ne modifient pas les bounds.
+ */
+let lastAppliedBounds: Electron.Rectangle | null = null;
+
 /** Timer de réduction différée en attente (annulé si une croissance arrive). */
 let shrinkTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Timer de coalescence des raffinements de croissance. Pendant un expand, le
+ * renderer pousse d'abord une estimation puis 1-2 mesures affinées du
+ * ResizeObserver : on applique la 1re grosse montée tout de suite (le contenu
+ * doit avoir la place) mais on fusionne les petits raffinements qui suivent en
+ * un seul setBounds → une seule réallocation de surface DWM au lieu de 2-4.
+ */
+let growTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Hauteurs demandées par **couche** ; la fenêtre prend le max.
@@ -129,6 +159,18 @@ function applyHeight(height: number): void {
   if (!notchWindow || notchWindow.isDestroyed()) return;
   const bounds = computeBounds(height);
   currentHeight = bounds.height;
+  // Rectangle inchangé : ne pas re-`setBounds` une fenêtre layered pour rien
+  // (évite une réallocation de surface DWM et les saccades associées).
+  if (
+    lastAppliedBounds &&
+    lastAppliedBounds.x === bounds.x &&
+    lastAppliedBounds.y === bounds.y &&
+    lastAppliedBounds.width === bounds.width &&
+    lastAppliedBounds.height === bounds.height
+  ) {
+    return;
+  }
+  lastAppliedBounds = bounds;
   notchWindow.setBounds(bounds);
 }
 
@@ -161,8 +203,29 @@ function reconcileHeight(): void {
   const target = computeBounds(targetHeight()).height;
   if (Math.abs(target - currentHeight) <= HEIGHT_EPSILON) return;
   if (target > currentHeight) {
-    applyHeight(target);
+    if (target - currentHeight > BIG_GROW_PX) {
+      // Gros saut (ouverture) : appliqué tout de suite, sinon le bas du notch
+      // serait clippé le temps de l'animation CSS.
+      if (growTimer) {
+        clearTimeout(growTimer);
+        growTimer = null;
+      }
+      applyHeight(target);
+    } else {
+      // Raffinement de mesure : coalescé sur ~2 frames (dernière cible gagne).
+      // La fenêtre est déjà quasi à la bonne taille → aucun clip visible.
+      if (growTimer) clearTimeout(growTimer);
+      growTimer = setTimeout(() => {
+        growTimer = null;
+        const t = computeBounds(targetHeight()).height;
+        if (t > currentHeight + HEIGHT_EPSILON) applyHeight(t);
+      }, GROW_COALESCE_MS);
+    }
   } else {
+    if (growTimer) {
+      clearTimeout(growTimer);
+      growTimer = null;
+    }
     shrinkTimer = setTimeout(() => {
       shrinkTimer = null;
       applyHeight(target);
@@ -225,6 +288,11 @@ export function getNotchWindow(): BrowserWindow | null {
  */
 export function createNotchWindow(): BrowserWindow {
   currentHeight = INITIAL_HEIGHT;
+  lastAppliedBounds = null;
+  if (growTimer) {
+    clearTimeout(growTimer);
+    growTimer = null;
+  }
   layerHeights.clear();
   layerHeights.set('notch', INITIAL_HEIGHT);
   const bounds = computeBounds(INITIAL_HEIGHT);

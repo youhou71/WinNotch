@@ -44,7 +44,10 @@
     height 700ms var(--spring),
     border-radius 700ms var(--spring),
     box-shadow 400ms ease;
-  will-change: width, height, border-radius;
+  /* Pas de `will-change` permanent : sur une fenêtre transparente
+     always-on-top, une couche de composition promue en continu fait
+     recomposer DWM au repos sans raison. Chromium promeut la couche le temps
+     de la transition d'expand/collapse, ce qui suffit. */
 }
 
 .notch[data-mode='expanded'] {

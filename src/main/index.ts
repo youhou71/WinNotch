@@ -19,6 +19,7 @@ import { app, BrowserWindow } from 'electron';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import {
   createNotchWindow,
+  getNotchWindow,
   registerNotchWindowIpc,
   registerScreenListeners,
 } from './window/notchWindow';
@@ -78,7 +79,7 @@ import {
   unregisterGlobalShortcuts,
 } from './shortcuts/globalShortcuts';
 
-app.whenReady().then(async () => {
+async function startApp(): Promise<void> {
   // Identifiant utilisé par Windows pour grouper les notifications/jumplist.
   electronApp.setAppUserModelId('com.cfast.winnotch');
 
@@ -190,7 +191,29 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createNotchWindow();
   });
-});
+}
+
+/**
+ * Verrou d'instance unique : empêche que plusieurs WinNotch tournent en
+ * parallèle (app installée en autostart + lancement manuel, ou instance dev
+ * `npm run dev` + app installée). Chaque instance ouvre une fenêtre
+ * transparente always-on-top dont la charge de composition DWM s'additionne
+ * → saccades système (curseur, scroll) qui s'aggravent « au fil du temps »
+ * sans pic CPU/RAM. La 2e instance quitte aussitôt ; on redonne le focus à
+ * celle déjà en place.
+ */
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const win = getNotchWindow();
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+  void app.whenReady().then(startApp);
+}
 
 app.on('window-all-closed', () => {
   // Nettoyage explicite avant la fin du process : les timers et les hooks

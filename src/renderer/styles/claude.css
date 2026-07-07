@@ -50,7 +50,10 @@
 
 .claude-spark.is-working::before,
 .claude-spark.is-working::after {
-  animation: claude-spin 1.6s linear infinite;
+  /* steps() au lieu de linear : ~10 fps au lieu de 60 → 6× moins de
+     recompositions DWM de la fenêtre transparente pour une chip visible en
+     permanence, effet horloge acceptable sur un spinner. */
+  animation: claude-spin 1.6s steps(16) infinite;
 }
 
 .claude-spark::after {
@@ -113,7 +116,7 @@
   border-radius: inherit;
   box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.35);
   pointer-events: none;
-  animation: claude-wfi-halo 1.6s ease-in-out infinite;
+  animation: claude-wfi-halo 1.6s steps(12) infinite;
 }
 
 @keyframes claude-wfi-halo {
