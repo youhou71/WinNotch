@@ -66,6 +66,16 @@ let prevNet: NetSnapshot | null = null;
 let pollTimer: NodeJS.Timeout | null = null;
 let tickInFlight: Promise<void> | null = null;
 
+/**
+ * Cadence de broadcast réduite quand le notch est replié : la Sparkline n'est
+ * alors qu'un aperçu de coin d'œil. Ne pousser qu'un tick sur N évite un
+ * repaint (= une recomposition DWM de la fenêtre transparente always-on-top)
+ * chaque seconde — source de micro-saccades système. En expanded (card
+ * ouverte, utilisateur qui regarde), on garde le 1 Hz plein.
+ */
+const COLLAPSED_BROADCAST_EVERY = 3;
+let collapsedTickCount = 0;
+
 function broadcast(): void {
   const win = getNotchWindow();
   if (!win || win.isDestroyed()) return;
@@ -147,7 +157,15 @@ async function tick(): Promise<void> {
       lastTickAt: Date.now(),
       lastError: netError,
     };
-    if (!uiHidden) broadcast();
+    if (!uiHidden) {
+      if (getNotchMode() === 'collapsed') {
+        collapsedTickCount = (collapsedTickCount + 1) % COLLAPSED_BROADCAST_EVERY;
+        if (collapsedTickCount === 0) broadcast();
+      } else {
+        collapsedTickCount = 0;
+        broadcast();
+      }
+    }
   })();
   tickInFlight = task;
   try {

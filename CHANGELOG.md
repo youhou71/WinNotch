@@ -7,6 +7,15 @@ versioning [SemVer](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Performance
+
+- **Lag système « qui s'aggrave au fil du temps » corrigé (fenêtre transparente / MPO).** Diagnostic : la fenêtre transparente always-on-top du notch perturbe le MPO (Multiplane Overlay) de Windows — DWM recompose et bascule overlay↔composition à chaque `setBounds`/repaint → micro-saccades du curseur **sans pic CPU/GPU** (fermer WinNotch supprimait le lag, alors que les compteurs GDI/USER/handles restaient normaux — ce n'était donc pas une fuite mais un coût de composition). Correctifs :
+  - **Verrou d'instance unique** (`app.requestSingleInstanceLock`) : empêche deux WinNotch simultanés (autostart + lancement manuel, ou instance dev + app installée), dont les fenêtres transparentes cumulaient leur charge de composition. La 2ᵉ instance quitte et redonne le focus à la 1ʳᵉ.
+  - **Moins de `setBounds`** : rectangle identique ignoré (guard d'égalité) + coalescence des raffinements de croissance à l'ouverture (1 resize au lieu de 2-4).
+  - **Moins de repaints continus** : les animations des chips toujours visibles (spinners / halos Claude, GitLab, meetings, confidentialité) passent en `steps()` (~10 fps au lieu de 60) ; la Sparkline Système n'émet plus qu'1 tick sur 3 quand le notch est replié ; `will-change` permanent retiré de `.notch`.
+  - **Tooltip** : plus de resize de fenêtre quand la bulle tient déjà dans la fenêtre (cas notch ouvert).
+- **Fuite mémoire du cache de détails MR GitLab** — le `Map` mémoïsant les détails de MR au survol (`pipeline.ts`) n'était jamais purgé (croissance monotone sur un widget always-on jamais rechargé) ; il est désormais borné à 100 entrées avec éviction LRU douce.
+
 ### Fixed
 
 - **GitLab — les MR déjà reviewées quittent « à reviewer »** — une MR reste dans le compteur « à reviewer » tant qu'elle est ouverte, même après avoir donné sa review (le filtre REST `reviewer_id` ne tient pas compte de l'état de reviewer). WinNotch récupère désormais cet état via une requête GraphQL (`currentUser.reviewRequestedMergeRequests`) et masque les MR dont **mon** état vaut *relue*, *approuvée* ou *changements demandés*. Robuste sur toutes les éditions (pas de dépendance à l'API d'approbations Premium) ; en cas d'indisponibilité du GraphQL, on retombe silencieusement sur la liste complète (aucune régression).

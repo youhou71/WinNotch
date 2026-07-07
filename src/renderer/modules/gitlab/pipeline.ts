@@ -44,6 +44,12 @@ export function pipelineMeta(status: string | null): PipelineMeta | null {
 }
 
 const TTL_MS = 60_000;
+/**
+ * Plafond du cache. Le notch est un widget always-on qui n'est jamais
+ * rechargé : sans borne, une entrée serait ajoutée par MR distincte survolée
+ * et jamais libérée (croissance mémoire monotone sur des jours d'uptime).
+ */
+const MAX_CACHE_ENTRIES = 100;
 const cache = new Map<string, { at: number; promise: Promise<GitLabMrDetail> }>();
 
 /** Détail MR mémoïsé (TTL 60 s). Réutilise une requête en vol pour la même MR. */
@@ -54,7 +60,17 @@ export function fetchMrDetailCached(
   const key = `${projectId}:${iid}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.promise;
+  // Entrée périmée : on la retire d'abord pour qu'un éventuel re-cache reparte
+  // en fin d'ordre d'insertion (Map.set sur une clé existante conserverait sa
+  // position d'origine et fausserait l'éviction FIFO ci-dessous).
+  if (hit) cache.delete(key);
   const promise = window.notch.gitlab.mrDetail(projectId, iid);
+  // LRU douce : évince la plus ancienne entrée par ordre d'insertion si on
+  // atteint le plafond (même pattern que urlUnfurl.ts).
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
   cache.set(key, { at: Date.now(), promise });
   return promise;
 }

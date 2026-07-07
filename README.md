@@ -315,6 +315,8 @@ npm run dist:win           # construit l'installer NSIS dans dist/
 
 L'installer généré (`dist/WinNotch-Setup-x.y.z.exe`) est un wizard NSIS classique. Installation per-user (pas besoin d'élévation), désinstallation propre via Programmes et fonctionnalités.
 
+> **Instance unique** : une seule instance de WinNotch tourne à la fois. Relancer l'app (ou la lancer alors qu'elle a déjà démarré à l'ouverture de session) ne crée pas de second notch — la tentative redonne simplement le focus à l'instance en place. Cela évite d'empiler des fenêtres flottantes qui alourdiraient l'affichage.
+
 ---
 
 ## Démarrage automatique avec Windows
