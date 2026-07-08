@@ -48,6 +48,20 @@ const POLL_INTERVAL_MS = 2000;
  */
 const DEVICES_TTL_MS = 30_000;
 
+/**
+ * Délais (ms) de relance de la liste des sorties au démarrage à froid.
+ *
+ * Au login, le service audio Windows et/ou SoundVolumeView ne sont pas
+ * toujours prêts : le premier `refresh({withDevices:true})` renvoie une
+ * liste vide. On enchaîne alors des relectures à délais croissants jusqu'à
+ * obtenir au moins un périphérique, puis on s'arrête. Chaque essai passe
+ * par `refresh()` → broadcast `audio:change` dès que la liste se remplit,
+ * sans attendre l'ouverture du panneau audio. Fenêtre totale ~60 s, ce qui
+ * laisse aussi le temps au circuit breaker SVV (cooldown 15 s) de repasser
+ * en half-open si le premier spawn avait time-out.
+ */
+const DEVICE_WARMUP_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000];
+
 /** Dernier état connu — sert de fallback en cas d'échec partiel. */
 let cached: AudioState = {
   level: 0,
@@ -57,6 +71,8 @@ let cached: AudioState = {
 };
 
 let pollTimer: NodeJS.Timeout | null = null;
+/** Timer de la relance devices en cours (warm-up boot/réveil), null si aucune. */
+let warmupTimer: NodeJS.Timeout | null = null;
 /** True entre les events powerMonitor suspend → resume : gèle le polling. */
 let suspended = false;
 
@@ -179,6 +195,42 @@ async function refresh(opts: { withDevices?: boolean } = {}): Promise<AudioState
   return next;
 }
 
+/** Annule la relance devices en cours, s'il y en a une. */
+function cancelDeviceWarmup(): void {
+  if (warmupTimer) {
+    clearTimeout(warmupTimer);
+    warmupTimer = null;
+  }
+}
+
+/**
+ * Planifie la n-ième relance de la liste des sorties. S'arrête au premier
+ * succès (liste non vide) ou une fois tous les délais épuisés. Pendant la
+ * veille, l'essai est reporté sans consommer d'étape.
+ */
+function scheduleDeviceWarmup(attempt: number): void {
+  if (attempt >= DEVICE_WARMUP_DELAYS_MS.length) {
+    warmupTimer = null;
+    return;
+  }
+  warmupTimer = setTimeout(() => {
+    warmupTimer = null;
+    if (suspended) {
+      scheduleDeviceWarmup(attempt); // reporte le même essai
+      return;
+    }
+    void refresh({ withDevices: true }).then((state) => {
+      if (state.devices.length === 0) scheduleDeviceWarmup(attempt + 1);
+    });
+  }, DEVICE_WARMUP_DELAYS_MS[attempt]);
+}
+
+/** (Re)démarre une chaîne de relance devices depuis le premier délai. */
+function startDeviceWarmup(): void {
+  cancelDeviceWarmup();
+  scheduleDeviceWarmup(0);
+}
+
 /**
  * Enregistre les 4 handlers `invoke` du module Audio.
  *
@@ -222,8 +274,12 @@ export function registerAudioIpc(): void {
 export function startAudioPolling(): void {
   if (pollTimer) return;
   // Premier cycle avec devices : le panneau doit avoir une liste prête
-  // dès la première ouverture.
-  void refresh({ withDevices: true });
+  // dès la première ouverture. Au démarrage à froid, cette 1re lecture
+  // revient souvent vide (service audio / SVV pas encore prêts) → on
+  // enchaîne des relances à délais croissants jusqu'à obtenir la liste.
+  void refresh({ withDevices: true }).then((state) => {
+    if (state.devices.length === 0) startDeviceWarmup();
+  });
   pollTimer = setInterval(() => {
     if (suspended) return;
     void refresh();
@@ -237,7 +293,11 @@ export function startAudioPolling(): void {
   });
   powerMonitor.on('resume', () => {
     suspended = false;
-    void refresh({ withDevices: true });
+    // Au réveil, le stack audio peut lui aussi être lent à revenir : même
+    // relance progressive si la liste ressort vide.
+    void refresh({ withDevices: true }).then((state) => {
+      if (state.devices.length === 0) startDeviceWarmup();
+    });
   });
 }
 
@@ -247,4 +307,5 @@ export function stopAudioPolling(): void {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  cancelDeviceWarmup();
 }

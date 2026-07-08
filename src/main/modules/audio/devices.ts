@@ -15,8 +15,10 @@
  *    le BOM et on décode correctement.
  *  - Les caractères accentués dans le chemin temp utilisateur peuvent
  *    déclencher un popup "Error 5" → on préfère C:\Windows\Temp.
- *  - Si SVV échoue plus de 3 fois, on désactive complètement l'appel
- *    (circuit breaker) pour éviter une cascade de popups.
+ *  - Si SVV échoue 3 fois d'affilée, un circuit breaker ouvre l'appel
+ *    pendant un cooldown (évite une cascade de popups), puis retente UNE
+ *    fois (half-open) : succès → refermé, échec → nouveau cooldown. Il
+ *    n'est donc plus verrouillé jusqu'au redémarrage de l'app.
  *  - Bypass total via la variable d'env WINNOTCH_DISABLE_SVV=1.
  */
 import { execFile } from 'child_process';
@@ -87,9 +89,58 @@ function classifyDevice(row: SvvRow): AudioDevice['type'] {
   return 'other';
 }
 
-/** Compteur d'échecs SVV pour le circuit breaker. Reset à 0 sur succès. */
+/**
+ * Circuit breaker SVV, version « half-open » (recouvrable).
+ *
+ * Motivation : au démarrage à froid (login), le premier spawn de SVV est
+ * souvent lent voire bloqué (scan antivirus/EDR, disque saturé) → il
+ * time-out. L'ancienne version incrémentait un compteur et, à partir de
+ * 3 échecs, court-circuitait l'appel DÉFINITIVEMENT — le reset n'arrivait
+ * que sur un résultat non vide, impossible à obtenir puisque SVV n'était
+ * plus jamais appelé. La liste des sorties restait donc vide jusqu'au
+ * prochain redémarrage de l'app (symptôme « Aucune sortie » au boot auto).
+ *
+ * Nouvelle logique :
+ *  - 3 échecs d'affilée → circuit « ouvert » pendant SVV_COOLDOWN_MS
+ *    (runSvvJson renvoie [] sans spawn → pas de popups en rafale).
+ *  - cooldown écoulé → circuit « half-open » : le prochain appel relance
+ *    SVV une fois. Succès (SVV a rendu la main) → circuit refermé ; nouvel
+ *    échec → nouveau cooldown.
+ *
+ * Le breaker se cale sur la *spawnabilité* de SVV, pas sur le nombre de
+ * périphériques : une liste vide mais issue d'un SVV vivant referme le
+ * circuit. La relance sur liste vide (audio pas encore prêt) est gérée en
+ * amont par le warm-up de `audioService`, pas par le breaker.
+ */
 let svvFailCount = 0;
 const SVV_MAX_FAILURES = 3;
+const SVV_COOLDOWN_MS = 15_000;
+/** Epoch ms jusqu'auquel le circuit reste ouvert (0 = fermé / half-open). */
+let svvOpenUntil = 0;
+
+/** Circuit ouvert : on saute le spawn tant que le cooldown n'est pas écoulé. */
+function svvCircuitOpen(): boolean {
+  return svvOpenUntil > Date.now();
+}
+
+/** SVV s'est lancé et a rendu la main → circuit refermé. */
+function recordSvvSuccess(): void {
+  svvFailCount = 0;
+  svvOpenUntil = 0;
+}
+
+/** Échec de spawn SVV → (ré)arme le cooldown au 3e échec consécutif. */
+function recordSvvFailure(): void {
+  svvFailCount++;
+  if (svvFailCount >= SVV_MAX_FAILURES) {
+    svvOpenUntil = Date.now() + SVV_COOLDOWN_MS;
+    if (svvFailCount === SVV_MAX_FAILURES) {
+      console.warn(
+        `[audio/devices] SoundVolumeView a échoué ${SVV_MAX_FAILURES} fois — circuit ouvert ${SVV_COOLDOWN_MS / 1000}s avant nouvel essai.`,
+      );
+    }
+  }
+}
 
 /**
  * Sélectionne un dossier temporaire ASCII-only en priorité.
@@ -124,7 +175,7 @@ function pickTempDir(): string {
  *         erreurs et retourne une liste vide.
  */
 async function runSvvJson(): Promise<SvvRow[]> {
-  if (svvFailCount >= SVV_MAX_FAILURES) {
+  if (svvCircuitOpen()) {
     return [];
   }
   const svv = resolveSvv();
@@ -139,13 +190,12 @@ async function runSvvJson(): Promise<SvvRow[]> {
       windowsHide: true,
       timeout: 8000,
     });
+    // SVV a rendu la main sans erreur → il est spawnable : on referme le
+    // circuit, même si la liste s'avère vide en aval (ce cas relève du
+    // warm-up, pas du breaker).
+    recordSvvSuccess();
   } catch (err) {
-    svvFailCount++;
-    if (svvFailCount === SVV_MAX_FAILURES) {
-      console.warn(
-        `[audio/devices] SoundVolumeView a échoué ${SVV_MAX_FAILURES} fois — désactivation. Les périphériques resteront vides.`,
-      );
-    }
+    recordSvvFailure();
     await unlink(tmpFile).catch(() => { /* ignore */ });
     throw err;
   }
@@ -205,8 +255,6 @@ export async function listOutputDevices(): Promise<AudioDevice[]> {
   if (process.env.WINNOTCH_DISABLE_SVV === '1') return [];
   try {
     const rows = await runSvvJson();
-    // Reset du circuit breaker dès qu'on obtient un résultat exploitable.
-    if (rows.length > 0) svvFailCount = 0;
     return rows
       .filter((r) => (r.Direction || '').toLowerCase() === 'render')
       .filter((r) => (r['Device State'] || '').toLowerCase() === 'active')
