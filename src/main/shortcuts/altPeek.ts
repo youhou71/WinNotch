@@ -44,9 +44,33 @@ let peekActive = false;
  */
 let currentMode: NotchMode = 'collapsed';
 
+/**
+ * Abonnés au changement de mode. Permet aux pollers coûteux de se mettre en
+ * veille quand le notch est replié et de se resynchroniser à l'ouverture,
+ * sans que `altPeek` ait à connaître les modules concernés.
+ */
+type NotchModeListener = (mode: NotchMode) => void;
+const modeListeners = new Set<NotchModeListener>();
+
+/** S'abonne aux changements de mode. Renvoie la fonction de désabonnement. */
+export function onNotchModeChange(listener: NotchModeListener): () => void {
+  modeListeners.add(listener);
+  return () => modeListeners.delete(listener);
+}
+
 /** Met à jour le mode courant. Appelé depuis globalShortcuts.ts. */
 export function setNotchMode(mode: NotchMode): void {
+  if (currentMode === mode) return;
   currentMode = mode;
+  for (const listener of modeListeners) {
+    try {
+      listener(mode);
+    } catch (err) {
+      // Un abonné qui throw ne doit pas empêcher les autres d'être notifiés,
+      // ni casser le changement de mode lui-même.
+      console.warn('[altPeek] listener de mode en échec:', err);
+    }
+  }
 }
 
 /**

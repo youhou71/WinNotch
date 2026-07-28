@@ -75,6 +75,10 @@ import {
 import { stopPersistentPowershell } from './modules/shell/persistentPowershell';
 import { startAltPeekListener, stopAltPeekListener } from './shortcuts/altPeek';
 import {
+  canDefineTypes,
+  probePowershellLanguageMode,
+} from './modules/shell/languageMode';
+import {
   registerGlobalShortcuts,
   unregisterGlobalShortcuts,
 } from './shortcuts/globalShortcuts';
@@ -174,16 +178,34 @@ async function startApp(): Promise<void> {
   } else {
     console.log('[WinNotch] Audio polling désactivé (WINNOTCH_DISABLE_AUDIO_POLL=1)');
   }
-  // IMPORTANT : avant startFullscreenDetector() — le handler Alt doit être
-  // enregistré au moment du spawn du poller PS (cf. altPeek.ts).
-  if (process.env.WINNOTCH_DISABLE_ALT_PEEK !== '1') {
-    startAltPeekListener();
-  } else {
-    console.log('[WinNotch] Alt peek listener désactivé (WINNOTCH_DISABLE_ALT_PEEK=1)');
-  }
-
   startMeetingsPolling();
-  startFullscreenDetector();
+
+  // Alt-Peek et détection plein écran partagent `fullscreen-detector.ps1`, qui
+  // fait du P/Invoke user32 via `Add-Type` — interdit en ConstrainedLanguage,
+  // le mode qu'AppLocker impose aux scripts sous %LOCALAPPDATA% (donc à l'app
+  // installée). On sonde d'abord le mode : inutile de spawner un powershell.exe
+  // qui mourra à coup sûr, et l'utilisateur mérite un message clair plutôt
+  // qu'un Alt-Peek qui ne réagit jamais. La sonde passe par le PowerShell
+  // résident : zéro spawn supplémentaire. Démarrage volontairement non
+  // bloquant — le boot n'attend pas ce diagnostic.
+  void (async () => {
+    const mode = await probePowershellLanguageMode();
+    if (!canDefineTypes(mode)) {
+      console.warn(
+        `[WinNotch] PowerShell en ${mode} (politique AppLocker/WDAC) : Alt-Peek et ` +
+          'détection plein écran indisponibles — `Add-Type` y est interdit.',
+      );
+      return;
+    }
+    // IMPORTANT : avant startFullscreenDetector() — le handler Alt doit être
+    // enregistré au moment du spawn du poller PS (cf. altPeek.ts).
+    if (process.env.WINNOTCH_DISABLE_ALT_PEEK !== '1') {
+      startAltPeekListener();
+    } else {
+      console.log('[WinNotch] Alt peek listener désactivé (WINNOTCH_DISABLE_ALT_PEEK=1)');
+    }
+    startFullscreenDetector();
+  })();
 
   // Amorce les caches Search (VS Code / VS) en tâche de fond dès le boot :
   // le 1er `/` ou `vs` de l'utilisateur affiche alors le cache instantanément

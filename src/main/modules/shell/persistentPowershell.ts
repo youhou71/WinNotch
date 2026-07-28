@@ -14,12 +14,18 @@
  * suivants en quelques millisecondes (CIM/modules déjà chauds dans le
  * process). Partagé par les modules VPN et Système.
  *
- * Protocole (1 ligne in → 1 ligne out, base64 pour éviter tout souci de
- * quoting/newline) :
- *   - Node écrit sur stdin : `<id> <base64(script UTF-8)>\n`
+ * Protocole (1 ligne JSON in → 1 ligne JSON out), **100 % ASCII dans les deux
+ * sens** pour être insensible à la page de code de la console :
+ *   - Node écrit sur stdin : `{"id":"<id>","code":"<script>"}\n`
  *   - le boucleur PS exécute le script et écrit sur stdout une enveloppe JSON
- *     compacte : `{"id":"<id>","ok":true,"out":"<base64(sortie UTF-8)>"}`
- *     (ou `"ok":false,"err":"<base64(message)>"`).
+ *     compacte : `{"id":"<id>","ok":true,"out":"<sortie>"}`
+ *     (ou `"ok":false,"err":"<message>"`).
+ *
+ * L'ancien transport base64 a été abandonné : son décodage exigeait
+ * `[Convert]::FromBase64String`, interdit en ConstrainedLanguage — le mode que
+ * AppLocker impose aux scripts sous `%LOCALAPPDATA%`, donc à l'app installée.
+ * L'échappement `\uXXXX` des non-ASCII (aller comme retour) offre la même
+ * garantie d'encodage sans aucune primitive interdite.
  *
  * Le process est relancé automatiquement au prochain appel s'il meurt ou si
  * une requête dépasse son délai (un cmdlet réellement bloqué).
@@ -32,8 +38,8 @@ import { psScriptPath } from './psScriptPath';
 // `resources/ps/persistent-loop.ps1`, lancé via `-File` (cf. ensureProc).
 // On évite ainsi `-EncodedCommand` (base64) dans la ligne de commande, que les
 // antivirus heuristiques signalent comme de l'obfuscation. Le protocole stdin
-// (1 ligne par requête, script en base64) reste interne au pipe — jamais dans
-// la ligne de commande, donc invisible aux scanners.
+// (1 ligne JSON par requête) reste interne au pipe — jamais dans la ligne de
+// commande, donc invisible aux scanners.
 
 export interface PsResult {
   /** Sortie stdout du script (chaîne vide si rien). */
@@ -52,6 +58,46 @@ let stdoutBuf = '';
 let seq = 0;
 let stopped = false;
 const pending = new Map<string, Pending>();
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  Coupe-circuit « la boucle ne démarre pas »
+ *
+ *  Si la boucle PS meurt AVANT d'avoir répondu ne serait-ce qu'une fois,
+ *  la relancer est sans espoir : elle remourra pour la même raison, et le
+ *  poller Système la redemande à 1 Hz. Cas réel mesuré sur un poste
+ *  d'entreprise : AppLocker force `ConstrainedLanguage` sur les scripts
+ *  situés sous `%LOCALAPPDATA%` (donc sur l'app installée, alors que le
+ *  même script lancé depuis le dépôt tourne en `FullLanguage`), ce qui
+ *  faisait sortir la boucle à la première ligne interdite → ~53 spawns de
+ *  `powershell.exe` par minute, chacun avec son `conhost.exe`, soit
+ *  ~69 000 process/jour scannés par l'antivirus, pour zéro résultat utile.
+ *
+ *  On borne donc les échecs : après MAX_FAST_DEATHS morts prématurées
+ *  consécutives, on cesse de spawner. Aucune régression possible — quand ce
+ *  coupe-circuit se déclenche, la fonctionnalité est de toute façon déjà
+ *  cassée ; on arrête simplement d'en payer le prix.
+ * ─────────────────────────────────────────────────────────────────── */
+
+/** Sous ce délai sans la moindre réponse, la mort est jugée prématurée. */
+const FAST_DEATH_MS = 2000;
+/** Nombre de morts prématurées consécutives tolérées avant abandon. */
+const MAX_FAST_DEATHS = 3;
+
+let spawnedAt = 0;
+/** La boucle courante a-t-elle répondu au moins une fois ? */
+let answeredSinceSpawn = false;
+let fastDeaths = 0;
+/** Non nul = coupe-circuit ouvert, on ne spawne plus. */
+let giveUpReason: string | null = null;
+
+/**
+ * Raison de l'abandon du PowerShell résident, ou `null` s'il est opérationnel.
+ * Permet aux appelants (et aux réglages) de distinguer « pas de données » d'un
+ * « environnement qui interdit ce mécanisme ».
+ */
+export function getPersistentPowershellFailure(): string | null {
+  return giveUpReason;
+}
 
 /** Tue le process (le cas échéant), vide la file en résolvant en erreur. */
 function resetProc(reason: string): void {
@@ -91,6 +137,25 @@ function resetProcFor(
   resetProc(reason);
 }
 
+/**
+ * Sérialise une requête en JSON **strictement ASCII** : tout caractère au-delà
+ * de U+007F part en `\uXXXX`.
+ *
+ * Le pipe stdin d'un `powershell.exe` n'est pas en UTF-8 — la page de code
+ * dépend du poste — et un script métier peut contenir des accents (ne serait-ce
+ * que dans ses commentaires). Rester en ASCII rend le transport indépendant de
+ * ce réglage. C'est la garantie qu'apportait l'ancien base64, que
+ * ConstrainedLanguage ne permet plus de décoder côté PowerShell.
+ */
+function toAsciiJsonLine(id: string, code: string): string {
+  const json = JSON.stringify({ id, code });
+  const escaped = json.replace(
+    /[^\x00-\x7F]/g,
+    (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'),
+  );
+  return `${escaped}\n`;
+}
+
 function onStdout(chunk: string): void {
   stdoutBuf += chunk;
   let nl: number;
@@ -105,30 +170,47 @@ function onStdout(chunk: string): void {
       continue; // ligne parasite (ne devrait pas arriver)
     }
     if (!env.id) continue;
+    // Une enveloppe bien formée prouve que la boucle tourne : le compteur de
+    // morts prématurées est réarmé (une mort plus tard sera un incident
+    // ponctuel — timeout, EDR — et non un environnement inhospitalier).
+    answeredSinceSpawn = true;
+    fastDeaths = 0;
     const pend = pending.get(env.id);
     if (!pend) continue;
     pending.delete(env.id);
     clearTimeout(pend.timer);
     if (env.ok) {
-      pend.resolve({
-        stdout: Buffer.from(env.out ?? '', 'base64').toString('utf8'),
-        error: null,
-      });
+      pend.resolve({ stdout: env.out ?? '', error: null });
     } else {
-      pend.resolve({
-        stdout: '',
-        error:
-          Buffer.from(env.err ?? '', 'base64').toString('utf8') ||
-          'erreur PowerShell',
-      });
+      pend.resolve({ stdout: '', error: env.err || 'erreur PowerShell' });
     }
   }
 }
 
 /** Démarre le process si besoin. Retourne null si le spawn échoue. */
+/**
+ * Comptabilise une sortie de process pour le coupe-circuit. Ne compte que les
+ * morts du process COURANT (un `exit` en retard d'une instance déjà remplacée
+ * ne doit pas pénaliser la nouvelle) et uniquement celles survenues avant la
+ * première réponse.
+ */
+function noteExit(emitter: ChildProcessWithoutNullStreams): void {
+  if (proc !== emitter) return;
+  if (answeredSinceSpawn) return;
+  if (Date.now() - spawnedAt >= FAST_DEATH_MS) return;
+  fastDeaths += 1;
+  if (fastDeaths < MAX_FAST_DEATHS) return;
+  giveUpReason =
+    `la boucle PowerShell est morte ${MAX_FAST_DEATHS} fois de suite en moins de ` +
+    `${FAST_DEATH_MS} ms sans répondre — mécanisme désactivé pour cette session ` +
+    `(environnement probablement en ConstrainedLanguage / AppLocker)`;
+  console.warn(`[powershell] ${giveUpReason}`);
+}
+
 function ensureProc(): ChildProcessWithoutNullStreams | null {
   if (proc) return proc;
   if (stopped) return null;
+  if (giveUpReason) return null;
   let p: ChildProcessWithoutNullStreams;
   try {
     p = spawn(
@@ -151,6 +233,8 @@ function ensureProc(): ChildProcessWithoutNullStreams | null {
     return null;
   }
   proc = p;
+  spawnedAt = Date.now();
+  answeredSinceSpawn = false;
   p.stdout.setEncoding('utf8');
   p.stdout.on('data', onStdout);
   // stderr = progression d'autoload / warnings : ignoré (jamais nos données).
@@ -172,7 +256,10 @@ function ensureProc(): ChildProcessWithoutNullStreams | null {
   // en vol est résolue en erreur par `resetProc` et le tick suivant respawn.
   p.stdin.on('error', (err) => resetProcFor(p, `PowerShell stdin: ${err.message}`));
   p.on('error', (err) => resetProcFor(p, `PowerShell: ${err.message}`));
-  p.on('exit', (code) => resetProcFor(p, `PowerShell terminé (code=${code})`));
+  p.on('exit', (code) => {
+    noteExit(p);
+    resetProcFor(p, `PowerShell terminé (code=${code})`);
+  });
   return p;
 }
 
@@ -192,7 +279,7 @@ export function runPersistentPowershell(
   return new Promise((resolve) => {
     const p = ensureProc();
     if (!p) {
-      resolve({ stdout: '', error: 'PowerShell indisponible' });
+      resolve({ stdout: '', error: giveUpReason ?? 'PowerShell indisponible' });
       return;
     }
     if (!p.stdin.writable) {
@@ -212,7 +299,7 @@ export function runPersistentPowershell(
     }, timeoutMs);
     pending.set(id, { resolve, timer });
     try {
-      p.stdin.write(`${id} ${Buffer.from(script, 'utf8').toString('base64')}\n`);
+      p.stdin.write(toAsciiJsonLine(id, script));
     } catch (err) {
       pending.delete(id);
       clearTimeout(timer);

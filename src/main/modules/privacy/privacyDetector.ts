@@ -20,7 +20,8 @@ const TIMEOUT_MS = 10_000;
  */
 const SCRIPT = `
 $ErrorActionPreference = 'SilentlyContinue'
-$OutputEncoding = [System.Text.Encoding]::UTF8
+# Pas de $OutputEncoding ici : interdit en ConstrainedLanguage, et inutile —
+# le transport du PowerShell résident est en ASCII pur (cf. persistent-loop.ps1).
 
 function Get-ActiveApps($cap) {
   $apps = @()
