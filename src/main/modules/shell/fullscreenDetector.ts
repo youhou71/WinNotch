@@ -33,6 +33,14 @@ import { IpcChannel } from '../../../shared/types';
 import { powershellExe } from './powershellPath';
 import { psScriptPath } from './psScriptPath';
 import { getNotchWindow } from '../../window/notchWindow';
+import { isFullscreenWindow, parseDetectorLine } from './fullscreenLogic';
+import {
+  isNativeDetectorRunning,
+  startNativeDetector,
+  stopNativeDetector,
+  type NativeDetectorCallbacks,
+} from './fullscreenDetectorNative';
+import { getNativeWin32Error } from '../../native/win32';
 
 const POLL_INTERVAL_MS = 750;
 /**
@@ -41,8 +49,9 @@ const POLL_INTERVAL_MS = 750;
  * négligeable.
  */
 const ALT_POLL_INTERVAL_MS = 75;
-/** Marge tolérée sur chaque bord (DPI, ombres, etc.). */
-const EDGE_TOLERANCE_PX = 2;
+// La tolérance de bord vit désormais dans `fullscreenLogic.ts`, partagée par
+// les deux implémentations. Ces deux constantes ne servent plus qu'à
+// paramétrer le script PowerShell de repli.
 
 let psProcess: ChildProcessWithoutNullStreams | null = null;
 let lastEmitted: boolean | null = null;
@@ -66,22 +75,6 @@ export function setAltKeyHandler(handler: ((down: boolean) => void) | null): voi
 // fournissant les bounds de la fenêtre active avec des prebuilds compatibles
 // Electron, ce module reste en PowerShell (le `Add-Type` demeure dans le .ps1).
 
-/**
- * Compare deux rectangles avec une marge de tolérance.
- * Retourne true si `inner` ≈ `outer` sur les 4 bords.
- */
-function rectsMatch(
-  inner: { x: number; y: number; w: number; h: number },
-  outer: { x: number; y: number; width: number; height: number },
-): boolean {
-  return (
-    Math.abs(inner.x - outer.x) <= EDGE_TOLERANCE_PX &&
-    Math.abs(inner.y - outer.y) <= EDGE_TOLERANCE_PX &&
-    Math.abs(inner.x + inner.w - (outer.x + outer.width)) <= EDGE_TOLERANCE_PX &&
-    Math.abs(inner.y + inner.h - (outer.y + outer.height)) <= EDGE_TOLERANCE_PX
-  );
-}
-
 function emit(fullscreen: boolean): void {
   if (lastEmitted === fullscreen) return;
   lastEmitted = fullscreen;
@@ -100,6 +93,20 @@ export function isFullscreenActive(): boolean {
   return lastEmitted === true;
 }
 
+/**
+ * Évalue un échantillon de fenêtre et diffuse le verdict. Point de convergence
+ * des deux implémentations : le chemin natif l'appelle avec ce que renvoie
+ * `user32`, le chemin PowerShell avec ce qu'il a parsé de stdout. La décision
+ * elle-même est déléguée à `fullscreenLogic`, donc identique dans les deux cas.
+ */
+function evaluateSample(
+  sample: { rect: { left: number; top: number; right: number; bottom: number }; pid: number } | null,
+): void {
+  if (!sample) return;
+  const display = screen.getPrimaryDisplay();
+  emit(isFullscreenWindow(sample.rect, sample.pid, process.pid, display.bounds));
+}
+
 function handleLine(line: string): void {
   const trimmed = line.trim();
   if (!trimmed) return;
@@ -108,31 +115,64 @@ function handleLine(line: string): void {
     altKeyHandler?.(trimmed === 'ALT,1');
     return;
   }
-  const parts = trimmed.split(',');
-  if (parts.length < 5) return;
-  const [l, t, r, b, pidStr] = parts.map((s) => Number(s));
-  if (![l, t, r, b].every(Number.isFinite)) return;
-
-  // On ignore notre propre process : si l'utilisateur passe le notch
-  // en expanded sur primary display, on ne veut pas se masquer
-  // nous-mêmes (de toute façon le mode expanded n'est pas concerné,
-  // c'est un filet supplémentaire).
-  const win = getNotchWindow();
-  if (win && pidStr === process.pid) {
-    emit(false);
-    return;
-  }
-  void pidStr;
-
-  const display = screen.getPrimaryDisplay();
-  const isFullscreen = rectsMatch(
-    { x: l, y: t, w: r - l, h: b - t },
-    display.bounds,
-  );
-  emit(isFullscreen);
+  evaluateSample(parseDetectorLine(trimmed));
 }
 
+/** Callbacks passés au détecteur natif — mêmes sorties que le parsing stdout. */
+const nativeCallbacks: NativeDetectorCallbacks = {
+  onAltChange: (down) => altKeyHandler?.(down),
+  onWindowSample: (info) =>
+    evaluateSample(info ? { rect: info, pid: info.pid } : null),
+};
+
+/**
+ * Démarre le détecteur, en préférant l'implémentation native.
+ *
+ * Ordre de préférence :
+ *  1. native (koffi → `user32`) : fonctionne quel que soit le mode de langage
+ *     PowerShell imposé par la politique du poste, et ne crée aucun process ;
+ *  2. PowerShell : repli conservé tant que le natif n'a pas fait ses preuves en
+ *     production. Il reste la seule option si le binaire de koffi manque ou si
+ *     son chargement est bloqué.
+ *
+ * Deux échappatoires par variable d'environnement, utiles au diagnostic :
+ *  - `WINNOTCH_FORCE_PS_DETECTOR=1` → force le repli PowerShell ;
+ *  - `WINNOTCH_FORCE_NATIVE_DETECTOR=1` → interdit le repli, pour vérifier le
+ *    chemin natif depuis le dépôt (où PowerShell tourne en `FullLanguage` et
+ *    masquerait donc une régression du natif).
+ */
 export function startFullscreenDetector(): void {
+  if (psProcess || isNativeDetectorRunning()) return;
+
+  const forcePs = process.env.WINNOTCH_FORCE_PS_DETECTOR === '1';
+  const forceNative = process.env.WINNOTCH_FORCE_NATIVE_DETECTOR === '1';
+
+  if (!forcePs) {
+    if (startNativeDetector(nativeCallbacks, altKeyHandler !== null)) {
+      console.log('[fullscreen] détecteur natif actif (aucun process PowerShell)');
+      return;
+    }
+    const reason = getNativeWin32Error() ?? 'raison inconnue';
+    if (forceNative) {
+      console.warn(
+        `[fullscreen] natif indisponible (${reason}) et repli interdit ` +
+          '(WINNOTCH_FORCE_NATIVE_DETECTOR=1) — détection désactivée',
+      );
+      return;
+    }
+    console.warn(`[fullscreen] natif indisponible (${reason}) — repli sur PowerShell`);
+  }
+
+  startPowershellDetector();
+}
+
+/**
+ * Repli historique : un `powershell.exe` résident qui poll `user32` par
+ * P/Invoke et écrit ses échantillons sur stdout. Inopérant sur un poste où la
+ * politique impose `ConstrainedLanguage` (le `Add-Type` du script y est
+ * interdit) — c'est précisément ce que l'implémentation native corrige.
+ */
+function startPowershellDetector(): void {
   if (psProcess) return;
   try {
     psProcess = spawn(
@@ -190,10 +230,15 @@ export function startFullscreenDetector(): void {
 }
 
 export function stopFullscreenDetector(): void {
-  if (!psProcess) return;
-  try {
-    psProcess.kill();
-  } catch { /* ignore */ }
-  psProcess = null;
+  // Arrête l'implémentation active, quelle qu'elle soit. `stopNativeDetector`
+  // notifie le relâchement d'Alt s'il était enfoncé — sans quoi le notch
+  // resterait figé en mode Peek.
+  stopNativeDetector(nativeCallbacks);
+  if (psProcess) {
+    try {
+      psProcess.kill();
+    } catch { /* ignore */ }
+    psProcess = null;
+  }
   lastEmitted = null;
 }

@@ -103,6 +103,14 @@ npmRebuild: false
 
 asar: true
 asarUnpack:
+  # koffi (FFI vers user32 pour le détecteur plein écran / Alt-Peek) charge son
+  # binaire depuis un package optionnel par plateforme, résolu en RELATIF :
+  # `koffi/src/koffi/` → `../../../@koromix/koffi-win32-x64/win32_x64/koffi.node`.
+  # Les DEUX doivent donc être dépaquetés : ne sortir que `@koromix` laisserait
+  # ce chemin relatif pointer à l'intérieur de l'asar, d'où un `.node`
+  # introuvable — panne qui ne se manifesterait QUE sur l'app packagée.
+  - "**/node_modules/koffi/**"
+  - "**/node_modules/@koromix/**"
   - "**/node_modules/loudness/**"
   - "**/node_modules/@coooookies/windows-smtc-monitor/**"
   - "**/node_modules/@nut-tree-fork/libnut-win32/**"
