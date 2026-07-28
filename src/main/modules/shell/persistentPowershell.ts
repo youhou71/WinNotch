@@ -14,12 +14,18 @@
  * suivants en quelques millisecondes (CIM/modules déjà chauds dans le
  * process). Partagé par les modules VPN et Système.
  *
- * Protocole (1 ligne in → 1 ligne out, base64 pour éviter tout souci de
- * quoting/newline) :
- *   - Node écrit sur stdin : `<id> <base64(script UTF-8)>\n`
+ * Protocole (1 ligne JSON in → 1 ligne JSON out), **100 % ASCII dans les deux
+ * sens** pour être insensible à la page de code de la console :
+ *   - Node écrit sur stdin : `{"id":"<id>","code":"<script>"}\n`
  *   - le boucleur PS exécute le script et écrit sur stdout une enveloppe JSON
- *     compacte : `{"id":"<id>","ok":true,"out":"<base64(sortie UTF-8)>"}`
- *     (ou `"ok":false,"err":"<base64(message)>"`).
+ *     compacte : `{"id":"<id>","ok":true,"out":"<sortie>"}`
+ *     (ou `"ok":false,"err":"<message>"`).
+ *
+ * L'ancien transport base64 a été abandonné : son décodage exigeait
+ * `[Convert]::FromBase64String`, interdit en ConstrainedLanguage — le mode que
+ * AppLocker impose aux scripts sous `%LOCALAPPDATA%`, donc à l'app installée.
+ * L'échappement `\uXXXX` des non-ASCII (aller comme retour) offre la même
+ * garantie d'encodage sans aucune primitive interdite.
  *
  * Le process est relancé automatiquement au prochain appel s'il meurt ou si
  * une requête dépasse son délai (un cmdlet réellement bloqué).
@@ -32,8 +38,8 @@ import { psScriptPath } from './psScriptPath';
 // `resources/ps/persistent-loop.ps1`, lancé via `-File` (cf. ensureProc).
 // On évite ainsi `-EncodedCommand` (base64) dans la ligne de commande, que les
 // antivirus heuristiques signalent comme de l'obfuscation. Le protocole stdin
-// (1 ligne par requête, script en base64) reste interne au pipe — jamais dans
-// la ligne de commande, donc invisible aux scanners.
+// (1 ligne JSON par requête) reste interne au pipe — jamais dans la ligne de
+// commande, donc invisible aux scanners.
 
 export interface PsResult {
   /** Sortie stdout du script (chaîne vide si rien). */
@@ -131,6 +137,25 @@ function resetProcFor(
   resetProc(reason);
 }
 
+/**
+ * Sérialise une requête en JSON **strictement ASCII** : tout caractère au-delà
+ * de U+007F part en `\uXXXX`.
+ *
+ * Le pipe stdin d'un `powershell.exe` n'est pas en UTF-8 — la page de code
+ * dépend du poste — et un script métier peut contenir des accents (ne serait-ce
+ * que dans ses commentaires). Rester en ASCII rend le transport indépendant de
+ * ce réglage. C'est la garantie qu'apportait l'ancien base64, que
+ * ConstrainedLanguage ne permet plus de décoder côté PowerShell.
+ */
+function toAsciiJsonLine(id: string, code: string): string {
+  const json = JSON.stringify({ id, code });
+  const escaped = json.replace(
+    /[^\x00-\x7F]/g,
+    (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'),
+  );
+  return `${escaped}\n`;
+}
+
 function onStdout(chunk: string): void {
   stdoutBuf += chunk;
   let nl: number;
@@ -155,17 +180,9 @@ function onStdout(chunk: string): void {
     pending.delete(env.id);
     clearTimeout(pend.timer);
     if (env.ok) {
-      pend.resolve({
-        stdout: Buffer.from(env.out ?? '', 'base64').toString('utf8'),
-        error: null,
-      });
+      pend.resolve({ stdout: env.out ?? '', error: null });
     } else {
-      pend.resolve({
-        stdout: '',
-        error:
-          Buffer.from(env.err ?? '', 'base64').toString('utf8') ||
-          'erreur PowerShell',
-      });
+      pend.resolve({ stdout: '', error: env.err || 'erreur PowerShell' });
     }
   }
 }
@@ -282,7 +299,7 @@ export function runPersistentPowershell(
     }, timeoutMs);
     pending.set(id, { resolve, timer });
     try {
-      p.stdin.write(`${id} ${Buffer.from(script, 'utf8').toString('base64')}\n`);
+      p.stdin.write(toAsciiJsonLine(id, script));
     } catch (err) {
       pending.delete(id);
       clearTimeout(timer);

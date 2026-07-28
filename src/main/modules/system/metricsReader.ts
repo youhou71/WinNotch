@@ -122,7 +122,8 @@ export interface NetSnapshot {
  */
 const NET_SCRIPT = `
 $ErrorActionPreference = 'SilentlyContinue'
-$OutputEncoding = [System.Text.Encoding]::UTF8
+# Pas de $OutputEncoding ici : interdit en ConstrainedLanguage, et inutile —
+# le transport du PowerShell résident est en ASCII pur (cf. persistent-loop.ps1).
 $stats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue
 # Jointure hashtable : DEUX requêtes CIM fixes au lieu de 1 + N
 # (l'ancien Get-NetAdapter -Name par adaptateur multipliait les requêtes
@@ -136,7 +137,7 @@ if ($stats) {
   foreach ($s in $stats) {
     $adapter = $adaptersByName[[string]$s.Name]
     if (-not $adapter) { continue }
-    $rows += [pscustomobject]@{
+    $rows += @{
       name = [string]$s.Name
       description = [string]$adapter.InterfaceDescription
       bytesReceived = [int64]$s.ReceivedBytes
@@ -144,7 +145,7 @@ if ($stats) {
     }
   }
 }
-[pscustomobject]@{ adapters = $rows } | ConvertTo-Json -Depth 3 -Compress
+@{ adapters = $rows } | ConvertTo-Json -Depth 3 -Compress
 `.trim();
 
 /**

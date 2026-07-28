@@ -57,7 +57,8 @@ interface VpnRawSnapshot {
  */
 const DETECT_SCRIPT = `
 $ErrorActionPreference = 'SilentlyContinue'
-$OutputEncoding = [System.Text.Encoding]::UTF8
+# Pas de $OutputEncoding ici : interdit en ConstrainedLanguage, et inutile —
+# le transport du PowerShell résident est en ASCII pur (cf. persistent-loop.ps1).
 
 # Patterns d'InterfaceDescription / Name typiques d'une interface VPN.
 # Liste large : on préfère un faux positif raisonnable à louper un client.
@@ -88,7 +89,7 @@ try {
     }
     if (-not $matched -and $name -like 'wg*') { $matched = $true }
     if ($matched) {
-      $adapters += [pscustomobject]@{
+      $adapters += @{
         name = $name
         description = $desc
         mediaType = $media
@@ -106,7 +107,7 @@ try {
   $rows = Get-CimInstance Win32_Process -Filter $procFilter -ErrorAction SilentlyContinue
   foreach ($p in $rows) {
     $n = [System.IO.Path]::GetFileNameWithoutExtension([string]$p.Name)
-    $processes += [pscustomobject]@{
+    $processes += @{
       name = $n
       commandLine = [string]$p.CommandLine
     }
@@ -126,7 +127,7 @@ try {
     Group-Object -Property Name |
     ForEach-Object { $_.Group[0] }
   foreach ($c in $unique) {
-    $windowsVpn += [pscustomobject]@{
+    $windowsVpn += @{
       name = [string]$c.Name
       serverAddress = [string]$c.ServerAddress
       status = $c.ConnectionStatus.ToString()
@@ -134,7 +135,7 @@ try {
   }
 } catch {}
 
-[pscustomobject]@{
+@{
   adapters = $adapters
   processes = $processes
   windowsVpn = $windowsVpn
