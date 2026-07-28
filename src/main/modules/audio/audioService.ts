@@ -29,6 +29,7 @@
 import { ipcMain, powerMonitor } from 'electron';
 import { IpcChannel, type AudioState, type AudioDevice } from '../../../shared/types';
 import { getNotchWindow } from '../../window/notchWindow';
+import { getNotchMode, onNotchModeChange } from '../../shortcuts/altPeek';
 import { getVolumeInfo, setVolume, setMuted, type VolumeInfo } from './volume';
 import { listOutputDevices, setDefaultOutput } from './devices';
 
@@ -71,6 +72,8 @@ let cached: AudioState = {
 };
 
 let pollTimer: NodeJS.Timeout | null = null;
+/** Désabonnement du changement de mode notch (armé par `startAudioPolling`). */
+let unsubscribeMode: (() => void) | null = null;
 /** Timer de la relance devices en cours (warm-up boot/réveil), null si aucune. */
 let warmupTimer: NodeJS.Timeout | null = null;
 /** True entre les events powerMonitor suspend → resume : gèle le polling. */
@@ -282,8 +285,27 @@ export function startAudioPolling(): void {
   });
   pollTimer = setInterval(() => {
     if (suspended) return;
+    // Notch replié = personne ne lit cet état : `AudioFooter` n'existe que
+    // dans `ExpandedDashboard`, et la rangée repliée n'affiche aucune chip
+    // audio. Or chaque cycle spawne le binaire `loudness`, soit 43 200
+    // créations de process par jour — dont l'écrasante majorité pour
+    // alimenter une interface que personne ne regarde. On saute donc le
+    // cycle, et `onNotchModeChange` resynchronise à l'ouverture.
+    //
+    // Le test porte sur le mode du notch, PAS sur `isFullscreenActive()` :
+    // ce dernier repose sur `fullscreen-detector.ps1`, qui ne démarre pas
+    // sur un poste en ConstrainedLanguage et y renvoie donc toujours `false`.
+    if (getNotchMode() === 'collapsed') return;
     void refresh();
   }, POLL_INTERVAL_MS);
+
+  // Ouverture du notch : l'état a pu dériver pendant la mise en veille du
+  // poller (volume changé aux touches média, casque branché). On resynchronise
+  // immédiatement, devices compris, pour que le panneau s'affiche à jour.
+  unsubscribeMode = onNotchModeChange((mode) => {
+    if (mode === 'collapsed' || suspended) return;
+    void refresh({ withDevices: true });
+  });
 
   // Gèle le polling pendant la veille : au réveil, un refresh immédiat
   // (devices compris — un dock/casque a pu apparaître pendant la veille)
@@ -306,6 +328,10 @@ export function stopAudioPolling(): void {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
+  }
+  if (unsubscribeMode) {
+    unsubscribeMode();
+    unsubscribeMode = null;
   }
   cancelDeviceWarmup();
 }
