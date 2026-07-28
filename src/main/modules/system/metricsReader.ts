@@ -18,6 +18,7 @@
  */
 import * as os from 'os';
 import { runPersistentPowershell } from '../shell/persistentPowershell';
+import { getNativeNetError, readNetCounters } from '../../native/netCounters';
 
 // Généreux : le premier appel (dans le process persistant partagé) paie
 // l'autoload des modules + l'init CIM ; les suivants sont quasi instantanés.
@@ -115,6 +116,9 @@ export interface NetSnapshot {
   adapters: NetAdapterSample[];
 }
 
+/** Trace unique du repli natif → PowerShell (le tick se répète chaque seconde). */
+let nativeNetWarned = false;
+
 /**
  * Le script ne filtre PAS côté PowerShell — la sélection finale (whitelist
  * utilisateur OU exclusion par défaut) est faite côté TS pour rester
@@ -149,14 +153,38 @@ if ($stats) {
 `.trim();
 
 /**
- * Exécute le script et retourne la liste des adapters actifs avec leurs
- * compteurs cumulés. Retourne `null` en cas d'erreur PowerShell (le caller
- * remonte ça dans `SystemState.lastError`).
+ * Relève la liste des adapters actifs avec leurs compteurs cumulés, par les
+ * compteurs natifs si possible, sinon par le script PowerShell. Retourne
+ * `null` en cas d'erreur (le caller remonte ça dans `SystemState.lastError`).
+ *
+ * `WINNOTCH_FORCE_PS_NET=1` force le repli, pour comparer les deux sources.
  */
 export async function readNetSnapshot(): Promise<{
   snapshot: NetSnapshot | null;
   error: string | null;
 }> {
+  // Chemin natif d'abord : `GetIfTable2` in-process coûte ~3 ms contre 80 à
+  // 200 ms d'aller-retour PowerShell, à 1 Hz. Il ne dépend surtout pas du mode
+  // de langage imposé au poste, contrairement au script — même si celui-ci a
+  // été rendu compatible ConstrainedLanguage, s'en affranchir supprime une
+  // classe entière de pannes. `readNetCounters()` renvoie déjà exactement la
+  // forme de `NetAdapterSample`, et filtre les couches NDIS qui dupliqueraient
+  // les compteurs.
+  if (process.env.WINNOTCH_FORCE_PS_NET !== '1') {
+    const native = readNetCounters();
+    if (native) {
+      return { snapshot: { at: Date.now(), adapters: native }, error: null };
+    }
+    // Une seule trace par session : ce tick se répète chaque seconde.
+    if (!nativeNetWarned) {
+      nativeNetWarned = true;
+      console.warn(
+        `[system] compteurs réseau natifs indisponibles (${getNativeNetError() ?? 'raison inconnue'})` +
+          ' — repli sur PowerShell',
+      );
+    }
+  }
+
   // Exécuté dans le powershell.exe persistant partagé (cf. persistentPowershell)
   // : pas de spawn par tick (le module Système poll jusqu'à 1 Hz), les modules
   // CDXML et la session CIM restent chauds entre les appels.
