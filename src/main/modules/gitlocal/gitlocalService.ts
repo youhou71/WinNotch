@@ -46,6 +46,14 @@ const MIN_POLL_MS = 15_000;
 const STATUS_CONCURRENCY = 4;
 /** Durée de validité de la liste des repos découverts. */
 const REPO_DISCOVERY_TTL_MS = 10 * 60 * 1000;
+/**
+ * Au-delà de ce délai, un repo est re-scanné même si son `.git` n'a pas bougé.
+ *
+ * Indispensable : la signature ci-dessous ne voit QUE le dossier `.git`, donc
+ * un commit, un checkout ou un fetch. Éditer un fichier suivi ne touche pas
+ * `.git` — sans ce rattrapage, le compteur « non commité » resterait figé.
+ */
+const FULL_RESCAN_MS = 5 * 60 * 1000;
 
 const store = new Store<Settings>({
   defaults: DEFAULT_SETTINGS,
@@ -63,6 +71,54 @@ let pollTimer: NodeJS.Timeout | null = null;
 let scanInFlight: Promise<void> | null = null;
 /** Cache de découverte (walk récursif des rootDirs). */
 let repoPathsCache: { paths: string[]; at: number } | null = null;
+
+/**
+ * Statut mémoïsé par repo, réutilisé tant que le `.git` n'a pas bougé.
+ *
+ * Motivation (audit perf) : `git status` était relancé sur CHAQUE repo à
+ * CHAQUE tick, sans le moindre test de fraîcheur. Sur un poste avec 20 repos
+ * et un tick de 60 s, cela faisait 20 `git.exe` par minute — et autant de
+ * `conhost.exe`, chaque process console en allouant un — soit ~57 600
+ * créations de process par jour, toutes interceptées et scannées par
+ * l'antivirus/EDR, alors que la quasi-totalité des repos n'avait pas changé.
+ * Un `git status` coûte ici de 0,7 à 1,9 s (mesuré) : le scan complet occupait
+ * ~18 s de travail disque par minute pour un résultat presque toujours
+ * identique.
+ *
+ * Borné par construction : purgé à chaque scan des repos qui ont disparu de la
+ * découverte, il ne peut pas dépasser le nombre de repos réellement présents.
+ */
+interface RepoCacheEntry {
+  repo: GitLocalRepo;
+  /** Empreinte du `.git` (mtimes) au moment du dernier `git status`. */
+  signature: string;
+  scannedAt: number;
+}
+const repoCache = new Map<string, RepoCacheEntry>();
+
+/**
+ * Empreinte bon marché de l'état d'un repo : mtimes de `.git/index` (staging,
+ * refresh d'index), `.git/HEAD` (changement de branche) et `.git/refs`
+ * (commits, fetch). Trois `fs.stat`, zéro process — à comparer aux ~1 s et aux
+ * deux process (`git.exe` + `conhost.exe`) d'un `git status`.
+ *
+ * Une entrée illisible devient `-` : un repo dont le `.git` est un fichier
+ * (worktree lié, sous-module) garde donc une signature constante et ne dépend
+ * que du rattrapage `FULL_RESCAN_MS`, ce qui reste correct.
+ */
+async function repoSignature(repoPath: string): Promise<string> {
+  const parts = await Promise.all(
+    ['index', 'HEAD', 'refs'].map(async (entry) => {
+      try {
+        const st = await fs.stat(join(repoPath, '.git', entry));
+        return String(st.mtimeMs);
+      } catch {
+        return '-';
+      }
+    }),
+  );
+  return parts.join('|');
+}
 
 /**
  * Exécute `fn` sur chaque item avec au plus `limit` exécutions simultanées.
@@ -220,12 +276,43 @@ async function checkGitAvailable(): Promise<string | null> {
 }
 
 /**
+ * `readRepoStatus` mémoïsé : ne relance `git status` (donc `git.exe` +
+ * `conhost.exe`) que si le `.git` a bougé, ou si la dernière lecture remonte à
+ * plus de `FULL_RESCAN_MS`.
+ *
+ * Les résultats en erreur ne sont volontairement PAS mémoïsés : un repo
+ * momentanément illisible (verrou, disque réseau) doit être retenté au tick
+ * suivant plutôt que d'afficher son erreur pendant cinq minutes.
+ */
+async function readRepoStatusCached(path: string): Promise<GitLocalRepo> {
+  const signature = await repoSignature(path);
+  const hit = repoCache.get(path);
+  if (
+    hit &&
+    hit.signature === signature &&
+    Date.now() - hit.scannedAt < FULL_RESCAN_MS
+  ) {
+    return hit.repo;
+  }
+  const repo = await readRepoStatus(path);
+  if (!repo.error) {
+    repoCache.set(path, { repo, signature, scannedAt: Date.now() });
+  }
+  return repo;
+}
+
+/**
  * Scan + statuts + broadcast. Réentrance protégée par `scanInFlight`.
  * `forceScan` bypasse le cache de découverte (refresh manuel, changement
  * de config).
  */
 async function refreshOnce(opts: { forceScan?: boolean } = {}): Promise<GitLocalState> {
-  if (opts.forceScan) repoPathsCache = null;
+  if (opts.forceScan) {
+    repoPathsCache = null;
+    // Refresh explicite (bouton, changement de config) : l'utilisateur attend
+    // des statuts frais, pas ceux mémoïsés.
+    repoCache.clear();
+  }
   if (scanInFlight) {
     await scanInFlight;
     return currentState;
@@ -265,7 +352,15 @@ async function refreshOnce(opts: { forceScan?: boolean } = {}): Promise<GitLocal
         paths = await scanForRepos(rootDirs, cfg.scanDepth, cfg.ignorePatterns);
         repoPathsCache = { paths, at: Date.now() };
       }
-      const repos = await mapLimit(paths, STATUS_CONCURRENCY, readRepoStatus);
+      const repos = await mapLimit(paths, STATUS_CONCURRENCY, readRepoStatusCached);
+      // Purge des repos disparus (dossier supprimé, rootDir retiré) : garde le
+      // cache borné au nombre de repos réellement découverts.
+      if (repoCache.size > paths.length) {
+        const alive = new Set(paths);
+        for (const key of repoCache.keys()) {
+          if (!alive.has(key)) repoCache.delete(key);
+        }
+      }
       // Tri : dirty d'abord (pour attirer l'œil), puis ordre alpha.
       repos.sort((a, b) => {
         if (a.isDirty !== b.isDirty) return a.isDirty ? -1 : 1;
