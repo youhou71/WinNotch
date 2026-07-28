@@ -631,7 +631,19 @@ export async function syncAutoStartFromSystem(): Promise<void> {
           // visible dans « Démarrage ». Le prochain toggle nettoiera.
         }
       } else {
-        console.warn('[settings] migration v0→v1 autostart échec:', result.error);
+        // La tâche n'a pas pu être (re)créée : le plus souvent un EDR qui
+        // bloque le spawn de `schtasks.exe` par un binaire non signé — créer
+        // une tâche planifiée est un comportement de persistance surveillé.
+        //
+        // Ne PAS laisser `autoStart` à `true` dans ce cas : l'utilisateur
+        // verrait un réglage « activé » alors que rien ne démarre avec sa
+        // session, et cette tentative échouerait à chaque démarrage sans qu'il
+        // en sache rien (le `console.warn` est invisible sur l'app packagée).
+        // Mieux vaut un toggle qui dit la vérité, quitte à ce qu'il se
+        // désactive tout seul.
+        console.warn('[settings] recréation de la tâche autostart échouée:', result.error);
+        store.set('autoStart', false);
+        broadcast(getAll());
       }
       return;
     }
