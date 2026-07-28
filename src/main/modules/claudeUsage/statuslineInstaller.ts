@@ -61,7 +61,21 @@ async function copyWrapperToUserData(): Promise<string> {
   const src = wrapperSourcePath();
   const dst = wrapperTargetPath();
   await fs.mkdir(path.dirname(dst), { recursive: true });
-  await fs.copyFile(src, dst);
+  try {
+    await fs.copyFile(src, dst);
+  } catch (err) {
+    // Un `ENOENT` brut ne dit pas QUEL fichier manque, et le réflexe est de
+    // chercher du côté de ~/.claude — alors que la cause est en amont : le
+    // wrapper absent des resources packagées (oubli dans `extraResources`).
+    // Ce cas ne se voit jamais en dev, où la source est le dossier du dépôt.
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(
+        `wrapper introuvable dans les resources de l'app : ${src}. ` +
+          "Il doit être déclaré dans `extraResources` d'electron-builder.yml.",
+      );
+    }
+    throw err;
+  }
   return dst;
 }
 

@@ -75,6 +75,13 @@ extraResources:
   # Cf. src/main/modules/shell/psScriptPath.ts.
   - from: resources/ps
     to: ps
+  # Wrapper de statusline Claude Code, copié vers userData à l'installation du
+  # module Claude Usage (cf. statuslineInstaller.ts, `wrapperSourcePath()`).
+  # SANS cette entrée, il n'existe QUE dans le dépôt : l'installation échoue en
+  # `ENOENT` sur l'app packagée alors qu'elle fonctionne en dev, où le fichier
+  # est résolu depuis `app.getAppPath()/resources`.
+  - from: resources/winnotch-statusline.cjs
+    to: winnotch-statusline.cjs
 
 # Activer l'asar (archive concaténée → démarrage plus rapide, anti-tampering
 # léger) mais EXCLURE les modules natifs : leurs .node ne sont pas chargés
