@@ -72,6 +72,25 @@ function resetProc(reason: string): void {
   stdoutBuf = '';
 }
 
+/**
+ * `resetProc` filtré sur l'identité du process émetteur.
+ *
+ * Les événements d'un process *déjà remplacé* arrivent en retard (un EPIPE
+ * tardif sur le stdin de l'ancien pipe, un `exit` traité après le respawn) :
+ * les router vers `resetProc` tuerait le process courant, parfaitement sain.
+ * Le garde rend donc chaque handler inoffensif dès que `proc` a changé — et
+ * c'est pour cela que `resetProc` ne détache PAS les listeners de `stdin` :
+ * ils doivent rester en place pour continuer à absorber les EPIPE tardifs
+ * plutôt que de les laisser remonter en `uncaughtException`.
+ */
+function resetProcFor(
+  emitter: ChildProcessWithoutNullStreams,
+  reason: string,
+): void {
+  if (proc !== emitter) return;
+  resetProc(reason);
+}
+
 function onStdout(chunk: string): void {
   stdoutBuf += chunk;
   let nl: number;
@@ -136,8 +155,24 @@ function ensureProc(): ChildProcessWithoutNullStreams | null {
   p.stdout.on('data', onStdout);
   // stderr = progression d'autoload / warnings : ignoré (jamais nos données).
   p.stderr.on('data', () => {});
-  p.on('error', (err) => resetProc(`PowerShell: ${err.message}`));
-  p.on('exit', (code) => resetProc(`PowerShell terminé (code=${code})`));
+  // stdin SANS handler d'erreur = crash de l'app. `write()` sur un pipe dont
+  // l'autre bout est mort ne lève rien de synchrone : l'EPIPE est émis sur le
+  // stream *après* le retour de `write()` (d'où `afterWriteDispatched` en tête
+  // de pile), donc le try/catch de `runPersistentPowershell` ne peut pas
+  // l'attraper. Sans listener, le stream escalade en `uncaughtException` →
+  // dialogue Electron « A JavaScript error occurred in the main process » et
+  // l'app entière est perdue pour une requête WMI lente.
+  //
+  // La fenêtre de tir est réelle : trois modules (Système 1 Hz, Confidentialité
+  // 4 s, VPN 10 s) partagent ce process. Le timeout de l'un déclenche
+  // `resetProc` → `kill()`, et une écriture d'un autre module peut partir avant
+  // que l'événement `exit` n'ait été traité par l'event loop (`stdin.writable`
+  // est alors encore `true`, le garde de `runPersistentPowershell` ne voit rien).
+  // L'EDR peut aussi tuer le process de son côté. Ici on absorbe : la requête
+  // en vol est résolue en erreur par `resetProc` et le tick suivant respawn.
+  p.stdin.on('error', (err) => resetProcFor(p, `PowerShell stdin: ${err.message}`));
+  p.on('error', (err) => resetProcFor(p, `PowerShell: ${err.message}`));
+  p.on('exit', (code) => resetProcFor(p, `PowerShell terminé (code=${code})`));
   return p;
 }
 
@@ -156,7 +191,16 @@ export function runPersistentPowershell(
 ): Promise<PsResult> {
   return new Promise((resolve) => {
     const p = ensureProc();
-    if (!p || !p.stdin.writable) {
+    if (!p) {
+      resolve({ stdout: '', error: 'PowerShell indisponible' });
+      return;
+    }
+    if (!p.stdin.writable) {
+      // Pipe déjà fermé alors que le process n'a pas (encore) émis `exit` : sans
+      // ce reset, `proc` resterait accroché à un process inutilisable et TOUS
+      // les appels suivants échoueraient en « PowerShell indisponible » jusqu'au
+      // redémarrage de l'app (modules Système / Confidentialité / VPN figés).
+      resetProcFor(p, 'PowerShell: stdin fermé');
       resolve({ stdout: '', error: 'PowerShell indisponible' });
       return;
     }
