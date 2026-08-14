@@ -27,8 +27,26 @@
  * L'échappement `\uXXXX` des non-ASCII (aller comme retour) offre la même
  * garantie d'encodage sans aucune primitive interdite.
  *
- * Le process est relancé automatiquement au prochain appel s'il meurt ou si
- * une requête dépasse son délai (un cmdlet réellement bloqué).
+ * Le process est relancé automatiquement au prochain appel s'il meurt.
+ *
+ * **Expiration souple d'une requête.** Une requête qui dépasse son délai est
+ * abandonnée *seule* : elle est résolue en erreur, retirée de la file, et sa
+ * réponse tardive sera ignorée (l'id n'est plus dans `pending`). Le process,
+ * lui, survit — c'est le point important, car il est partagé par les modules
+ * Système (1 Hz), Confidentialité (4 s), VPN (10 s) et Audio. L'ancienne
+ * version tuait le process à la première expiration : un module lent
+ * emportait donc la détection des trois autres, qui recevaient au passage un
+ * message d'erreur mentionnant un délai qui n'était pas le leur (cas réel
+ * observé : « Détection VPN : timeout (10000 ms) » alors que le VPN attend
+ * 20 s — c'était l'expiration d'un autre module).
+ *
+ * Le filet reste en place pour le cas où la boucle est *réellement* bloquée
+ * (cmdlet gelé) : voir `MAX_ABANDONED_BEFORE_RESET`.
+ *
+ * Ce comportement ne se manifeste jamais en usage normal — rien ne
+ * signalerait donc sa régression. Il est couvert par un harnais dédié,
+ * `node scripts/check-ps-soft-timeout.mjs`, à relancer après toute
+ * modification de ce fichier ou de `persistent-loop.ps1`.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { powershellExe } from './powershellPath';
@@ -87,6 +105,25 @@ let spawnedAt = 0;
 /** La boucle courante a-t-elle répondu au moins une fois ? */
 let answeredSinceSpawn = false;
 let fastDeaths = 0;
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  Filet de dernier recours derrière l'expiration souple
+ *
+ *  Abandonner les requêtes une par une est le bon comportement quand la
+ *  boucle est simplement lente. Mais si elle est *vraiment* bloquée (cmdlet
+ *  gelé), plus personne ne la relancerait jamais et les quatre modules
+ *  resteraient muets jusqu'au redémarrage de l'app.
+ *
+ *  On compte donc les abandons **consécutifs sans la moindre réponse entre
+ *  temps** : la boucle traitant ses requêtes séquentiellement, un seul
+ *  cmdlet gelé fait expirer aussi celles qui suivent, et le seuil est
+ *  atteint. À l'inverse, un module isolément lent pendant que les autres
+ *  répondent ne déclenche rien — chaque enveloppe reçue réarme le compteur.
+ * ─────────────────────────────────────────────────────────────────── */
+
+/** Abandons consécutifs sans aucune réponse de la boucle entre temps. */
+let abandonedSinceAnswer = 0;
+const MAX_ABANDONED_BEFORE_RESET = 3;
 /** Non nul = coupe-circuit ouvert, on ne spawne plus. */
 let giveUpReason: string | null = null;
 
@@ -101,6 +138,10 @@ export function getPersistentPowershellFailure(): string | null {
 
 /** Tue le process (le cas échéant), vide la file en résolvant en erreur. */
 function resetProc(reason: string): void {
+  // Le compteur d'abandons appartient à l'instance qu'on abat : sans ce
+  // remise à zéro, la toute première expiration de la boucle suivante
+  // franchirait aussitôt le seuil et la tuerait à son tour.
+  abandonedSinceAnswer = 0;
   for (const [id, pend] of pending) {
     clearTimeout(pend.timer);
     pend.resolve({ stdout: '', error: reason });
@@ -170,11 +211,15 @@ function onStdout(chunk: string): void {
       continue; // ligne parasite (ne devrait pas arriver)
     }
     if (!env.id) continue;
-    // Une enveloppe bien formée prouve que la boucle tourne : le compteur de
-    // morts prématurées est réarmé (une mort plus tard sera un incident
-    // ponctuel — timeout, EDR — et non un environnement inhospitalier).
+    // Une enveloppe bien formée prouve que la boucle tourne : les compteurs
+    // de morts prématurées et d'abandons sont réarmés (une mort plus tard
+    // sera un incident ponctuel — timeout, EDR — et non un environnement
+    // inhospitalier). Réarmer ici, avant même de chercher la requête
+    // correspondante, est volontaire : la réponse *tardive* d'une requête
+    // déjà abandonnée prouve elle aussi que la boucle est vivante.
     answeredSinceSpawn = true;
     fastDeaths = 0;
+    abandonedSinceAnswer = 0;
     const pend = pending.get(env.id);
     if (!pend) continue;
     pending.delete(env.id);
@@ -293,9 +338,23 @@ export function runPersistentPowershell(
     }
     const id = `r${++seq}`;
     const timer = setTimeout(() => {
-      // Requête dépassée = cmdlet probablement bloqué. On relance tout le
-      // process (resetProc résout aussi les requêtes en file).
-      resetProc(`timeout (${timeoutMs} ms)`);
+      // Expiration SOUPLE : on abandonne cette requête seule. Le process
+      // survit (il est partagé), et la réponse tardive éventuelle sera
+      // ignorée puisque l'id n'est plus dans `pending`.
+      pending.delete(id);
+      abandonedSinceAnswer += 1;
+      const loopLooksStuck = abandonedSinceAnswer >= MAX_ABANDONED_BEFORE_RESET;
+      resolve({ stdout: '', error: `timeout (${timeoutMs} ms)` });
+      // Filet : plusieurs abandons d'affilée sans la moindre réponse — la
+      // boucle est vraisemblablement bloquée sur un cmdlet gelé. Là, et
+      // seulement là, on relance le process.
+      if (loopLooksStuck) {
+        const reason =
+          `${MAX_ABANDONED_BEFORE_RESET} requêtes expirées sans aucune réponse ` +
+          `— boucle PowerShell considérée bloquée, relance`;
+        console.warn(`[powershell] ${reason}`);
+        resetProc(reason);
+      }
     }, timeoutMs);
     pending.set(id, { resolve, timer });
     try {
