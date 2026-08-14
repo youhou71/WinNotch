@@ -19,10 +19,24 @@ export type NotchMode = 'collapsed' | 'expanded';
 export interface AudioDevice {
   id: string;
   name: string;
-  /** Catégorie déduite du nom du device — purement cosmétique (icône). */
-  type: 'speakers' | 'headphones' | 'display' | 'other';
+  /**
+   * Catégorie du périphérique — purement cosmétique (choix de l'icône).
+   *
+   * Renseignée en priorité par le **form factor déclaré par Windows** dans
+   * `HKLM\...\MMDevices\Audio\Render\<guid>\Properties` (cf.
+   * `audio/endpoints.ts`), qui est une donnée du pilote et non une
+   * supposition. Repli sur l'heuristique de nom quand le registre est
+   * illisible (cf. `classifyDevice` dans `audio/devices.ts`).
+   */
+  type: 'speakers' | 'headphones' | 'headset' | 'display' | 'other';
   /** True si Windows considère ce device comme la sortie par défaut. */
   isDefault: boolean;
+  /**
+   * Périphérique raccordé en Bluetooth (déduit de l'énumérateur du device
+   * côté registre). Information de *transport*, indépendante de `type` :
+   * une enceinte BT reste `speakers`. Affichée en complément dans l'UI.
+   */
+  bluetooth: boolean;
 }
 
 /**
@@ -229,8 +243,11 @@ export interface BambuCloudLoginResult {
 
 /**
  * Identifiants des modules que l'utilisateur peut activer/désactiver
- * depuis les réglages. Note : `audio` n'est pas dans la liste car il est
- * implicite (toujours actif — le footer audio est toujours rendu).
+ * depuis les réglages.
+ *
+ * `audio` gouverne **tout** le module son : le footer volume + sorties du
+ * dashboard déployé ET la chip « sortie courante » du notch rétracté.
+ * Désactivé, plus rien n'est rendu et le polling s'arrête entièrement.
  *
  * **Convention dot-notation** : un identifiant peut être plat (`'audio'`,
  * `'music'`…) ou hiérarchique `'<groupId>.<subId>'` (ex. `'claude.live'`,
@@ -239,6 +256,7 @@ export interface BambuCloudLoginResult {
  * `parseModuleId` ci-dessous et `moduleGroupsMeta.ts` côté renderer.
  */
 export type ModuleId =
+  | 'audio'
   | 'music'
   | 'meetings'
   | 'gitlab'
@@ -318,6 +336,31 @@ export interface DashTile {
  * ici sa structure de réglages persistés.
  */
 export interface ModuleConfig {
+  audio: {
+    /**
+     * Afficher la chip « sortie courante » (icône casque / haut-parleurs /
+     * écran) dans le notch rétracté.
+     */
+    collapsed: boolean;
+    /**
+     * Cadence (ms) de la **surveillance en rétracté** : relecture du
+     * registre des endpoints audio via le PowerShell résident, pour
+     * détecter un casque branché/débranché ou un appareil BT connecté.
+     * N'entraîne **aucune** création de process (cf. `audio/endpoints.ts`).
+     * Ignoré quand le notch est déployé (le polling normal prend le relais).
+     */
+    watchMs: number;
+    /**
+     * Intervalle (ms) du **filet de sécurité** en rétracté : relecture
+     * complète via `SoundVolumeView.exe` (1 spawn), seule façon de savoir
+     * quelle sortie est celle « par défaut ». Nécessaire car changer de
+     * sortie depuis le panneau Windows ne modifie pas l'état des endpoints
+     * dans le registre, donc la surveillance ci-dessus ne le voit pas.
+     * Plus la valeur est haute, moins de spawns (utile si l'antivirus /
+     * EDR de la machine scanne chaque création de process).
+     */
+    fullCheckMs: number;
+  };
   music: {
     /** Masque la chip et la card quand aucune lecture n'est détectée. */
     hideWhenStopped: boolean;
@@ -737,6 +780,7 @@ export const DEFAULT_SETTINGS: Settings = {
   density: 'airy',
   autoStart: false,
   modules: {
+    audio: true,
     music: true,
     meetings: true,
     gitlab: true,
@@ -755,6 +799,18 @@ export const DEFAULT_SETTINGS: Settings = {
     privacy: true,
   },
   moduleConfig: {
+    audio: {
+      collapsed: true,
+      // 5 s : assez réactif pour qu'un casque branché se voie presque tout
+      // de suite, et sans coût (lecture registre dans le PowerShell déjà
+      // résident, aucun process créé).
+      watchMs: 5_000,
+      // 5 min : ~288 spawns SVV/jour en rétracté. Couvre le cas « j'ai
+      // changé de sortie depuis le panneau Windows », invisible côté
+      // registre. Réglable jusqu'à 30 min pour qui veut minimiser les
+      // créations de process.
+      fullCheckMs: 300_000,
+    },
     music: {
       hideWhenStopped: true,
       collapsed: true,

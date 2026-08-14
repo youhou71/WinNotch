@@ -76,6 +76,42 @@
     border-radius 700ms var(--spring);
 }
 
+/*
+ * Notch épinglé (bouton punaise) — deux effets, tous deux purement visuels
+ * ou de sélection ; la logique de non-fermeture vit dans `App.tsx` /
+ * `Notch.tsx` / `useShellEvents.ts`.
+ *
+ * 1. Liseré ambre en inset, pour qu'on sache d'un coup d'œil que le notch
+ *    ne se refermera pas tout seul. On reste sur `box-shadow` (aucune
+ *    incidence sur le layout, contrairement à un `border`, qui décalerait
+ *    le contenu de 1 px à chaque bascule).
+ * 2. `user-select: text` sur le contenu déployé : le reset global pose
+ *    `user-select: none` sur le body (le notch est un widget, pas un
+ *    document), ce qui rend impossible la sélection à la souris — donc
+ *    la copie de toute valeur affichée hors champ de saisie. L'épinglage
+ *    est précisément le mode "je viens lire/copier", on rouvre donc la
+ *    sélection, et seulement là.
+ */
+.notch.is-pinned {
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.6),
+    0 2px 6px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(251, 191, 36, 0.55);
+}
+
+.notch.is-pinned .expanded-shell,
+.notch.is-pinned .expanded-shell * {
+  user-select: text;
+}
+
+/* Le curseur texte n'a de sens que sur du contenu ; sur les éléments
+   cliquables il induirait en erreur. */
+.notch.is-pinned .expanded-shell button,
+.notch.is-pinned .expanded-shell [role='button'],
+.notch.is-pinned .expanded-shell a {
+  cursor: pointer;
+}
+
 /* Masquage automatique quand une app est en plein écran sur l'écran
    principal. On utilise opacity + pointer-events:none plutôt que
    display:none pour préserver l'animation et permettre une réapparition

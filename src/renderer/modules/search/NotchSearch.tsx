@@ -53,6 +53,13 @@ interface Props {
    * Clipboard est désactivé dans Settings).
    */
   onClipboardClick?: () => void;
+  /** Notch épinglé (punaise active). */
+  pinned?: boolean;
+  /**
+   * Bascule l'épinglage du notch. Si `undefined`, la punaise n'est pas
+   * rendue (le composant est réutilisable hors du shell).
+   */
+  onTogglePin?: () => void;
 }
 
 export function NotchSearch({
@@ -63,6 +70,8 @@ export function NotchSearch({
   onGearClick,
   clipboardOpen,
   onClipboardClick,
+  pinned,
+  onTogglePin,
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { add: addTask } = useTasksContext();
@@ -480,6 +489,22 @@ export function NotchSearch({
             title="Effacer"
           >
             <i className="fa-solid fa-xmark" />
+          </button>
+        )}
+        {onTogglePin && (
+          <button
+            type="button"
+            className={'search-pin' + (pinned ? ' is-active' : '')}
+            onClick={() => onTogglePin()}
+            aria-label="Épingler le notch"
+            aria-pressed={!!pinned}
+            title={
+              pinned
+                ? 'Épinglé : le notch reste ouvert et le texte est sélectionnable. Cliquer pour détacher.'
+                : 'Épingler : le notch reste ouvert même en cliquant ailleurs, et le texte devient sélectionnable (copier-coller).'
+            }
+          >
+            <i className="fa-solid fa-thumbtack" />
           </button>
         )}
         {onClipboardClick && (

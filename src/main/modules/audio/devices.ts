@@ -31,6 +31,10 @@ import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import { is } from '@electron-toolkit/utils';
 import type { AudioDevice } from '../../../shared/types';
+import {
+  endpointGuidFromItemId,
+  type AudioEndpointInfo,
+} from './endpoints';
 
 const execFileAsync = promisify(execFile);
 
@@ -71,12 +75,17 @@ interface SvvRow {
 }
 
 /**
- * Heuristique de catégorisation par nom de device. Utilisée uniquement pour
- * choisir l'icône Font Awesome dans l'UI ; aucune logique fonctionnelle ne
- * dépend de cette classification.
+ * Heuristique de catégorisation par nom de device. **Repli seulement** :
+ * la catégorie vient normalement du form factor déclaré par le pilote
+ * (cf. `endpoints.ts`), cette fonction ne sert que lorsque le registre est
+ * illisible. Utilisée uniquement pour choisir l'icône Font Awesome dans
+ * l'UI ; aucune logique fonctionnelle ne dépend de cette classification.
  */
 function classifyDevice(row: SvvRow): AudioDevice['type'] {
   const name = (row.Name || row['Device Name'] || '').toLowerCase();
+  if (name.includes('headset') || name.includes('micro-casque')) {
+    return 'headset';
+  }
   if (name.includes('headphone') || name.includes('airpod') || name.includes('écouteur') || name.includes('casque')) {
     return 'headphones';
   }
@@ -250,28 +259,42 @@ async function runSvvJson(): Promise<SvvRow[]> {
  *
  * Le champ `isDefault` accepte plusieurs orthographes du tag (différentes
  * versions de SVV utilisent "Render" ou un libellé enrichi).
+ *
+ * @param endpoints Endpoints lus dans le registre (cf. `endpoints.ts`),
+ *        joints par le GUID contenu dans l'`Item ID` de SVV. Renseignent
+ *        le vrai `type` (form factor du pilote) et le flag Bluetooth.
+ *        Liste vide → repli sur l'heuristique de nom, `bluetooth: false`.
  */
-export async function listOutputDevices(): Promise<AudioDevice[]> {
+export async function listOutputDevices(
+  endpoints: AudioEndpointInfo[] = [],
+): Promise<AudioDevice[]> {
   if (process.env.WINNOTCH_DISABLE_SVV === '1') return [];
+  const byGuid = new Map(endpoints.map((e) => [e.guid, e]));
   try {
     const rows = await runSvvJson();
     return rows
       .filter((r) => (r.Direction || '').toLowerCase() === 'render')
       .filter((r) => (r['Device State'] || '').toLowerCase() === 'active')
       .filter((r) => (r.Type || '').toLowerCase() === 'device')
-      .map<AudioDevice>((r) => ({
-        id: r['Command-Line Friendly ID'] || r['Item ID'] || r.Name || '',
-        // `Device Name` est le nom du périphérique physique (ex. "Realtek
-        // High Definition Audio", "Casque Sony WH-1000XM5"). `Name` est
-        // souvent générique ("Speakers", "Headphones") — on le prend en
-        // fallback. Quand les deux existent et diffèrent, l'utilisateur
-        // voit l'identité réelle de l'appareil + son rôle via `type`.
-        name: r['Device Name'] || r.Name || 'Inconnu',
-        type: classifyDevice(r),
-        isDefault: (r['Default'] || '').toLowerCase() === 'render' ||
-                   (r['Default Multimedia'] || '').toLowerCase() === 'render' ||
-                   (r['Default'] || '').toLowerCase().includes('render'),
-      }))
+      .map<AudioDevice>((r) => {
+        const endpoint = byGuid.get(endpointGuidFromItemId(r['Item ID']) ?? '');
+        return {
+          id: r['Command-Line Friendly ID'] || r['Item ID'] || r.Name || '',
+          // `Device Name` est le nom du périphérique physique (ex. "Realtek
+          // High Definition Audio", "Casque Sony WH-1000XM5"). `Name` est
+          // souvent générique ("Speakers", "Headphones") — on le prend en
+          // fallback. Quand les deux existent et diffèrent, l'utilisateur
+          // voit l'identité réelle de l'appareil + son rôle via `type`.
+          name: r['Device Name'] || r.Name || 'Inconnu',
+          // Le form factor du pilote fait autorité ; l'heuristique de nom
+          // ne sert que si le registre n'a rien donné pour cet endpoint.
+          type: endpoint?.type ?? classifyDevice(r),
+          isDefault: (r['Default'] || '').toLowerCase() === 'render' ||
+                     (r['Default Multimedia'] || '').toLowerCase() === 'render' ||
+                     (r['Default'] || '').toLowerCase().includes('render'),
+          bluetooth: endpoint?.bluetooth ?? false,
+        };
+      })
       .filter((d) => d.id);
   } catch (err) {
     console.error('[audio/devices] listOutputDevices failed:', err);

@@ -9,7 +9,30 @@
  * Le dropdown .af-dropdown s'ancre en bottom du footer et s'ouvre vers
  * le HAUT (bottom: calc(100% + 6px)) car le footer est déjà en bas de
  * la fenêtre — pas d'espace en dessous pour un popover descendant.
+ *
+ * La chip `.chip-audio` du notch rétracté vit aussi ici : même module, même
+ * palette (teal), et elle partage ses libellés/icônes avec le footer via
+ * `deviceMeta.ts`.
  */
+
+/* ───────────── Chip du notch rétracté ───────────── */
+
+/* Calquée sur `.chip-vpn` : boîte fixe de 18 px pour que l'icône ne fasse
+   pas sauter la largeur du notch selon le glyphe (le casque est plus large
+   que le haut-parleur). */
+.chip-audio {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.chip-audio .audio-glyph {
+  font-size: 12px;
+  color: #2dd4bf;
+}
+
 .audio-footer {
   position: relative;
   flex-shrink: 0;

@@ -17,6 +17,14 @@ export interface ModuleMeta {
 
 export const SETTINGS_MODULES: ModuleMeta[] = [
   {
+    id: 'audio',
+    label: 'Sortie audio',
+    icon: 'fa-solid fa-volume-high',
+    color: '#2dd4bf',
+    description:
+      'Volume et choix de la sortie dans le dashboard, + icône du type de sortie (casque / haut-parleurs / écran) dans le notch rétracté.',
+  },
+  {
     id: 'music',
     label: 'Musique',
     icon: 'fa-solid fa-music',
