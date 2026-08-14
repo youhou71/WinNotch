@@ -16,8 +16,14 @@ Conçu pour rester discret (mode Peek à `Alt` maintenu, masquage en plein écra
 
 ## Modules
 
-### Audio (toujours actif)
-Footer sticky dans le dashboard. Contrôle du volume et du mute système, et basculement du périphérique de sortie par défaut (haut-parleurs, casque, sortie HDMI, etc.). Reflète les changements externes faits via les touches Windows.
+### Sortie audio
+Footer sticky dans le dashboard : contrôle du volume et du mute système, et basculement du périphérique de sortie par défaut (haut-parleurs, casque, sortie HDMI, etc.). Reflète les changements externes faits via les touches Windows.
+
+Dans le **notch rétracté**, une chip affiche l'icône du **type** de la sortie courante — casque, micro-casque, haut-parleurs, sortie écran — pour savoir où part le son sans rien ouvrir. Le nom réel de l'appareil, son type et son transport (Bluetooth) sont dans la tooltip au survol ; un clic déploie le notch sur le footer audio. Le type ne vient pas d'une supposition sur le nom de l'appareil mais du *form factor* déclaré par le pilote dans le registre Windows.
+
+Notch fermé, la chip est tenue à jour sans faire tourner de polling coûteux : une relecture du registre des sorties (aucune création de processus) repère un casque branché ou un appareil Bluetooth connecté, et seul ce changement — ou un filet de sécurité espacé, réglable de 1 à 30 min — déclenche l'énumération complète des sorties. Le volume, lui, n'est pas relu tant que le notch est fermé : la chip ne l'affiche pas. Les deux cadences sont réglables dans **Réglages → Modules → Sortie audio**.
+
+Désactiver le module retire **à la fois** la chip et le footer volume, et arrête tout polling audio.
 
 ### Music
 Chip avec pochette + titre tronqué dans le notch rétracté, card étendue avec scrubber et contrôles play/pause/next/previous. Écoute les sessions media (SMTC) — fonctionne avec Spotify, Apple Music, navigateurs, Groove, etc.
@@ -227,7 +233,7 @@ Le comportement s'adapte au contexte :
 - Une page Settings drilldown → retour à la home Settings.
 - Settings home → ferme Settings.
 - Mode search actif → vide la query.
-- Aucun overlay → collapse le notch.
+- Aucun overlay → collapse le notch (et le **dépingle** s'il était épinglé, cf. Mode épinglé).
 
 ---
 
@@ -295,10 +301,20 @@ Masque les chips de **notifications** et bloque les toasts. Indicateur visuel : 
 | Claude | masquée | notification (sessions actives) |
 | VPN | **visible** | état système — l'utilisateur veut savoir en permanence si son tunnel est actif |
 | Teams (présence) | **visible** | état système — la pastille reste pertinente même en DND, surtout avec le couplage bidirectionnel `Ctrl+Shift+D ↔ Teams DoNotDisturb` |
+| Sortie audio | **visible** | état système — savoir où part le son reste pertinent en toute circonstance |
 | Système (CPU/RAM/Net) | **visible** | état système — la jauge est utile même pendant une démo |
 | Imprimante 3D (Bambu) | **visible** | état d'impression — surveiller un print de plusieurs heures prime sur le DND |
 | Music | non affectée | la chip est dans `cr-left`, pas une notification |
 | Clipboard | non affectée | rappel passif d'historique, pas une notification |
+
+### Mode épinglé (copier-coller)
+Le bouton **punaise** de la barre de recherche (à gauche de l'engrenage) verrouille le notch en position ouverte :
+
+- il ne se referme plus au clic dans une autre fenêtre, ni quand il perd le focus — on peut donc aller copier une valeur ailleurs et revenir la coller dans un champ des réglages sans perdre la page en cours ;
+- le **texte devient sélectionnable à la souris** dans tout le dashboard. Hors de ce mode le notch se comporte en widget (sélection désactivée pour éviter les sélections accidentelles), ce qui empêchait de copier une valeur affichée hors champ de saisie ;
+- un liseré ambre signale l'état ; la punaise se redresse quand elle est active.
+
+Les fermetures explicites continuent de fonctionner (`Esc`, `Ctrl + Shift + Space`) et **dépinglent** au passage : la prochaine ouverture repart sur le comportement normal. L'épinglage n'est pas persisté entre deux ouvertures.
 
 ### Mode Peek
 Maintenir `Alt` rend le notch à 15 % d'opacité et le rend click-through complet. Utile pour vérifier ce qui se trouve derrière sans avoir à le rétracter.
@@ -404,7 +420,8 @@ Après une création manuelle, ne re-bascule pas le toggle dans l'app (il retent
 - **`@coooookies/windows-smtc-monitor`** — bindings napi-rs pour les sessions media Windows.
 - **`@nut-tree-fork/libnut-win32`** — bindings natifs N-API pour l'envoi des touches média (play/pause, suivant, précédent).
 - **`loudness`** — binaire Core Audio bundlé pour le volume système (lecture volume+muted en un seul spawn via `getVolumeInfo`).
-- **`SoundVolumeView.exe`** (NirSoft, bundlé) — énumération + changement du device de sortie. Appelé uniquement à la demande (ouverture du panneau audio, changement de device) avec cache 30 s — plus de spawn périodique. Au démarrage automatique (login), où le service audio n'est pas toujours prêt, un warm-up relance l'énumération à délais croissants jusqu'à ce que la liste des sorties se remplisse, et le circuit breaker de secours se réarme tout seul (plus de liste « Aucune sortie » bloquée jusqu'au redémarrage).
+- **`SoundVolumeView.exe`** (NirSoft, bundlé) — énumération + changement du device de sortie, et **seule** source du « quelle sortie est celle par défaut ». Appelé uniquement à la demande (ouverture du panneau audio, changement de device, changement de matériel détecté notch fermé) avec cache 30 s — plus de spawn périodique. Au démarrage automatique (login), où le service audio n'est pas toujours prêt, un warm-up relance l'énumération à délais croissants jusqu'à ce que la liste des sorties se remplisse, et le circuit breaker de secours se réarme tout seul (plus de liste « Aucune sortie » bloquée jusqu'au redémarrage).
+- **Registre `MMDevices`** (lecture seule, via le PowerShell résident) — type réel de chaque sortie (*form factor* déclaré par le pilote : haut-parleurs / casque / micro-casque / sortie écran), transport Bluetooth, et liste des sorties actives. Sert la chip audio du notch rétracté **sans créer de processus** ; le registre ne dit en revanche pas laquelle est la sortie par défaut, d'où le recours ciblé à `SoundVolumeView`.
 - **Workspaces VS Code récents** — dérivés du scan de `%APPDATA%/Code/User/workspaceStorage` (fichiers `workspace.json`, tri par récence), 100 % `fs`, sans dépendance native. Les versions récentes de VS Code (1.10x+) ne stockent plus le MRU dans `state.vscdb`.
 - **Détection `Alt` (mode Peek)** — polling `GetAsyncKeyState` dans le PowerShell résident du détecteur fullscreen (`resources/ps/fullscreen-detector.ps1`). Indisponible sur les postes où une politique d'entreprise force `ConstrainedLanguage` (cf. Limitations connues) : le script y est bloqué et n'est alors pas lancé. Plus aucun hook clavier global : l'ancien `node-global-key-listener` (WH_KEYBOARD_LL) faisait transiter chaque frappe du PC par l'event loop de l'app, ajoutant de la latence clavier système dès que le main était chargé.
 

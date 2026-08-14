@@ -14,38 +14,11 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { useAudioContext } from './AudioContext';
-import type { AudioDevice } from './types';
-
-/**
- * Mapping nom de classe Font Awesome selon le type de device. Purement
- * cosmétique — la classification se fait côté main (devices.ts).
- */
-function deviceIcon(d: AudioDevice): string {
-  switch (d.type) {
-    case 'headphones':
-      return 'fa-headphones';
-    case 'display':
-      return 'fa-display';
-    case 'speakers':
-      return 'fa-volume-high';
-    default:
-      return 'fa-volume-high';
-  }
-}
-
-/** Libellé secondaire affiché à droite dans le dropdown. */
-function deviceMeta(d: AudioDevice): string {
-  switch (d.type) {
-    case 'headphones':
-      return 'Casque';
-    case 'display':
-      return 'Sortie écran';
-    case 'speakers':
-      return 'Haut-parleurs';
-    default:
-      return 'Audio';
-  }
-}
+import {
+  currentDevice,
+  deviceIcon,
+  deviceMetaFull,
+} from './deviceMeta';
 
 export function AudioFooter() {
   const { state, setVolume, toggleMute, selectDevice } = useAudioContext();
@@ -70,11 +43,9 @@ export function AudioFooter() {
 
   // Choix du device "courant" pour l'affichage : on prend la valeur
   // optimiste de l'utilisateur (currentDeviceId) avant de retomber sur
-  // le default réel ou la première entrée disponible.
-  const device =
-    state.devices.find((d) => d.id === state.currentDeviceId) ??
-    state.devices.find((d) => d.isDefault) ??
-    state.devices[0];
+  // le default réel ou la première entrée disponible. Règle partagée avec
+  // la chip du notch rétracté (cf. `deviceMeta.ts`).
+  const device = currentDevice(state.devices, state.currentDeviceId);
 
   const level = state.level;
   // L'icône de mute reflète soit le flag muted, soit un volume à 0 :
@@ -190,7 +161,7 @@ export function AudioFooter() {
                   <i className={'fa-solid ' + deviceIcon(d)} />
                   <span className="afdr-name">
                     {d.name}
-                    <span className="afdr-meta"> ({deviceMeta(d)})</span>
+                    <span className="afdr-meta"> ({deviceMetaFull(d)})</span>
                   </span>
                   {active && <i className="fa-solid fa-check afdr-check" />}
                 </button>

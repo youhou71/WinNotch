@@ -86,6 +86,7 @@ export function SettingsModulePage({ moduleId, onBack }: Props) {
         />
       </div>
 
+      {moduleId === 'audio' && <AudioSettings />}
       {moduleId === 'music' && <MusicSettings />}
       {moduleId === 'tasks' && <TasksSettings />}
       {moduleId === 'meetings' && <MeetingsSettings />}
@@ -1545,6 +1546,67 @@ function VpnSettings() {
           <strong>OpenVPN</strong>, <strong>WireGuard</strong>, et les VPN
           configurés dans Windows (PPTP / L2TP / SSTP / IKEv2). Module
           read-only : aucune action n'est exposée (pas de connect / disconnect).
+        </div>
+      </SettingsSection>
+    </>
+  );
+}
+
+/* ───────────── Sortie audio ───────────── */
+function AudioSettings() {
+  const { settings, patchModuleConfig } = useSettingsContext();
+  const cfg = settings.moduleConfig.audio;
+
+  return (
+    <>
+      <SettingsSection title="Affichage">
+        <SettingsToggleRow
+          icon="fa-solid fa-minimize"
+          iconColor="#2dd4bf"
+          label="Afficher la sortie courante dans le notch rétracté"
+          description="Icône du type de sortie (casque, micro-casque, haut-parleurs, écran) pour savoir où part le son sans déployer le notch. Nom de l'appareil au survol. Jamais masquée en Ne pas Déranger — c'est un état système."
+          value={cfg.collapsed}
+          onChange={(next) => void patchModuleConfig('audio', { collapsed: next })}
+        />
+      </SettingsSection>
+
+      {cfg.collapsed && (
+        <SettingsSection title="Surveillance en rétracté">
+          <SettingsSliderRow
+            icon="fa-solid fa-clock-rotate-left"
+            iconColor="#2dd4bf"
+            label="Détection d'un changement de matériel"
+            description="Relecture du registre des sorties audio pour repérer un casque branché ou un appareil Bluetooth connecté. Passe par le PowerShell déjà résident : aucune création de processus, quelle que soit la cadence."
+            value={cfg.watchMs}
+            min={2_000}
+            max={30_000}
+            step={1_000}
+            formatValue={(v) => `${Math.round(v / 1000)} s`}
+            onChange={(v) => void patchModuleConfig('audio', { watchMs: v })}
+          />
+          <SettingsSliderRow
+            icon="fa-solid fa-rotate"
+            iconColor="#2dd4bf"
+            label="Vérification complète"
+            description="Seul moyen de savoir quelle sortie est celle par défaut : un appel à SoundVolumeView (1 processus). Nécessaire car changer de sortie depuis le panneau Windows ne laisse aucune trace dans le registre. Espacer la valeur réduit le nombre de processus créés — utile si un antivirus scanne chacun d'eux."
+            value={cfg.fullCheckMs}
+            min={60_000}
+            max={1_800_000}
+            step={60_000}
+            formatValue={(v) => `${Math.round(v / 60_000)} min`}
+            onChange={(v) => void patchModuleConfig('audio', { fullCheckMs: v })}
+          />
+        </SettingsSection>
+      )}
+
+      <SettingsSection title="À propos">
+        <div className="settings-empty">
+          Le type de sortie vient du <em>form factor</em> déclaré par le pilote
+          dans le registre Windows (<code>MMDevices</code>) — pas d'une
+          supposition sur le nom de l'appareil. Le volume et la liste des
+          sorties passent par <code>SoundVolumeView</code>. Désactiver le
+          module retire aussi le bandeau volume du dashboard et arrête tout
+          polling audio.
         </div>
       </SettingsSection>
     </>

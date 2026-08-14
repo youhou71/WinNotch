@@ -79,6 +79,18 @@ function NotchToastSlot({ collapsed }: { collapsed: boolean }) {
 
 function AppInner() {
   const [mode, setModeState] = useState<NotchMode>('collapsed');
+  /**
+   * Notch **épinglé** : il ne se referme plus tout seul (ni au clic hors
+   * du notch, ni quand la fenêtre perd le focus). Sert au copier-coller —
+   * aller chercher une valeur dans une autre fenêtre puis revenir la
+   * coller dans les réglages — et rend le texte sélectionnable (cf.
+   * `.notch.is-pinned` dans notch.css).
+   *
+   * Volontairement **non persisté** : c'est un état de session, pas une
+   * préférence. Les fermetures explicites (Esc, Ctrl+Shift+Space) restent
+   * opérantes et dépinglent au passage (effet ci-dessous).
+   */
+  const [pinned, setPinned] = useState(false);
 
   // Wrapper qui expose une signature "updater" (style React.SetStateAction)
   // attendue par les hooks consommateurs.
@@ -88,7 +100,7 @@ function AppInner() {
 
   useHitTest();
   useKeyboardShortcuts({ setMode });
-  useShellEvents({ setMode });
+  useShellEvents({ setMode, pinned });
   const peeking = usePeekMode();
   const fullscreen = useFullscreenMode();
 
@@ -132,6 +144,13 @@ function AppInner() {
     if (pendingFocusAt === 0) return;
     setModeState('expanded');
   }, [pendingFocusAt]);
+  // Le notch se referme (Esc, Ctrl+Shift+Space, action de search) → on
+  // dépingle, pour que la prochaine ouverture reparte sur le comportement
+  // normal. Sans ça, un pin oublié rendrait le notch "collant" jusqu'au
+  // redémarrage de l'app.
+  useEffect(() => {
+    if (mode === 'collapsed' && pinned) setPinned(false);
+  }, [mode, pinned]);
   // Quand le notch passe en collapsed, on referme la page Clipboard pour
   // que la prochaine ouverture via Ctrl+Shift+Space retombe sur le
   // dashboard normal (et non sur la dernière page consultée).
@@ -152,6 +171,8 @@ function AppInner() {
         setMode={setMode}
         peeking={peeking}
         fullscreen={fullscreen}
+        pinned={pinned}
+        onTogglePin={() => setPinned((p) => !p)}
       />
       <NotchToastSlot collapsed={mode === 'collapsed'} />
     </>

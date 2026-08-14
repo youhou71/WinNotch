@@ -16,6 +16,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { DashTileId, NotchMode } from '../../../shared/types';
+import { useAudioContext } from '../../modules/audio/AudioContext';
 import { useMeetingsContext } from '../../modules/meetings/MeetingsContext';
 import { useMusicContext } from '../../modules/music/MusicContext';
 import { useClaudeContext } from '../../modules/claude/ClaudeContext';
@@ -29,6 +30,10 @@ interface NotchProps {
   setMode: (updater: (m: NotchMode) => NotchMode) => void;
   peeking: boolean;
   fullscreen: boolean;
+  /** Notch épinglé : aucune fermeture implicite (clic outside, blur). */
+  pinned: boolean;
+  /** Bascule l'épinglage (bouton punaise de la barre de recherche). */
+  onTogglePin: () => void;
 }
 
 // Marge réservée sous le notch étendu : on laisse ~100 px de respiration
@@ -49,13 +54,21 @@ function computeMaxNotchHeight(): number {
   return Math.max(MIN_MAX_H, window.screen.availHeight - NOTCH_BOTTOM_RESERVE_PX);
 }
 
-export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
+export function Notch({
+  mode,
+  setMode,
+  peeking,
+  fullscreen,
+  pinned,
+  onTogglePin,
+}: NotchProps) {
   const [pressing, setPressing] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const { state: music } = useMusicContext();
   const { next: nextMeeting } = useMeetingsContext();
   const { active: activeClaude } = useClaudeContext();
   const { state: gitlab } = useGitLabContext();
+  const { state: audio } = useAudioContext();
   const { settings } = useSettingsContext();
 
   // Hauteur réelle du contenu de l'état expanded (`.dashboard` scrollHeight
@@ -72,9 +85,11 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
   const [maxH, setMaxH] = useState(computeMaxNotchHeight);
 
   // Click outside → collapse. Listener attaché seulement en mode expanded
-  // pour économiser les re-render.
+  // pour économiser les re-render. Notch épinglé : pas de listener du tout —
+  // l'utilisateur veut pouvoir cliquer ailleurs (copier une valeur dans une
+  // autre fenêtre) sans perdre la page en cours.
   useEffect(() => {
-    if (mode !== 'expanded') return;
+    if (mode !== 'expanded' || pinned) return;
     const onDown = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setMode(() => 'collapsed');
@@ -82,7 +97,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [mode, setMode]);
+  }, [mode, setMode, pinned]);
 
   // Suit les variations de hauteur de la fenêtre (l'utilisateur change
   // d'écran principal, branche un écran de hauteur différente, change la
@@ -215,6 +230,7 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
   //  +54 si chip Meeting (pill avec countdown ou heure)
   //  +36 si chip Claude (icône + badge)
   //  +36 si chip GitLab (icône + badge)
+  //  +36 si chip Sortie audio (icône seule)
   //  +38 si chip DND (qui remplace toutes les chips droite)
   //
   // Les valeurs sont des estimations volontairement larges (icône réelle
@@ -247,12 +263,20 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
       gitlab.toReview.length > 0 ||
       gitlab.mine.length > 0);
   const hasDndChip = settings.dnd;
+  // Même condition que `CollapsedRow` + `AudioChip` : la chip ne se rend que
+  // si une sortie est connue, sinon on réserverait 36 px pour rien au boot
+  // à froid (SoundVolumeView pas encore répondu).
+  const hasAudioChip =
+    settings.modules.audio &&
+    settings.moduleConfig.audio.collapsed &&
+    audio.devices.length > 0;
   const collapsedW =
     124 +
     (hasMusicChip ? 80 : 0) +
     (hasMeetingChip ? 54 : 0) +
     (hasClaudeChip ? 36 : 0) +
     (hasGitlabChip ? 36 : 0) +
+    (hasAudioChip ? 36 : 0) +
     (hasDndChip ? 38 : 0);
 
   // Estimation a priori utilisée *uniquement* comme fallback avant la
@@ -349,6 +373,11 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
   if (pressing) classes.push('is-pressing');
   if (peeking) classes.push('is-peeking');
   if (hideForFullscreen) classes.push('is-fullscreen-hidden');
+  // `is-pinned` porte deux effets purement CSS : le liseré d'accent qui
+  // signale l'état, et `user-select: text` sur le contenu déployé (le reset
+  // global interdit la sélection — indispensable pour copier une valeur
+  // affichée hors champ de saisie).
+  if (pinned && mode === 'expanded') classes.push('is-pinned');
 
   return (
     <div className="notch-host">
@@ -376,6 +405,8 @@ export function Notch({ mode, setMode, peeking, fullscreen }: NotchProps) {
           ) : (
             <ExpandedDashboard
               onSearchAction={() => setMode(() => 'collapsed')}
+              pinned={pinned}
+              onTogglePin={onTogglePin}
             />
           )}
         </div>

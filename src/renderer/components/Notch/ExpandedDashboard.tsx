@@ -82,9 +82,17 @@ function DashboardLoader() {
 interface Props {
   /** Appelé après une action de search réussie (rétracte le notch). */
   onSearchAction?: () => void;
+  /** Notch épinglé (passe-plat vers le bouton punaise de la search bar). */
+  pinned?: boolean;
+  /** Bascule l'épinglage. */
+  onTogglePin?: () => void;
 }
 
-export function ExpandedDashboard({ onSearchAction }: Props) {
+export function ExpandedDashboard({
+  onSearchAction,
+  pinned,
+  onTogglePin,
+}: Props) {
   const { state: music } = useMusicContext();
   const { active: claudeActive } = useClaudeContext();
   const { settings, toggleDnd } = useSettingsContext();
@@ -253,6 +261,8 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
           onClipboardClick={
             settings.modules.clipboard ? toggleClipboard : undefined
           }
+          pinned={pinned}
+          onTogglePin={onTogglePin}
         />
 
         {settings.dnd && !inSearch && !settingsOpen && !gitlabPanelOpen && !gitlocalPanelOpen && !clipboardOpen && (
@@ -357,7 +367,10 @@ export function ExpandedDashboard({ onSearchAction }: Props) {
           </div>
         )}
       </div>
-      <AudioFooter />
+      {/* Footer audio : gouverné par le module `audio` (comme la chip du
+          notch rétracté). Désactivé, le module ne rend plus rien et son
+          polling s'arrête entièrement côté main. */}
+      {settings.modules.audio && <AudioFooter />}
     </div>
   );
 }

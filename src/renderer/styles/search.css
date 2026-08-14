@@ -119,7 +119,8 @@
 }
 
 .search-gear,
-.search-clipboard {
+.search-clipboard,
+.search-pin {
   width: 26px;
   height: 26px;
   display: grid;
@@ -137,9 +138,32 @@
 }
 
 .search-gear:hover,
-.search-clipboard:hover {
+.search-clipboard:hover,
+.search-pin:hover {
   background: var(--surface-2);
   color: var(--txt);
+}
+
+/* Punaise inactive : légèrement inclinée pour lire "pas encore planté",
+   redressée quand l'épinglage est actif (feedback sans changer de glyphe). */
+.search-pin i {
+  transform: rotate(-35deg);
+  transition: transform 200ms var(--ease-out);
+}
+
+/* État épinglé — ambre plutôt que bleu : le notch reste ouvert, ce n'est
+   pas un état neutre et il doit se distinguer du gear actif. */
+.search-pin.is-active {
+  background: rgba(251, 191, 36, 0.16);
+  color: #fbbf24;
+}
+
+.search-pin.is-active i {
+  transform: rotate(0deg);
+}
+
+.search-pin.is-active:hover {
+  background: rgba(251, 191, 36, 0.24);
 }
 
 /* État actif quand la SettingsView est ouverte — donne un repère visuel

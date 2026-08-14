@@ -26,6 +26,7 @@ import { TeamsChip } from '../../modules/teams/TeamsChip';
 import { SystemChip } from '../../modules/system/SystemChip';
 import { BambuChip } from '../../modules/bambu/BambuChip';
 import { useBambuContext } from '../../modules/bambu/BambuContext';
+import { AudioChip } from '../../modules/audio/AudioChip';
 import { NotchTooltip } from '../Tooltip/NotchTooltip';
 import { ClipboardChip } from '../../modules/clipboard/ClipboardChip';
 import { useClipboardContext } from '../../modules/clipboard/ClipboardContext';
@@ -142,6 +143,13 @@ export function CollapsedRow() {
     bambuCfg.collapsed &&
     (bambu.isPrinting || bambuCfg.showWhenIdle);
 
+  // La chip Sortie audio : module activé + autorisée en collapsed. La chip
+  // se cache d'elle-même tant qu'aucune sortie n'est connue (boot à froid,
+  // SoundVolumeView en circuit-breaker). Pas masquée en DND : savoir où part
+  // le son est un état système, pas une notification.
+  const audioCfg = settings.moduleConfig.audio;
+  const audioEnabled = settings.modules.audio && audioCfg.collapsed;
+
   // La chip Confidentialité : module activé + autorisée en collapsed + cam
   // OU micro actif. JAMAIS masquée en DND — un témoin de capture cam/micro
   // est un signal de sécurité qu'on veut voir en permanence, surtout en
@@ -201,6 +209,9 @@ export function CollapsedRow() {
             notification — l'utilisateur veut savoir en permanence si son
             VPN tourne, indépendamment du mode "ne pas déranger". */}
         {vpnEnabled && <VpnChip />}
+        {/* Sortie audio — état système : où part le son en ce moment (casque,
+            haut-parleurs, écran). Jamais masqué par DND. */}
+        {audioEnabled && <AudioChip />}
         {/* Teams Presence — même logique que VPN : c'est un état système
             (le statut Teams reste pertinent pendant un mode DND, surtout
             avec le couplage bidirectionnel P3 où DND WinNotch écrit Teams). */}
