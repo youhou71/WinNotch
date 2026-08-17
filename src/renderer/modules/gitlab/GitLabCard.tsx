@@ -1,10 +1,12 @@
 /**
  * Card GitLab compacte du dashboard étendu.
  *
- * Jusqu'à quatre compteurs cliquables : Issues à prendre / À reviewer /
- * Mes MR / work items qui me sont assignés. Chacun n'apparaît que si sa
- * section est suivie (`moduleConfig.gitlab.sections`), et la grille
- * s'ajuste au nombre restant.
+ * Jusqu'à quatre compteurs cliquables, dans l'ordre : à prendre / mes
+ * issues / à reviewer / mes MR — les tickets d'abord, les MR ensuite.
+ * Chacun n'apparaît que si sa section est suivie
+ * (`moduleConfig.gitlab.sections`), et la grille s'ajuste au nombre
+ * restant : trois compteurs restent sur une seule ligne, quatre se
+ * replient en 2 × 2 plus tôt (cf. `.gl-stats` dans gitlab.css).
  * Le clic sur la card ouvre la `<GitLabPanel>` plein dashboard via
  * `onOpen` géré par `ExpandedDashboard`.
  *
@@ -169,6 +171,14 @@ export function GitLabCard({ onOpen }: Props) {
               alert
             />
           )}
+          {sections.myWorkItems && (
+            <Stat
+              icon="fa-regular fa-circle-dot"
+              iconColor="#60a5fa"
+              count={state.myWorkItems.length}
+              label="mes issues"
+            />
+          )}
           {sections.toReview && (
             <Stat
               icon="fa-solid fa-code-merge"
@@ -183,14 +193,6 @@ export function GitLabCard({ onOpen }: Props) {
               iconColor="#94a3b8"
               count={state.mine.length}
               label="mes MR"
-            />
-          )}
-          {sections.myWorkItems && (
-            <Stat
-              icon="fa-regular fa-circle-dot"
-              iconColor="#60a5fa"
-              count={state.myWorkItems.length}
-              label="assignés"
             />
           )}
         </div>

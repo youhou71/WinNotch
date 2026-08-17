@@ -936,10 +936,34 @@ function GitLabSettings() {
 
       <SettingsSection title="Ce qui est suivi">
         <SettingsToggleRow
+          icon="fa-solid fa-circle-exclamation"
+          iconColor="#ef4444"
+          label="Issues à prendre"
+          description="Issues sans assigné portant un label surveillé. Décoché : plus de section ni de compteur, l'API n'est plus interrogée pour ça, et le badge rouge de la chip disparaît."
+          value={cfg.sections.watchedIssues}
+          onChange={(next) =>
+            void patchModuleConfig('gitlab', {
+              sections: { ...cfg.sections, watchedIssues: next },
+            })
+          }
+        />
+        <SettingsToggleRow
+          icon="fa-regular fa-circle-dot"
+          iconColor="#60a5fa"
+          label="Mes issues"
+          description="Issues, incidents, tâches et cas de test ouverts qui me sont assignés."
+          value={cfg.sections.myWorkItems}
+          onChange={(next) =>
+            void patchModuleConfig('gitlab', {
+              sections: { ...cfg.sections, myWorkItems: next },
+            })
+          }
+        />
+        <SettingsToggleRow
           icon="fa-solid fa-code-merge"
           iconColor="#FC6D26"
           label="MR à reviewer"
-          description="MR où je suis reviewer. Décoché : plus de section, plus de compteur, et l'API n'est plus interrogée pour ça."
+          description="MR où je suis reviewer."
           value={cfg.sections.toReview}
           onChange={(next) =>
             void patchModuleConfig('gitlab', {
@@ -956,30 +980,6 @@ function GitLabSettings() {
           onChange={(next) =>
             void patchModuleConfig('gitlab', {
               sections: { ...cfg.sections, mine: next },
-            })
-          }
-        />
-        <SettingsToggleRow
-          icon="fa-regular fa-circle-dot"
-          iconColor="#60a5fa"
-          label="Mes work items"
-          description="Issues, incidents, tâches et cas de test ouverts qui me sont assignés."
-          value={cfg.sections.myWorkItems}
-          onChange={(next) =>
-            void patchModuleConfig('gitlab', {
-              sections: { ...cfg.sections, myWorkItems: next },
-            })
-          }
-        />
-        <SettingsToggleRow
-          icon="fa-solid fa-circle-exclamation"
-          iconColor="#ef4444"
-          label="Issues à prendre"
-          description="Issues sans assigné portant un label surveillé. Décoché : le badge rouge de la chip disparaît aussi."
-          value={cfg.sections.watchedIssues}
-          onChange={(next) =>
-            void patchModuleConfig('gitlab', {
-              sections: { ...cfg.sections, watchedIssues: next },
             })
           }
         />

@@ -6,10 +6,13 @@
  *  - Header avec back, label, compte connecté, bouton refresh
  *  - Section "Issues à prendre" (issues non assignées matchant un
  *    `watchedLabels`)
+ *  - Section "Mes issues" (work items ouverts qui lui sont assignés :
+ *    issues, incidents, tâches, cas de test)
  *  - Section "À reviewer" (MR où l'utilisateur courant est reviewer)
  *  - Section "Mes MR" (MR créées par l'utilisateur courant)
- *  - Section "Mes work items" (issues / incidents / tâches / cas de test
- *    ouverts qui lui sont assignés)
+ *
+ * Les tickets d'abord, les MR ensuite — même ordre que les compteurs de
+ * la card et que les interrupteurs des réglages.
  *
  * Cas particuliers : `state.configured === false`, `state.lastError`,
  * listes vides — chacun a un placeholder dédié.
@@ -413,6 +416,27 @@ export function GitLabPanel({ onClose }: Props) {
           </>
         )}
 
+        {state.configured && sections.myWorkItems && (
+          <>
+            <div
+              className="gl-section-title"
+              title="Issues, incidents, tâches et cas de test ouverts qui te sont assignés."
+            >
+              Mes issues
+              <span className="gl-count">{state.myWorkItems.length}</span>
+            </div>
+            {state.myWorkItems.length === 0 ? (
+              <div className="gl-empty">Rien ne t'est assigné.</div>
+            ) : (
+              <div className="gl-list">
+                {state.myWorkItems.map((item) => (
+                  <WorkItemRow key={item.id} item={item} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
         {state.configured && sections.toReview && (
           <>
             <div className="gl-section-title">
@@ -443,27 +467,6 @@ export function GitLabPanel({ onClose }: Props) {
               <div className="gl-list">
                 {state.mine.map((mr) => (
                   <MrRow key={mr.id} mr={mr} showAuthor={false} />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {state.configured && sections.myWorkItems && (
-          <>
-            <div
-              className="gl-section-title"
-              title="Issues, incidents, tâches et cas de test ouverts qui te sont assignés."
-            >
-              Mes work items
-              <span className="gl-count">{state.myWorkItems.length}</span>
-            </div>
-            {state.myWorkItems.length === 0 ? (
-              <div className="gl-empty">Rien ne t'est assigné.</div>
-            ) : (
-              <div className="gl-list">
-                {state.myWorkItems.map((item) => (
-                  <WorkItemRow key={item.id} item={item} />
                 ))}
               </div>
             )}

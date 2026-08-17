@@ -108,12 +108,18 @@
   margin-top: 2px;
 }
 
-/* Tuile étroite : au-delà de deux compteurs les libellés s'écrasent bien
-   avant que la place ne manque vraiment → on replie en 2 colonnes. Ciblé
-   par `data-count` pour ne pas étirer une grille qui tient déjà. */
+/* Repli progressif, par nombre de compteurs affichés. Une 4e colonne
+   écrase les libellés bien avant que la place ne manque vraiment → repli
+   en 2 × 2 dès 320 px. Trois compteurs, eux, tiennent sur une seule ligne
+   beaucoup plus longtemps : on les garde alignés jusqu'à 230 px. */
 @container dashtile (max-width: 320px) {
-  .gl-stats[data-count='3'],
   .gl-stats[data-count='4'] {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@container dashtile (max-width: 230px) {
+  .gl-stats[data-count='3'] {
     grid-template-columns: 1fr 1fr;
   }
 }
