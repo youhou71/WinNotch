@@ -273,6 +273,10 @@
   font-weight: 900;
 }
 
+/* Le libellé est un <button> (et non un <span>) : cliquer dessus ouvre
+   l'édition inline, et le clavier y accède comme sur n'importe quelle
+   action. D'où le reset complet des styles de bouton — visuellement, ça
+   doit rester du texte. */
 .task-text {
   flex: 1;
   min-width: 0;
@@ -280,6 +284,13 @@
   color: var(--txt);
   line-height: 1.4;
   word-break: break-word;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  text-align: left;
+  cursor: text;
 }
 
 .task-row.is-done .task-text {
@@ -288,6 +299,56 @@
   /* Couleur de la barre de barré désaturée pour ne pas concurrencer
      le texte gris en dessous. */
   text-decoration-color: rgba(244, 244, 245, 0.3);
+}
+
+/* Champ d'édition inline : mêmes métriques que `.task-text` pour que la
+   ligne ne bouge pas d'un pixel au passage lecture → édition. */
+.task-edit {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-family: inherit;
+  line-height: 1.4;
+  color: var(--txt);
+  background: var(--surface-2);
+  border: 1px solid var(--accent-green);
+  border-radius: 5px;
+  padding: 2px 6px;
+  margin: -3px 0;
+  outline: none;
+}
+
+.task-row.is-editing {
+  background: var(--surface-1);
+}
+
+/* Copier le libellé — même patron que ✕ : révélé au hover de la ligne. */
+.task-copy {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--txt-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.task-row:hover .task-copy {
+  opacity: 1;
+}
+
+.task-copy:hover {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--accent-green);
 }
 
 /* Bouton ✕ révélé uniquement au hover de la ligne — UX moins bruyante
