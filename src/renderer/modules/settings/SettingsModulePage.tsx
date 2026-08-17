@@ -934,6 +934,57 @@ function GitLabSettings() {
         </div>
       </SettingsSection>
 
+      <SettingsSection title="Ce qui est suivi">
+        <SettingsToggleRow
+          icon="fa-solid fa-circle-exclamation"
+          iconColor="#ef4444"
+          label="Issues à prendre"
+          description="Issues sans assigné portant un label surveillé. Décoché : plus de section ni de compteur, l'API n'est plus interrogée pour ça, et le badge rouge de la chip disparaît."
+          value={cfg.sections.watchedIssues}
+          onChange={(next) =>
+            void patchModuleConfig('gitlab', {
+              sections: { ...cfg.sections, watchedIssues: next },
+            })
+          }
+        />
+        <SettingsToggleRow
+          icon="fa-regular fa-circle-dot"
+          iconColor="#60a5fa"
+          label="Mes issues"
+          description="Issues, incidents, tâches et cas de test ouverts qui me sont assignés."
+          value={cfg.sections.myWorkItems}
+          onChange={(next) =>
+            void patchModuleConfig('gitlab', {
+              sections: { ...cfg.sections, myWorkItems: next },
+            })
+          }
+        />
+        <SettingsToggleRow
+          icon="fa-solid fa-code-merge"
+          iconColor="#FC6D26"
+          label="MR à reviewer"
+          description="MR où je suis reviewer."
+          value={cfg.sections.toReview}
+          onChange={(next) =>
+            void patchModuleConfig('gitlab', {
+              sections: { ...cfg.sections, toReview: next },
+            })
+          }
+        />
+        <SettingsToggleRow
+          icon="fa-solid fa-code-pull-request"
+          iconColor="#94a3b8"
+          label="Mes MR"
+          description="MR que j'ai ouvertes. Décoché : la pastille de pipeline cassé disparaît aussi de la chip, faute de données."
+          value={cfg.sections.mine}
+          onChange={(next) =>
+            void patchModuleConfig('gitlab', {
+              sections: { ...cfg.sections, mine: next },
+            })
+          }
+        />
+      </SettingsSection>
+
       <SettingsSection title="Notifications">
         <SettingsToggleRow
           icon="fa-solid fa-code-merge"

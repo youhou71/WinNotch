@@ -1,7 +1,12 @@
 /**
  * Card GitLab compacte du dashboard étendu.
  *
- * Trois compteurs cliquables : Issues à prendre / À reviewer / Mes MR.
+ * Jusqu'à quatre compteurs cliquables, dans l'ordre : à prendre / mes
+ * issues / à reviewer / mes MR — les tickets d'abord, les MR ensuite.
+ * Chacun n'apparaît que si sa section est suivie
+ * (`moduleConfig.gitlab.sections`), et la grille s'ajuste au nombre
+ * restant : trois compteurs restent sur une seule ligne, quatre se
+ * replient en 2 × 2 plus tôt (cf. `.gl-stats` dans gitlab.css).
  * Le clic sur la card ouvre la `<GitLabPanel>` plein dashboard via
  * `onOpen` géré par `ExpandedDashboard`.
  *
@@ -15,8 +20,9 @@
  * `key={count}` sur chaque chiffre déclenche l'animation pop CSS à chaque
  * changement (même technique que `<TasksCounterCard>`).
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useGitLabContext } from './GitLabContext';
+import { useSettingsContext } from '../settings/SettingsContext';
 
 interface Props {
   /** Appelé au clic — `ExpandedDashboard` ouvre alors `<GitLabPanel>`. */
@@ -48,6 +54,16 @@ function Stat({ icon, iconColor, count, label, alert }: StatProps) {
 
 export function GitLabCard({ onOpen }: Props) {
   const { state, refresh } = useGitLabContext();
+  const { settings } = useSettingsContext();
+  const sections = settings.moduleConfig.gitlab.sections;
+  // Le nombre de compteurs affichés pilote la grille : `data-count` sert
+  // aux paliers responsive, la variable CSS au nombre de colonnes.
+  const statCount = [
+    sections.watchedIssues,
+    sections.toReview,
+    sections.mine,
+    sections.myWorkItems,
+  ].filter(Boolean).length;
   const [refreshing, setRefreshing] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -136,27 +152,51 @@ export function GitLabCard({ onOpen }: Props) {
         </div>
       </div>
 
-      <div className="gl-stats">
-        <Stat
-          icon="fa-solid fa-circle-exclamation"
-          iconColor="#ef4444"
-          count={state.watchedIssues.length}
-          label="à prendre"
-          alert
-        />
-        <Stat
-          icon="fa-solid fa-code-merge"
-          iconColor="#fc6d26"
-          count={state.toReview.length}
-          label="à reviewer"
-        />
-        <Stat
-          icon="fa-solid fa-code-pull-request"
-          iconColor="#94a3b8"
-          count={state.mine.length}
-          label="mes MR"
-        />
-      </div>
+      {statCount === 0 ? (
+        <div className="gl-stats-empty">
+          Aucune section suivie — voir Réglages → GitLab.
+        </div>
+      ) : (
+        <div
+          className="gl-stats"
+          data-count={statCount}
+          style={{ '--gl-stat-count': statCount } as CSSProperties}
+        >
+          {sections.watchedIssues && (
+            <Stat
+              icon="fa-solid fa-circle-exclamation"
+              iconColor="#ef4444"
+              count={state.watchedIssues.length}
+              label="à prendre"
+              alert
+            />
+          )}
+          {sections.myWorkItems && (
+            <Stat
+              icon="fa-regular fa-circle-dot"
+              iconColor="#60a5fa"
+              count={state.myWorkItems.length}
+              label="mes issues"
+            />
+          )}
+          {sections.toReview && (
+            <Stat
+              icon="fa-solid fa-code-merge"
+              iconColor="#fc6d26"
+              count={state.toReview.length}
+              label="à reviewer"
+            />
+          )}
+          {sections.mine && (
+            <Stat
+              icon="fa-solid fa-code-pull-request"
+              iconColor="#94a3b8"
+              count={state.mine.length}
+              label="mes MR"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

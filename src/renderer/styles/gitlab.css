@@ -98,17 +98,28 @@
   outline-offset: -1px;
 }
 
+/* Le nombre de colonnes suit le nombre de compteurs réellement affichés
+   (les sections non suivies n'en produisent aucun) — d'où la variable
+   posée par `GitLabCard`. */
 .gl-stats {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(var(--gl-stat-count, 4), 1fr);
   gap: 6px;
   margin-top: 2px;
 }
 
-/* Tuile étroite : 3 colonnes de stats deviennent illisibles → on empile.
- * Étape intermédiaire à 2 colonnes avant de passer à 1. */
+/* Repli progressif, par nombre de compteurs affichés. Une 4e colonne
+   écrase les libellés bien avant que la place ne manque vraiment → repli
+   en 2 × 2 dès 320 px. Trois compteurs, eux, tiennent sur une seule ligne
+   beaucoup plus longtemps : on les garde alignés jusqu'à 230 px. */
+@container dashtile (max-width: 320px) {
+  .gl-stats[data-count='4'] {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 @container dashtile (max-width: 230px) {
-  .gl-stats {
+  .gl-stats[data-count='3'] {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -117,6 +128,19 @@
   .gl-stats {
     grid-template-columns: 1fr;
   }
+}
+
+/* Cas limite : plus aucune section suivie — la card reste cliquable et
+   explique où rallumer quelque chose plutôt que d'afficher un vide. */
+.gl-stats-empty {
+  margin-top: 2px;
+  padding: 10px 8px;
+  font-size: 10px;
+  color: var(--txt-faint);
+  text-align: center;
+  background: var(--surface-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
 }
 
 .gl-stat {
@@ -353,6 +377,44 @@
   font-family: 'JetBrains Mono', monospace;
   font-size: 8.5px;
   letter-spacing: 0;
+}
+
+/* Badge jalon d'un work item — neutre, il porte du contexte, pas une alerte. */
+.gl-badge-milestone {
+  background: rgba(148, 163, 184, 0.14);
+  color: #cbd5e1;
+  font-size: 8.5px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Badge échéance — vire au rouge une fois la date dépassée. */
+.gl-badge-due {
+  background: rgba(96, 165, 250, 0.14);
+  color: #93c5fd;
+  font-size: 8.5px;
+  white-space: nowrap;
+}
+
+.gl-badge-due.is-late {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+/* Ligne "type + référence" d'un work item : le type est une icône, la
+   référence garde son style monospace orange commun avec les MR. */
+.gl-wi-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.gl-wi-type {
+  font-size: 9.5px;
+  flex-shrink: 0;
 }
 
 /* Section "Issues surveillées" : titre rouge + icône, sépare visuellement
