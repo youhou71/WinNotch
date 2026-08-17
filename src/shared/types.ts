@@ -460,6 +460,26 @@ export interface ModuleConfig {
      * font partie du nom du label, ce n'est pas une syntaxe spéciale).
      */
     watchedLabels: string[];
+    /**
+     * Ce que le module suit. Une section désactivée n'est **pas
+     * interrogée** — un appel API en moins par cycle : sa liste reste
+     * vide, sa section disparaît du panel et son compteur de la card.
+     *
+     * Conséquences volontaires : sans `watchedIssues`, la chip du notch
+     * rétracté perd son badge rouge ; sans `mine`, elle perd la pastille
+     * de pipeline cassé. Les toasts de la section suivent le même sort,
+     * faute de données pour les déclencher.
+     */
+    sections: {
+      /** Issues non assignées portant un label surveillé. */
+      watchedIssues: boolean;
+      /** MR où je suis reviewer. */
+      toReview: boolean;
+      /** MR que j'ai ouvertes. */
+      mine: boolean;
+      /** Work items ouverts qui me sont assignés. */
+      myWorkItems: boolean;
+    };
     /** Filtrer uniquement les MR/issues assignées à l'utilisateur. */
     assignedOnly: boolean;
     /** Fréquence de polling en millisecondes (défaut 120 000 ms). */
@@ -830,6 +850,12 @@ export const DEFAULT_SETTINGS: Settings = {
       encryptedToken: null,
       account: null,
       notify: { mr: true, pipelines: false, comments: false, watchedIssues: true },
+      sections: {
+        watchedIssues: true,
+        toReview: true,
+        mine: true,
+        myWorkItems: true,
+      },
       watchedLabels: [],
       assignedOnly: false,
       pollMs: 120_000,

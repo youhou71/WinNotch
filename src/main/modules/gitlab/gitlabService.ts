@@ -158,33 +158,48 @@ async function refreshOnce(): Promise<GitLabState> {
   }
 
   try {
+    // Une section désactivée n'est pas interrogée du tout : on résout
+    // directement une liste vide plutôt que de filtrer après coup, pour
+    // que le réglage se traduise en appels API économisés.
+    const sections = cfg.sections;
+
     // Issues : un appel par label surveillé, en parallèle. On dédup
     // ensuite par `id` (une issue peut porter plusieurs labels surveillés
     // → ne pas la lister deux fois) en conservant le 1er `matchedLabel`
     // rencontré.
-    const labelFetches = cfg.watchedLabels
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0)
-      .map((label) => fetchIssuesByLabel(cfg.url, token, label));
+    const labelFetches = sections.watchedIssues
+      ? cfg.watchedLabels
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0)
+          .map((label) => fetchIssuesByLabel(cfg.url, token, label))
+      : [];
 
     const [toReviewRaw, mineRaw, issueGroups, myWorkItems, reviewedIds] =
       await Promise.all([
-        fetchMrsToReview(cfg.url, token, cfg.account.id),
-        fetchMrsAuthored(cfg.url, token, cfg.account.id),
+        sections.toReview
+          ? fetchMrsToReview(cfg.url, token, cfg.account.id)
+          : Promise.resolve([]),
+        sections.mine
+          ? fetchMrsAuthored(cfg.url, token, cfg.account.id)
+          : Promise.resolve([]),
         Promise.all(labelFetches),
-        fetchMyWorkItems(cfg.url, token, cfg.account.id),
+        sections.myWorkItems
+          ? fetchMyWorkItems(cfg.url, token, cfg.account.id)
+          : Promise.resolve([]),
         // État de reviewer (GraphQL) : ids des MR que j'ai déjà reviewées.
         // `.catch` local → un échec GraphQL ne fait pas rejeter le Promise.all
         // (donc pas de lastError parasite) ; on retombe sur la liste complète.
-        fetchMyReviewedMrIds(cfg.url, token, cfg.account.username).catch(
-          (err) => {
-            console.warn(
-              '[gitlab] filtre MR reviewées indisponible (GraphQL):',
-              err,
-            );
-            return new Set<number>();
-          },
-        ),
+        sections.toReview
+          ? fetchMyReviewedMrIds(cfg.url, token, cfg.account.username).catch(
+              (err) => {
+                console.warn(
+                  '[gitlab] filtre MR reviewées indisponible (GraphQL):',
+                  err,
+                );
+                return new Set<number>();
+              },
+            )
+          : Promise.resolve(new Set<number>()),
       ]);
 
     // Le filtre REST `reviewer_id` garde les MR tant qu'elles sont ouvertes,
@@ -337,8 +352,8 @@ function handleClearCredentials(): void {
 
 /**
  * Réagit aux changements de `moduleConfig.gitlab` depuis les Settings :
- *  - `watchedLabels` modifié → refresh immédiat (ne pas attendre 120 s
- *    avant de voir la nouvelle liste d'issues correspondante).
+ *  - `watchedLabels` ou `sections` modifiés → refresh immédiat (ne pas
+ *    attendre 120 s avant de voir la liste correspondante).
  *  - `pollMs` modifié → restart du timer avec le nouvel intervalle.
  *  - autres champs (notify, collapsed, etc.) → pas d'action backend
  *    nécessaire ; le renderer relit `settings.moduleConfig` directement.
@@ -352,7 +367,12 @@ function subscribeConfigChanges(): void {
     const labelsChanged =
       JSON.stringify(newG.watchedLabels) !==
       JSON.stringify(oldG.watchedLabels);
-    if (labelsChanged && newG.account && newG.encryptedToken) {
+    // Activer une section doit la remplir tout de suite : sans ça, elle
+    // resterait vide jusqu'au prochain tick (2 min par défaut) et le
+    // réglage aurait l'air sans effet.
+    const sectionsChanged =
+      JSON.stringify(newG.sections) !== JSON.stringify(oldG.sections);
+    if ((labelsChanged || sectionsChanged) && newG.account && newG.encryptedToken) {
       void refreshOnce();
     }
 

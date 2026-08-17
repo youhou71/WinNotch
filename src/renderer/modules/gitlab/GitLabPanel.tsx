@@ -25,6 +25,7 @@ import type {
   GitLabWorkItem,
 } from '../../../shared/types';
 import { useGitLabContext } from './GitLabContext';
+import { useSettingsContext } from '../settings/SettingsContext';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { NotchTooltip } from '../../components/Tooltip/NotchTooltip';
@@ -280,6 +281,13 @@ interface Props {
 
 export function GitLabPanel({ onClose }: Props) {
   const { state, refresh } = useGitLabContext();
+  const { settings } = useSettingsContext();
+  const sections = settings.moduleConfig.gitlab.sections;
+  const anySection =
+    sections.watchedIssues ||
+    sections.toReview ||
+    sections.mine ||
+    sections.myWorkItems;
   const [refreshing, setRefreshing] = useState(false);
 
   // Bouton "Précédent" de la souris (XButton1) ET touche Esc → ferme le panel.
@@ -376,7 +384,16 @@ export function GitLabPanel({ onClose }: Props) {
           </div>
         )}
 
-        {state.configured && state.watchedIssues.length > 0 && (
+        {state.configured && !anySection && (
+          <div className="gl-empty">
+            Aucune section suivie — choisis ce que tu veux voir dans Réglages
+            → GitLab → « Ce qui est suivi ».
+          </div>
+        )}
+
+        {state.configured &&
+          sections.watchedIssues &&
+          state.watchedIssues.length > 0 && (
           <>
             <div
               className="gl-section-title gl-section-issues"
@@ -396,7 +413,7 @@ export function GitLabPanel({ onClose }: Props) {
           </>
         )}
 
-        {state.configured && (
+        {state.configured && sections.toReview && (
           <>
             <div className="gl-section-title">
               À reviewer
@@ -411,7 +428,11 @@ export function GitLabPanel({ onClose }: Props) {
                 ))}
               </div>
             )}
+          </>
+        )}
 
+        {state.configured && sections.mine && (
+          <>
             <div className="gl-section-title">
               Mes MR
               <span className="gl-count">{state.mine.length}</span>
@@ -425,7 +446,11 @@ export function GitLabPanel({ onClose }: Props) {
                 ))}
               </div>
             )}
+          </>
+        )}
 
+        {state.configured && sections.myWorkItems && (
+          <>
             <div
               className="gl-section-title"
               title="Issues, incidents, tâches et cas de test ouverts qui te sont assignés."

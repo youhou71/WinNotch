@@ -98,19 +98,22 @@
   outline-offset: -1px;
 }
 
+/* Le nombre de colonnes suit le nombre de compteurs réellement affichés
+   (les sections non suivies n'en produisent aucun) — d'où la variable
+   posée par `GitLabCard`. */
 .gl-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(var(--gl-stat-count, 4), 1fr);
   gap: 6px;
   margin-top: 2px;
 }
 
-/* Tuile étroite : 4 colonnes de stats deviennent illisibles → on empile.
- * Étape intermédiaire en 2 × 2 avant de passer à 1 colonne. Le palier est
- * plus haut qu'avec 3 stats — une 4e colonne écrase les libellés bien
- * avant que la place ne manque vraiment. */
+/* Tuile étroite : au-delà de deux compteurs les libellés s'écrasent bien
+   avant que la place ne manque vraiment → on replie en 2 colonnes. Ciblé
+   par `data-count` pour ne pas étirer une grille qui tient déjà. */
 @container dashtile (max-width: 320px) {
-  .gl-stats {
+  .gl-stats[data-count='3'],
+  .gl-stats[data-count='4'] {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -119,6 +122,19 @@
   .gl-stats {
     grid-template-columns: 1fr;
   }
+}
+
+/* Cas limite : plus aucune section suivie — la card reste cliquable et
+   explique où rallumer quelque chose plutôt que d'afficher un vide. */
+.gl-stats-empty {
+  margin-top: 2px;
+  padding: 10px 8px;
+  font-size: 10px;
+  color: var(--txt-faint);
+  text-align: center;
+  background: var(--surface-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
 }
 
 .gl-stat {

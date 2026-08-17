@@ -23,9 +23,15 @@ export function useGitLabReviewToasts(): void {
   /** Snapshot des IDs vus au tick précédent. `null` = baseline non amorcée. */
   const prev = useRef<Set<number> | null>(null);
 
+  const sectionOn = settings.moduleConfig.gitlab.sections.toReview;
+
   useEffect(() => {
     // Pas configuré → on ne touche pas à la baseline.
-    if (!state.configured) {
+    // Section non suivie → on la **désarme** : la liste est vide côté main,
+    // et sans ce reset, la réactiver ferait passer la liste de vide à
+    // pleine d'un coup — un toast pour chaque MR, y compris les plus
+    // anciennes. Au retour, le premier passage ré-amorce en silence.
+    if (!state.configured || !sectionOn) {
       prev.current = null;
       return;
     }
@@ -56,6 +62,7 @@ export function useGitLabReviewToasts(): void {
   }, [
     state.configured,
     state.toReview,
+    sectionOn,
     settings.modules.gitlab,
     settings.moduleConfig.gitlab.notify.mr,
     push,

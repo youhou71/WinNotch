@@ -30,8 +30,13 @@ export function useGitLabIssueToasts(): void {
    */
   const prevLabelsKey = useRef<string>('');
 
+  const sectionOn = settings.moduleConfig.gitlab.sections.watchedIssues;
+
   useEffect(() => {
-    if (!state.configured) {
+    // Section non suivie → baseline désarmée, même raison que le reset sur
+    // changement de labels ci-dessous : à la réactivation, toutes les
+    // issues déjà là passeraient pour des nouveautés.
+    if (!state.configured || !sectionOn) {
       prev.current = null;
       return;
     }
@@ -70,6 +75,7 @@ export function useGitLabIssueToasts(): void {
   }, [
     state.configured,
     state.watchedIssues,
+    sectionOn,
     settings.modules.gitlab,
     settings.moduleConfig.gitlab.notify.watchedIssues,
     settings.moduleConfig.gitlab.watchedLabels,

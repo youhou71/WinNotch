@@ -23,8 +23,13 @@ export function useGitLabPipelineToasts(): void {
   /** Map<mrId, pipelineStatus> du tick précédent. `null` = baseline non amorcée. */
   const prev = useRef<Map<number, string | null> | null>(null);
 
+  const sectionOn = settings.moduleConfig.gitlab.sections.mine;
+
   useEffect(() => {
-    if (!state.configured) {
+    // Section « Mes MR » non suivie → plus de statut pipeline récupéré, et
+    // baseline désarmée pour qu'un pipeline rouge de longue date ne
+    // ressorte pas en toast au moment de réactiver la section.
+    if (!state.configured || !sectionOn) {
       prev.current = null;
       return;
     }
@@ -60,6 +65,7 @@ export function useGitLabPipelineToasts(): void {
   }, [
     state.configured,
     state.mine,
+    sectionOn,
     settings.modules.gitlab,
     settings.moduleConfig.gitlab.notify.pipelines,
     push,
