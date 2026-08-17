@@ -10,7 +10,7 @@ Widget système flottant pour Windows 11 inspiré du Dynamic Island d'iOS. WinNo
 
 À l'état rétracté, WinNotch est une petite barre noire qui héberge des chips contextuelles (musique en cours, prochain meeting, sessions Claude actives, état GitLab…). Au clic ou via `Ctrl + Shift + Space`, elle s'anime en un dashboard de 580 px de large rassemblant les informations actionnables du moment.
 
-Conçu pour rester discret (mode Peek à `Alt` maintenu, masquage en plein écran, mode Ne pas Déranger).
+Conçu pour rester discret (mode Peek à `Alt` maintenu, masquage en plein écran, mode Ne pas Déranger). La fenêtre est déclarée en *tool window* Windows : WinNotch n'apparaît **ni dans la barre des tâches, ni dans Alt+Tab** — il se pilote au clic et aux raccourcis globaux.
 
 ---
 

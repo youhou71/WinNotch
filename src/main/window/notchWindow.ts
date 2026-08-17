@@ -48,10 +48,12 @@ import { isMouseOverNotch } from '../ipc/mouse';
  *  - prod : l'icône est copiée via `extraResources` à côté de l'exe
  *    (`resources/icon.ico`).
  *
- * Indispensable côté BrowserWindow pour que l'icône s'affiche dans
- * Alt+Tab, le gestionnaire des tâches et le menu Aero Peek — sans ça,
- * Electron retombe sur son icône par défaut même si l'exe lui-même a
- * été patché par rcedit au packaging.
+ * Indispensable côté BrowserWindow pour que l'icône s'affiche partout où
+ * Windows représente la fenêtre (gestionnaire des tâches, boîtes système) —
+ * sans ça, Electron retombe sur son icône par défaut même si l'exe lui-même
+ * a été patché par rcedit au packaging. Depuis le passage en tool window
+ * (cf. `type: 'toolbar'` dans createNotchWindow), le notch n'apparaît en
+ * revanche ni dans la barre des tâches ni dans Alt+Tab.
  */
 const WINDOW_ICON_PATH = is.dev
   ? join(__dirname, '../../build/icon.ico')
@@ -271,13 +273,41 @@ export function getNotchWindow(): BrowserWindow | null {
 }
 
 /**
+ * Ré-affirme l'exclusion de la barre des tâches.
+ *
+ * Pourquoi en plus de `type: 'toolbar'` ? Les deux mécanismes n'agissent pas
+ * au même moment :
+ *  - `type: 'toolbar'` pose le style natif `WS_EX_TOOLWINDOW` **à la création**
+ *    de la fenêtre : le shell Windows ne lui crée jamais de bouton. C'est la
+ *    garantie de fond, insensible au timing.
+ *  - `skipTaskbar` passe lui par `ITaskbarList::DeleteTab`, c'est-à-dire un
+ *    retrait **a posteriori** : Windows crée le bouton, Electron le supprime
+ *    juste après. Si la taskbar n'est pas prête à ce moment-là — typiquement
+ *    au démarrage de session, quand WinNotch est lancé par la tâche
+ *    planifiée pendant qu'explorer.exe initialise encore sa barre — le retrait
+ *    peut se perdre et le bouton subsister. C'est exactement le « parfois au
+ *    lancement » observé.
+ *
+ * On garde donc les deux, et on redemande le retrait sur les transitions où
+ * le shell est susceptible de (re)construire ses boutons : premier affichage,
+ * prise de focus, restauration. L'appel est idempotent et gratuit quand il n'y
+ * a rien à retirer. (Un redémarrage d'explorer.exe, lui, est couvert par le
+ * seul style natif : Windows ne recrée aucun bouton pour une tool window.)
+ */
+function enforceSkipTaskbar(): void {
+  if (!notchWindow || notchWindow.isDestroyed()) return;
+  notchWindow.setSkipTaskbar(true);
+}
+
+/**
  * Crée la BrowserWindow unique du Notch.
  *
  * Choix de configuration importants :
  *  - `transparent: true` + `backgroundColor: '#00000000'` → fond strictement
  *    transparent, seul le `<div class="notch">` peint des pixels visibles
  *  - `hasShadow: false` → évite un halo DWM autour de la fenêtre
- *  - `skipTaskbar: true` → pas d'icône dans la barre des tâches Windows
+ *  - `type: 'toolbar'` + `skipTaskbar: true` → jamais d'icône dans la barre
+ *    des tâches (cf. `enforceSkipTaskbar` pour le détail du pourquoi des deux)
  *  - `resizable/movable: false` → l'utilisateur ne doit jamais pouvoir
  *    déplacer la fenêtre (le Notch est fixe par essence)
  *  - `setAlwaysOnTop('pop-up-menu')` → niveau moins agressif que
@@ -308,6 +338,9 @@ export function createNotchWindow(): BrowserWindow {
     maximizable: false,
     minimizable: false,
     fullscreenable: false,
+    // Tool window Windows (WS_EX_TOOLWINDOW) : le notch n'est structurellement
+    // pas éligible à la barre des tâches ni à Alt+Tab. Cf. enforceSkipTaskbar.
+    type: 'toolbar',
     skipTaskbar: true,
     show: false, // on attend ready-to-show pour éviter un flash de transparence
     focusable: true,
@@ -327,6 +360,11 @@ export function createNotchWindow(): BrowserWindow {
   notchWindow.on('ready-to-show', () => {
     notchWindow?.show();
   });
+
+  // Filet anti-course avec le shell : cf. enforceSkipTaskbar.
+  notchWindow.on('show', enforceSkipTaskbar);
+  notchWindow.on('focus', enforceSkipTaskbar);
+  notchWindow.on('restore', enforceSkipTaskbar);
 
   // Quand la fenêtre perd le focus (clic outside, alt-tab, etc.), on
   // demande au renderer de rétracter. Le renderer décide selon son
