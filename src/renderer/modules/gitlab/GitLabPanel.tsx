@@ -8,6 +8,8 @@
  *    `watchedLabels`)
  *  - Section "À reviewer" (MR où l'utilisateur courant est reviewer)
  *  - Section "Mes MR" (MR créées par l'utilisateur courant)
+ *  - Section "Mes work items" (issues / incidents / tâches / cas de test
+ *    ouverts qui lui sont assignés)
  *
  * Cas particuliers : `state.configured === false`, `state.lastError`,
  * listes vides — chacun a un placeholder dédié.
@@ -16,7 +18,12 @@
  * navigateur par défaut.
  */
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { GitLabIssue, GitLabMr, GitLabMrDetail } from '../../../shared/types';
+import type {
+  GitLabIssue,
+  GitLabMr,
+  GitLabMrDetail,
+  GitLabWorkItem,
+} from '../../../shared/types';
 import { useGitLabContext } from './GitLabContext';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
@@ -64,6 +71,80 @@ function IssueRow({ issue }: { issue: GitLabIssue }) {
         <span className="dot">·</span>
         <span className="gl-mr-age">{relativeAge(issue.createdAt)}</span>
         <span className="gl-badge gl-badge-issue">{issue.matchedLabel}</span>
+      </div>
+    </button>
+  );
+}
+
+/**
+ * Icône + couleur par type de work item. `issue` est le défaut : les
+ * instances antérieures à GitLab 13 ne renvoient pas `issue_type`, et le
+ * client normalise alors vers cette valeur.
+ */
+const WORK_ITEM_TYPES: Record<string, { icon: string; color: string; label: string }> = {
+  issue: { icon: 'fa-regular fa-circle-dot', color: '#94a3b8', label: 'issue' },
+  incident: { icon: 'fa-solid fa-fire', color: '#ef4444', label: 'incident' },
+  task: { icon: 'fa-solid fa-list-check', color: '#60a5fa', label: 'tâche' },
+  test_case: { icon: 'fa-solid fa-vial', color: '#a78bfa', label: 'cas de test' },
+};
+
+const DUE_FORMAT = new Intl.DateTimeFormat('fr-FR', {
+  day: '2-digit',
+  month: '2-digit',
+});
+
+/**
+ * Formate une échéance `yyyy-mm-dd` et dit si elle est dépassée.
+ *
+ * La comparaison se fait à la journée (minuit local) : une échéance
+ * fixée à aujourd'hui n'est pas « en retard ».
+ */
+function dueMeta(dueDate: string): { text: string; late: boolean } | null {
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return { text: DUE_FORMAT.format(due), late: due.getTime() < today.getTime() };
+}
+
+function WorkItemRow({ item }: { item: GitLabWorkItem }) {
+  const type = WORK_ITEM_TYPES[item.issueType] ?? WORK_ITEM_TYPES.issue;
+  const due = item.dueDate ? dueMeta(item.dueDate) : null;
+  return (
+    <button
+      type="button"
+      className="gl-mr gl-work-item"
+      onClick={() => void window.notch.shell.openExternal(item.webUrl)}
+      title={`${item.reference} · ${type.label}`}
+    >
+      <div className="gl-mr-main">
+        {/* `.gl-mr-main` empile ref puis titre : l'icône de type doit donc
+            partager une ligne avec la référence, pas s'insérer au-dessus. */}
+        <div className="gl-wi-head">
+          <i
+            className={type.icon + ' gl-wi-type'}
+            style={{ color: type.color }}
+            aria-hidden="true"
+          />
+          <span className="gl-mr-ref">{item.reference}</span>
+        </div>
+        <span className="gl-mr-title">{item.title}</span>
+      </div>
+      <div className="gl-mr-meta">
+        <span className="gl-mr-age">{relativeAge(item.updatedAt)}</span>
+        {item.milestoneTitle && (
+          <span className="gl-badge gl-badge-milestone">
+            {item.milestoneTitle}
+          </span>
+        )}
+        {due && (
+          <span
+            className={'gl-badge gl-badge-due' + (due.late ? ' is-late' : '')}
+            title={due.late ? 'Échéance dépassée' : 'Échéance'}
+          >
+            <i className="fa-regular fa-calendar" /> {due.text}
+          </span>
+        )}
       </div>
     </button>
   );
@@ -341,6 +422,23 @@ export function GitLabPanel({ onClose }: Props) {
               <div className="gl-list">
                 {state.mine.map((mr) => (
                   <MrRow key={mr.id} mr={mr} showAuthor={false} />
+                ))}
+              </div>
+            )}
+
+            <div
+              className="gl-section-title"
+              title="Issues, incidents, tâches et cas de test ouverts qui te sont assignés."
+            >
+              Mes work items
+              <span className="gl-count">{state.myWorkItems.length}</span>
+            </div>
+            {state.myWorkItems.length === 0 ? (
+              <div className="gl-empty">Rien ne t'est assigné.</div>
+            ) : (
+              <div className="gl-list">
+                {state.myWorkItems.map((item) => (
+                  <WorkItemRow key={item.id} item={item} />
                 ))}
               </div>
             )}

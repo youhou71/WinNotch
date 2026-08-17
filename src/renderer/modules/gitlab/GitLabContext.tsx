@@ -27,6 +27,7 @@ const EMPTY_STATE: GitLabState = {
   toReview: [],
   mine: [],
   watchedIssues: [],
+  myWorkItems: [],
   lastFetchAt: null,
   lastError: null,
 };

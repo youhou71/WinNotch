@@ -100,14 +100,16 @@
 
 .gl-stats {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
   margin-top: 2px;
 }
 
-/* Tuile étroite : 3 colonnes de stats deviennent illisibles → on empile.
- * Étape intermédiaire à 2 colonnes avant de passer à 1. */
-@container dashtile (max-width: 230px) {
+/* Tuile étroite : 4 colonnes de stats deviennent illisibles → on empile.
+ * Étape intermédiaire en 2 × 2 avant de passer à 1 colonne. Le palier est
+ * plus haut qu'avec 3 stats — une 4e colonne écrase les libellés bien
+ * avant que la place ne manque vraiment. */
+@container dashtile (max-width: 320px) {
   .gl-stats {
     grid-template-columns: 1fr 1fr;
   }
@@ -353,6 +355,44 @@
   font-family: 'JetBrains Mono', monospace;
   font-size: 8.5px;
   letter-spacing: 0;
+}
+
+/* Badge jalon d'un work item — neutre, il porte du contexte, pas une alerte. */
+.gl-badge-milestone {
+  background: rgba(148, 163, 184, 0.14);
+  color: #cbd5e1;
+  font-size: 8.5px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Badge échéance — vire au rouge une fois la date dépassée. */
+.gl-badge-due {
+  background: rgba(96, 165, 250, 0.14);
+  color: #93c5fd;
+  font-size: 8.5px;
+  white-space: nowrap;
+}
+
+.gl-badge-due.is-late {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+/* Ligne "type + référence" d'un work item : le type est une icône, la
+   référence garde son style monospace orange commun avec les MR. */
+.gl-wi-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.gl-wi-type {
+  font-size: 9.5px;
+  flex-shrink: 0;
 }
 
 /* Section "Issues surveillées" : titre rouge + icône, sépare visuellement

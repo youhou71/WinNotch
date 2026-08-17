@@ -6,7 +6,8 @@
  *  - Chiffrement du PAT via Electron `safeStorage` (DPAPI sous Windows) :
  *    le PAT brut ne quitte jamais le main process. Le renderer ne voit que
  *    le statut booléen `configured`.
- *  - Polling périodique des MR à reviewer + des MR créées par l'utilisateur.
+ *  - Polling périodique des MR à reviewer, des MR créées par l'utilisateur,
+ *    des issues à label surveillé et des work items qui lui sont assignés.
  *  - Broadcast IPC `gitlab:change` à chaque changement d'état.
  *
  * Erreurs réseau / 401 : on les attrape silencieusement et on stocke un
@@ -30,6 +31,7 @@ import {
   fetchMrsAuthored,
   fetchMrsToReview,
   fetchMyReviewedMrIds,
+  fetchMyWorkItems,
   GitLabAuthError,
   GitLabNetworkError,
 } from './gitlabClient';
@@ -56,6 +58,7 @@ let currentState: GitLabState = {
   toReview: [],
   mine: [],
   watchedIssues: [],
+  myWorkItems: [],
   lastFetchAt: null,
   lastError: null,
 };
@@ -146,6 +149,7 @@ async function refreshOnce(): Promise<GitLabState> {
       toReview: [],
       mine: [],
       watchedIssues: [],
+      myWorkItems: [],
       lastFetchAt: currentState.lastFetchAt,
       lastError: null,
     };
@@ -163,11 +167,12 @@ async function refreshOnce(): Promise<GitLabState> {
       .filter((l) => l.length > 0)
       .map((label) => fetchIssuesByLabel(cfg.url, token, label));
 
-    const [toReviewRaw, mineRaw, issueGroups, reviewedIds] = await Promise.all(
-      [
+    const [toReviewRaw, mineRaw, issueGroups, myWorkItems, reviewedIds] =
+      await Promise.all([
         fetchMrsToReview(cfg.url, token, cfg.account.id),
         fetchMrsAuthored(cfg.url, token, cfg.account.id),
         Promise.all(labelFetches),
+        fetchMyWorkItems(cfg.url, token, cfg.account.id),
         // État de reviewer (GraphQL) : ids des MR que j'ai déjà reviewées.
         // `.catch` local → un échec GraphQL ne fait pas rejeter le Promise.all
         // (donc pas de lastError parasite) ; on retombe sur la liste complète.
@@ -180,8 +185,7 @@ async function refreshOnce(): Promise<GitLabState> {
             return new Set<number>();
           },
         ),
-      ],
-    );
+      ]);
 
     // Le filtre REST `reviewer_id` garde les MR tant qu'elles sont ouvertes,
     // même après ma review → on retire ici celles que j'ai déjà reviewées.
@@ -221,6 +225,7 @@ async function refreshOnce(): Promise<GitLabState> {
       toReview,
       mine,
       watchedIssues,
+      myWorkItems,
       lastFetchAt: new Date().toISOString(),
       lastError: null,
     };
@@ -318,6 +323,7 @@ function handleClearCredentials(): void {
     toReview: [],
     mine: [],
     watchedIssues: [],
+    myWorkItems: [],
     lastFetchAt: null,
     lastError: null,
   };

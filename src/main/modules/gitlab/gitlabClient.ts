@@ -6,6 +6,8 @@
  *  - récupérer le profil utilisateur courant (`GET /user`)
  *  - lister les MR où l'utilisateur est reviewer
  *  - lister les MR créées par l'utilisateur
+ *  - lister les issues portant un label surveillé, et les work items
+ *    assignés à l'utilisateur
  *
  * Authentification : header `PRIVATE-TOKEN` avec un Personal Access Token
  * (scope `read_api` suffisant). Les URLs sont construites à partir de
@@ -16,6 +18,7 @@ import type {
   GitLabMr,
   GitLabMrDetail,
   GitLabUser,
+  GitLabWorkItem,
 } from '../../../shared/types';
 
 /** Erreurs explicites pour que le service puisse les renvoyer au renderer. */
@@ -498,6 +501,10 @@ interface RawIssue {
   labels: string[];
   author: { name: string; avatar_url: string };
   references: { full: string; relative: string; short: string };
+  /** Absent des instances antérieures à GitLab 13.x — traité comme `issue`. */
+  issue_type?: string;
+  due_date?: string | null;
+  milestone?: { title: string } | null;
 }
 
 function normalizeIssue(raw: RawIssue, matchedLabel: string): GitLabIssue {
@@ -550,4 +557,58 @@ export async function fetchIssuesByLabel(
     sort: 'desc',
   });
   return raws.map((r) => normalizeIssue(r, label));
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  Work items assignés
+ * ─────────────────────────────────────────────────────────────────── */
+
+function normalizeWorkItem(raw: RawIssue): GitLabWorkItem {
+  const refFull = raw.references?.full ?? '';
+  const projectPath = refFull.split('#')[0] ?? '';
+  const projectName = projectPath.split('/').pop() ?? '';
+  return {
+    id: raw.id,
+    iid: raw.iid,
+    projectId: raw.project_id,
+    projectName,
+    reference: refFull,
+    title: raw.title,
+    webUrl: raw.web_url,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+    labels: raw.labels ?? [],
+    issueType: raw.issue_type ?? 'issue',
+    dueDate: raw.due_date ?? null,
+    milestoneTitle: raw.milestone?.title ?? null,
+  };
+}
+
+/**
+ * Liste les work items ouverts **assignés à l'utilisateur** — le pendant,
+ * côté tickets, de « mes MR ».
+ *
+ * L'endpoint `/issues` sert tous les types de work items qui en dérivent
+ * (issue, incident, tâche, cas de test) ; le type réel est lu dans
+ * `issue_type`. Les **epics** ne passent pas par là (endpoint distinct,
+ * édition Premium) et sont hors périmètre.
+ *
+ * Aucun recoupement possible avec `fetchIssuesByLabel`, qui ne remonte
+ * que des issues **sans** assignee : une issue ne peut pas figurer dans
+ * les deux listes.
+ */
+export async function fetchMyWorkItems(
+  instanceUrl: string,
+  token: string,
+  userId: number,
+): Promise<GitLabWorkItem[]> {
+  const raws = await apiFetch<RawIssue[]>(instanceUrl, token, '/issues', {
+    assignee_id: userId,
+    state: 'opened',
+    scope: 'all',
+    per_page: 50,
+    order_by: 'updated_at',
+    sort: 'desc',
+  });
+  return raws.map(normalizeWorkItem);
 }

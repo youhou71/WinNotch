@@ -1272,6 +1272,37 @@ export interface GitLabIssue {
 }
 
 /**
+ * Work item GitLab **assigné à l'utilisateur** — ce qu'il a à traiter.
+ *
+ * Même socle que `GitLabIssue` (l'API REST `/issues` sert les deux), mais
+ * sans `matchedLabel` — ces items ne viennent pas d'une surveillance de
+ * label — et avec le contexte utile à une liste de travail : le type
+ * (`issue`, `incident`, `task`, `test_case`), l'échéance et le jalon.
+ *
+ * Les epics n'en font pas partie : côté REST, ce ne sont pas des issues
+ * (endpoint séparé, édition Premium).
+ */
+export interface GitLabWorkItem {
+  id: number;
+  iid: number;
+  projectId: number;
+  projectName: string;
+  /** Référence "group/project#iid". */
+  reference: string;
+  title: string;
+  webUrl: string;
+  createdAt: string;
+  updatedAt: string;
+  labels: string[];
+  /** `issue_type` renvoyé par l'API : issue | incident | task | test_case. */
+  issueType: string;
+  /** Date d'échéance (`yyyy-mm-dd`) si définie, sinon `null`. */
+  dueDate: string | null;
+  /** Titre du jalon rattaché si présent, sinon `null`. */
+  milestoneTitle: string | null;
+}
+
+/**
  * Snapshot complet exposé au renderer via `gitlab:getState` + push
  * `gitlab:change`.
  *
@@ -1292,6 +1323,11 @@ export interface GitLabState {
    * `moduleConfig.gitlab.watchedLabels`. Tri par createdAt DESC.
    */
   watchedIssues: GitLabIssue[];
+  /**
+   * Work items ouverts **assignés à l'utilisateur** (issues, incidents,
+   * tâches, cas de test). Tri par updatedAt DESC.
+   */
+  myWorkItems: GitLabWorkItem[];
   /** ISO du dernier fetch réussi. `null` si jamais réussi. */
   lastFetchAt: string | null;
   /** Message d'erreur du dernier fetch raté (ex: 401, network down). */
