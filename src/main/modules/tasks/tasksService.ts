@@ -55,6 +55,26 @@ function addTask(text: string): Task[] {
   return tasks;
 }
 
+/**
+ * Réécrit le libellé d'une tâche.
+ *
+ * Un texte vide est **ignoré** plutôt que traité comme une suppression :
+ * l'utilisateur qui efface tout dans le champ inline puis valide par
+ * inadvertance ne doit pas perdre sa tâche — il a la croix pour ça.
+ * `done` et `createdAt` sont préservés (une correction de libellé n'est
+ * pas une nouvelle tâche).
+ */
+function updateTask(id: string, text: string): Task[] {
+  const trimmed = text.trim();
+  if (!trimmed) return getTasks();
+  const tasks = getTasks().map((t) =>
+    t.id === id ? { ...t, text: trimmed } : t,
+  );
+  store.set('tasks', tasks);
+  broadcast(tasks);
+  return tasks;
+}
+
 function toggleTask(id: string): Task[] {
   const tasks = getTasks().map((t) =>
     t.id === id ? { ...t, done: !t.done } : t,
@@ -81,6 +101,9 @@ function clearDoneTasks(): Task[] {
 export function registerTasksIpc(): void {
   ipcMain.handle(IpcChannel.TasksGetState, () => getTasks());
   ipcMain.handle(IpcChannel.TasksAdd, (_e, text: string) => addTask(text));
+  ipcMain.handle(IpcChannel.TasksUpdate, (_e, id: string, text: string) =>
+    updateTask(id, text),
+  );
   ipcMain.handle(IpcChannel.TasksToggle, (_e, id: string) => toggleTask(id));
   ipcMain.handle(IpcChannel.TasksRemove, (_e, id: string) => removeTask(id));
   ipcMain.handle(IpcChannel.TasksClearDone, () => clearDoneTasks());

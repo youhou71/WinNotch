@@ -78,6 +78,8 @@ Configuration : liste de dossiers racines à scanner, profondeur du scan, patter
 ### Tasks
 Liste de tâches éphémères locales (pas de cloud sync). Compteur compact dans le dashboard, vue détaillée via le préfixe `-` dans la search bar. Auto-suppression optionnelle des tâches terminées après N jours.
 
+Chaque ligne se **modifie** au clic sur son libellé (Entrée valide, Échap annule) et se **copie** dans le presse-papier via le bouton révélé au survol — utile pour reprendre l'intitulé d'une tâche dans un ticket ou un message.
+
 ### Clipboard
 Historique du presse-papier chiffré localement (DPAPI), avec détection automatique du type de contenu et preview adapté :
 

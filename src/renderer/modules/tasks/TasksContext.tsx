@@ -8,7 +8,7 @@
  * `system`, etc.).
  *
  * Une seule subscription IPC (`tasks:change`). Les mutations
- * (`add`/`toggle`/`remove`/`clearDone`) retournent la liste mise à jour
+ * (`add`/`update`/`toggle`/`remove`/`clearDone`) retournent la liste mise à jour
  * et déclenchent en plus un broadcast pour les autres consommateurs
  * éventuels.
  */
@@ -32,6 +32,8 @@ interface TasksContextValue {
    */
   lastAddedId: string | null;
   add: (text: string) => Promise<void>;
+  /** Réécrit le libellé d'une tâche (édition inline). Texte vide ignoré. */
+  update: (id: string, text: string) => Promise<void>;
   toggle: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   clearDone: () => Promise<void>;
@@ -67,6 +69,11 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     if (added) setLastAddedId(added.id);
   }, []);
 
+  const update = useCallback(async (id: string, text: string) => {
+    const next = await window.notch.tasks.update(id, text);
+    setTasks(next);
+  }, []);
+
   const toggle = useCallback(async (id: string) => {
     const next = await window.notch.tasks.toggle(id);
     setTasks(next);
@@ -84,7 +91,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   return (
     <TasksContext.Provider
-      value={{ tasks, lastAddedId, add, toggle, remove, clearDone }}
+      value={{ tasks, lastAddedId, add, update, toggle, remove, clearDone }}
     >
       {children}
     </TasksContext.Provider>

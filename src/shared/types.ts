@@ -2057,6 +2057,8 @@ export const IpcChannel = {
   TasksGetState: 'tasks:getState',
   /** Renderer → main (invoke) : ajoute une tâche, retourne la liste mise à jour. */
   TasksAdd: 'tasks:add',
+  /** Renderer → main (invoke) : réécrit le libellé d'une tâche, retourne la liste. */
+  TasksUpdate: 'tasks:update',
   /** Renderer → main (invoke) : bascule done sur une tâche, retourne la liste. */
   TasksToggle: 'tasks:toggle',
   /** Renderer → main (invoke) : supprime une tâche, retourne la liste. */
@@ -2785,6 +2787,12 @@ export interface NotchApi {
     getState: () => Promise<Task[]>;
     /** Ajoute une tâche. Retourne la liste mise à jour. */
     add: (text: string) => Promise<Task[]>;
+    /**
+     * Réécrit le libellé d'une tâche. Un texte vide (ou uniquement des
+     * espaces) est ignoré — la tâche garde son libellé précédent.
+     * Retourne la liste.
+     */
+    update: (id: string, text: string) => Promise<Task[]>;
     /** Bascule done sur une tâche. Retourne la liste. */
     toggle: (id: string) => Promise<Task[]>;
     /** Supprime une tâche. Retourne la liste. */

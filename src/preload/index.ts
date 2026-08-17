@@ -454,6 +454,8 @@ const api: NotchApi = {
   tasks: {
     getState: () => ipcRenderer.invoke(IpcChannel.TasksGetState),
     add: (text: string) => ipcRenderer.invoke(IpcChannel.TasksAdd, text),
+    update: (id: string, text: string) =>
+      ipcRenderer.invoke(IpcChannel.TasksUpdate, id, text),
     toggle: (id: string) => ipcRenderer.invoke(IpcChannel.TasksToggle, id),
     remove: (id: string) => ipcRenderer.invoke(IpcChannel.TasksRemove, id),
     clearDone: () => ipcRenderer.invoke(IpcChannel.TasksClearDone),
