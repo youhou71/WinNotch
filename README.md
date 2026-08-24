@@ -62,6 +62,10 @@ Suit les **issues critiques non assignées** (labels surveillés, ex. `Severity:
 
 **Ce qui est suivi se choisit** (Réglages → GitLab) : chacune des quatre listes — issues à prendre, mes issues, MR à reviewer, mes MR — s'active indépendamment. Une section décochée n'est **pas interrogée du tout** : un appel d'API en moins par cycle, plus de section dans le panel, plus de compteur dans la card, et plus de toast la concernant. Décocher « issues à prendre » retire aussi le badge rouge de la chip, et « mes MR » la pastille de pipeline cassé — ces indicateurs n'ont plus de source. Les compteurs restants se réorganisent : jusqu'à trois, ils tiennent sur une seule ligne ; à quatre, ils se replient en 2 × 2 dès que la tuile se resserre.
 
+**Sections pliables** : dans le panel, un clic sur le bandeau d'une section la replie ; l'état est **retenu** (il survit à la fermeture du panel comme au redémarrage). Plier ne coupe rien — le compteur du bandeau reste à jour, contrairement à une section décochée dans les réglages qui n'est plus interrogée.
+
+**Lien par section** : au survol d'un bandeau, une icône ouvre la page GitLab équivalente, filtrée à l'identique — « mes MR » sur mes MR ouvertes, « à reviewer » sur celles où je suis reviewer, « mes issues » sur le tableau de bord des work items, « issues à prendre » sur les issues sans assigné portant les labels surveillés. Renseigne **Réglages → GitLab → Liens du panel** avec un groupe (ex. `app`) pour cadrer les liens MR et issues sur ce groupe ; laisse vide pour viser le tableau de bord global, qui est la portée réellement interrogée par l'API.
+
 **Mes issues** : tout ce qui **t'est assigné** et reste ouvert — issues, incidents, tâches et cas de test confondus (les *work items* GitLab), avec l'icône du type, le jalon et l'échéance (qui vire au rouge une fois dépassée). Les epics en sont absentes : côté API REST, ce ne sont pas des issues. Aucun recoupement possible avec « issues à prendre », qui ne remonte que ce qui n'a pas d'assigné.
 
 Configuration : URL d'instance + Personal Access Token (scope `read_api`), chiffré localement.

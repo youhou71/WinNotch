@@ -480,6 +480,32 @@ export interface ModuleConfig {
       /** Work items ouverts qui me sont assignés. */
       myWorkItems: boolean;
     };
+    /**
+     * État plié / déplié de chaque section du `<GitLabPanel>`. `true` =
+     * dépliée. Purement cosmétique et **indépendant de `sections`** : une
+     * section pliée est toujours interrogée (son compteur reste à jour dans
+     * son en-tête), contrairement à une section décochée dans les réglages
+     * qui n'est pas requêtée du tout.
+     *
+     * Persisté ici plutôt qu'en state React pour survivre à la fermeture du
+     * panel comme au redémarrage de l'app.
+     */
+    panelOpen: {
+      watchedIssues: boolean;
+      toReview: boolean;
+      mine: boolean;
+      myWorkItems: boolean;
+    };
+    /**
+     * Chemin du groupe GitLab servant de portée aux liens « ouvrir dans
+     * GitLab » des sections MR et « issues à prendre » (ex. `app`, ou
+     * `app/sous-groupe`). Vide → les liens tombent sur le tableau de bord
+     * global (`/dashboard/…`), qui correspond à la portée réellement
+     * interrogée par l'API (`scope=all`).
+     *
+     * Sans slash de début ni de fin : normalisé à la saisie.
+     */
+    linkGroup: string;
     /** Filtrer uniquement les MR/issues assignées à l'utilisateur. */
     assignedOnly: boolean;
     /** Fréquence de polling en millisecondes (défaut 120 000 ms). */
@@ -856,6 +882,13 @@ export const DEFAULT_SETTINGS: Settings = {
         mine: true,
         myWorkItems: true,
       },
+      panelOpen: {
+        watchedIssues: true,
+        toReview: true,
+        mine: true,
+        myWorkItems: true,
+      },
+      linkGroup: '',
       watchedLabels: [],
       assignedOnly: false,
       pollMs: 120_000,

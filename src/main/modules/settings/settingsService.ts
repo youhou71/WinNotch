@@ -167,11 +167,11 @@ function mergeDefaults(): void {
   }
 
   // Merge de niveau 2 pour les sous-objets de `gitlab`. Le merge par
-  // section ci-dessus est shallow : il remplace `notify` et `sections` en
-  // bloc, donc une clé ajoutée plus tard à l'un de ces sous-objets ne
-  // serait jamais complétée sur une installation existante (elle
-  // arriverait `undefined` côté renderer). Ces deux-là sont les seuls
-  // sous-objets de `ModuleConfig` à ce jour.
+  // section ci-dessus est shallow : il remplace `notify`, `sections` et
+  // `panelOpen` en bloc, donc une clé ajoutée plus tard à l'un de ces
+  // sous-objets ne serait jamais complétée sur une installation existante
+  // (elle arriverait `undefined` côté renderer). Ces trois-là sont les
+  // seuls sous-objets de `ModuleConfig` à ce jour.
   const existingGitLab = existing.gitlab as
     | Partial<ModuleConfig['gitlab']>
     | undefined;
@@ -182,6 +182,10 @@ function mergeDefaults(): void {
   mergedModuleConfig.gitlab.sections = {
     ...DEFAULT_SETTINGS.moduleConfig.gitlab.sections,
     ...(existingGitLab?.sections ?? {}),
+  };
+  mergedModuleConfig.gitlab.panelOpen = {
+    ...DEFAULT_SETTINGS.moduleConfig.gitlab.panelOpen,
+    ...(existingGitLab?.panelOpen ?? {}),
   };
 
   // Migration douce `pollSec` (legacy) → `pollMs` (v1.0+). Si une vieille
