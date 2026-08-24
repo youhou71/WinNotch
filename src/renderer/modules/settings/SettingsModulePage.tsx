@@ -27,6 +27,7 @@ import { useMeetingsContext } from '../meetings/MeetingsContext';
 import { SystemSettings } from '../system/SystemSettings';
 import { ClaudeUsageSettings } from '../claudeUsage/ClaudeUsageSettings';
 import { BambuSettings } from '../bambu/BambuSettings';
+import { normalizeGroupPath } from '../gitlab/links';
 import { useToast } from '../toast/ToastContext';
 import { MODULE_META_BY_ID } from './modulesMeta';
 import { useMouseBackButton } from '../../hooks/useMouseBackButton';
@@ -1016,6 +1017,10 @@ function GitLabSettings() {
         <WatchedLabelsField />
       </SettingsSection>
 
+      <SettingsSection title="Liens du panel">
+        <LinkGroupField />
+      </SettingsSection>
+
       <SettingsSection title="Comportement">
         <SettingsToggleRow
           icon="fa-solid fa-minimize"
@@ -1121,6 +1126,68 @@ function WatchedLabelsField() {
         <strong>ouvertes et non assignées</strong> correspondant à au
         moins un label apparaissent dans la card et déclenchent un toast
         à leur création (une fois prises en charge, elles disparaissent).
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Groupe GitLab servant de portée aux liens « ouvrir dans GitLab » des
+ * en-têtes de section du panel. Commit au blur, comme les labels.
+ *
+ * Vide → les liens visent le tableau de bord global, ce qui correspond à la
+ * portée réellement interrogée par l'API (`scope=all`). Renseigné → listes
+ * du groupe, plus proche de l'usage quotidien (un seul groupe de travail).
+ */
+function LinkGroupField() {
+  const { settings, patchModuleConfig } = useSettingsContext();
+  const cfg = settings.moduleConfig.gitlab;
+  const [text, setText] = useState(cfg.linkGroup ?? '');
+  // Même garde que `WatchedLabelsField` : un re-render du context réécrit
+  // `text`, un blur dans cette fenêtre ne doit pas persister quoi que ce soit.
+  const dirtyRef = useRef(false);
+
+  useEffect(() => {
+    setText(cfg.linkGroup ?? '');
+    dirtyRef.current = false;
+  }, [cfg.linkGroup]);
+
+  const commit = () => {
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    // Normalisé à la saisie : ce qui est persisté est déjà propre (une URL
+    // complète collée depuis le navigateur est réduite au chemin du groupe).
+    void patchModuleConfig('gitlab', { linkGroup: normalizeGroupPath(text) });
+  };
+
+  return (
+    <div className="settings-credentials">
+      <label className="settings-field">
+        <span className="settings-field-label">
+          Groupe par défaut (ex. <code>app</code>)
+        </span>
+        <input
+          type="text"
+          className="settings-field-input"
+          value={text}
+          onChange={(e) => {
+            dirtyRef.current = true;
+            setText(e.target.value);
+          }}
+          onBlur={commit}
+          placeholder="app"
+          spellCheck={false}
+          autoComplete="off"
+        />
+      </label>
+      <div className="settings-credentials-hint">
+        Chaque en-tête de section du panel GitLab porte une icône qui ouvre
+        la page GitLab équivalente, filtrée à l'identique. Renseigne un
+        groupe pour cadrer les liens MR et « issues à prendre » dessus
+        (<code>/groups/app/-/merge_requests…</code>) ; laisse vide pour
+        viser le tableau de bord global. « Mes issues » passe toujours par
+        le tableau de bord — seule page qui agrège les quatre types de work
+        items.
       </div>
     </div>
   );

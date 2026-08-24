@@ -14,13 +14,28 @@
  * Les tickets d'abord, les MR ensuite — même ordre que les compteurs de
  * la card et que les interrupteurs des réglages.
  *
+ * Chaque en-tête de section est pliable (clic sur le bandeau) et son état
+ * est persisté dans `moduleConfig.gitlab.panelOpen` : il survit à la
+ * fermeture du panel comme au redémarrage. Plier ne change **rien** au
+ * polling — le compteur de l'en-tête reste à jour, contrairement à une
+ * section décochée dans les réglages qui n'est plus interrogée du tout.
+ *
+ * À droite de chaque en-tête, une icône ouvre la page GitLab équivalente
+ * (cf. `links.ts`), filtrée comme la section.
+ *
  * Cas particuliers : `state.configured === false`, `state.lastError`,
  * listes vides — chacun a un placeholder dédié.
  *
  * Clic sur une ligne → `shell.openExternal(webUrl)` ouvre dans le
  * navigateur par défaut.
  */
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from 'react';
 import type {
   GitLabIssue,
   GitLabMr,
@@ -33,6 +48,7 @@ import { useMouseBackButton } from '../../hooks/useMouseBackButton';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { NotchTooltip } from '../../components/Tooltip/NotchTooltip';
 import { pipelineMeta, fetchMrDetailCached } from './pipeline';
+import { sectionUrl, type GitLabSectionKey } from './links';
 
 const GITLAB_TT_ACCENT: CSSProperties = {
   '--tt-accent': '#fc6d26',
@@ -278,20 +294,126 @@ function MrRow({ mr, showAuthor }: { mr: GitLabMr; showAuthor: boolean }) {
   );
 }
 
+/**
+ * En-tête pliable d'une section, avec son compteur et son lien GitLab.
+ *
+ * Tout le bandeau est le bouton de pliage ; le lien est un second bouton,
+ * **frère** dans le DOM et non imbriqué (un `<button>` dans un `<button>`
+ * est invalide, Chromium le sort du parent au parsing). D'où le conteneur
+ * `<div class="gl-section-title">` qui porte les styles de texte communs.
+ */
+function SectionHeader({
+  label,
+  count,
+  open,
+  onToggle,
+  url,
+  linkTitle,
+  tooltip,
+  icon,
+  danger,
+}: {
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  /** `null` = instance non configurée ou compte inconnu → pas de lien. */
+  url: string | null;
+  linkTitle: string;
+  tooltip?: string;
+  icon?: string;
+  /** Palette rouge de la section « issues à prendre ». */
+  danger?: boolean;
+}) {
+  // `stopPropagation` : les deux boutons sont frères, le clic ne remonte
+  // donc pas au pliage — garde-fou si l'un venait à englober l'autre.
+  const openInGitLab = (e: MouseEvent) => {
+    e.stopPropagation();
+    if (url) void window.notch.shell.openExternal(url);
+  };
+  return (
+    <div className={'gl-section-title' + (danger ? ' gl-section-issues' : '')}>
+      <button
+        type="button"
+        className="gl-section-toggle"
+        onClick={onToggle}
+        aria-expanded={open}
+        // Le libellé de l'action de pliage est toujours présent, même quand
+        // la section a une description : sans lui, rien n'indique que le
+        // bandeau est cliquable.
+        title={[tooltip, open ? 'Clic : replier' : 'Clic : déplier']
+          .filter(Boolean)
+          .join(' · ')}
+      >
+        <i
+          className={
+            'fa-solid fa-chevron-down gl-section-chev' + (open ? '' : ' is-closed')
+          }
+          aria-hidden="true"
+        />
+        {icon && <i className={icon + ' gl-section-icon'} aria-hidden="true" />}
+        <span className="gl-section-label">{label}</span>
+        <span className={'gl-count' + (danger ? ' gl-count-issues' : '')}>
+          {count}
+        </span>
+      </button>
+      {url && (
+        <button
+          type="button"
+          className="gl-section-link"
+          onClick={openInGitLab}
+          title={linkTitle}
+          aria-label={linkTitle}
+        >
+          <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   onClose: () => void;
 }
 
 export function GitLabPanel({ onClose }: Props) {
   const { state, refresh } = useGitLabContext();
-  const { settings } = useSettingsContext();
-  const sections = settings.moduleConfig.gitlab.sections;
+  const { settings, patchModuleConfig } = useSettingsContext();
+  const cfg = settings.moduleConfig.gitlab;
+  const sections = cfg.sections;
   const anySection =
     sections.watchedIssues ||
     sections.toReview ||
     sections.mine ||
     sections.myWorkItems;
   const [refreshing, setRefreshing] = useState(false);
+
+  // Résolution défensive : une config écrite par une version antérieure à
+  // `panelOpen` n'a pas la clé (le normalize du main la complète au
+  // démarrage, mais un patch partiel entre-temps resterait incomplet).
+  // Absent ⇒ déplié.
+  const open: Record<GitLabSectionKey, boolean> = {
+    watchedIssues: cfg.panelOpen?.watchedIssues !== false,
+    myWorkItems: cfg.panelOpen?.myWorkItems !== false,
+    toReview: cfg.panelOpen?.toReview !== false,
+    mine: cfg.panelOpen?.mine !== false,
+  };
+
+  // `patchModuleConfig` applique un update optimiste : le pli est immédiat,
+  // l'écriture disque suit.
+  const toggle = (key: GitLabSectionKey) => {
+    void patchModuleConfig('gitlab', {
+      panelOpen: { ...open, [key]: !open[key] },
+    });
+  };
+
+  const linkFor = (key: GitLabSectionKey) =>
+    sectionUrl(key, {
+      instanceUrl: cfg.url,
+      username: state.user?.username ?? null,
+      linkGroup: cfg.linkGroup ?? '',
+      watchedLabels: cfg.watchedLabels,
+    });
 
   // Bouton "Précédent" de la souris (XButton1) ET touche Esc → ferme le panel.
   useMouseBackButton(onClose);
@@ -398,78 +520,94 @@ export function GitLabPanel({ onClose }: Props) {
           sections.watchedIssues &&
           state.watchedIssues.length > 0 && (
           <>
-            <div
-              className="gl-section-title gl-section-issues"
-              title="Issues ouvertes correspondant à un label surveillé et non assignées."
-            >
-              <i className="fa-solid fa-circle-exclamation" />
-              Issues à prendre
-              <span className="gl-count gl-count-issues">
-                {state.watchedIssues.length}
-              </span>
-            </div>
-            <div className="gl-list">
-              {state.watchedIssues.map((issue) => (
-                <IssueRow key={issue.id} issue={issue} />
-              ))}
-            </div>
+            <SectionHeader
+              label="Issues à prendre"
+              icon="fa-solid fa-circle-exclamation"
+              danger
+              count={state.watchedIssues.length}
+              open={open.watchedIssues}
+              onToggle={() => toggle('watchedIssues')}
+              url={linkFor('watchedIssues')}
+              linkTitle="Ouvrir les issues sans assigné dans GitLab"
+              tooltip="Issues ouvertes correspondant à un label surveillé et non assignées."
+            />
+            {open.watchedIssues && (
+              <div className="gl-list">
+                {state.watchedIssues.map((issue) => (
+                  <IssueRow key={issue.id} issue={issue} />
+                ))}
+              </div>
+            )}
           </>
         )}
 
         {state.configured && sections.myWorkItems && (
           <>
-            <div
-              className="gl-section-title"
-              title="Issues, incidents, tâches et cas de test ouverts qui te sont assignés."
-            >
-              Mes issues
-              <span className="gl-count">{state.myWorkItems.length}</span>
-            </div>
-            {state.myWorkItems.length === 0 ? (
-              <div className="gl-empty">Rien ne t'est assigné.</div>
-            ) : (
-              <div className="gl-list">
-                {state.myWorkItems.map((item) => (
-                  <WorkItemRow key={item.id} item={item} />
-                ))}
-              </div>
-            )}
+            <SectionHeader
+              label="Mes issues"
+              count={state.myWorkItems.length}
+              open={open.myWorkItems}
+              onToggle={() => toggle('myWorkItems')}
+              url={linkFor('myWorkItems')}
+              linkTitle="Ouvrir mes issues assignées dans GitLab"
+              tooltip="Issues, incidents, tâches et cas de test ouverts qui te sont assignés."
+            />
+            {open.myWorkItems &&
+              (state.myWorkItems.length === 0 ? (
+                <div className="gl-empty">Rien ne t'est assigné.</div>
+              ) : (
+                <div className="gl-list">
+                  {state.myWorkItems.map((item) => (
+                    <WorkItemRow key={item.id} item={item} />
+                  ))}
+                </div>
+              ))}
           </>
         )}
 
         {state.configured && sections.toReview && (
           <>
-            <div className="gl-section-title">
-              À reviewer
-              <span className="gl-count">{state.toReview.length}</span>
-            </div>
-            {state.toReview.length === 0 ? (
-              <div className="gl-empty">Rien en attente côté review.</div>
-            ) : (
-              <div className="gl-list">
-                {state.toReview.map((mr) => (
-                  <MrRow key={mr.id} mr={mr} showAuthor />
-                ))}
-              </div>
-            )}
+            <SectionHeader
+              label="À reviewer"
+              count={state.toReview.length}
+              open={open.toReview}
+              onToggle={() => toggle('toReview')}
+              url={linkFor('toReview')}
+              linkTitle="Ouvrir les MR où je suis reviewer dans GitLab"
+            />
+            {open.toReview &&
+              (state.toReview.length === 0 ? (
+                <div className="gl-empty">Rien en attente côté review.</div>
+              ) : (
+                <div className="gl-list">
+                  {state.toReview.map((mr) => (
+                    <MrRow key={mr.id} mr={mr} showAuthor />
+                  ))}
+                </div>
+              ))}
           </>
         )}
 
         {state.configured && sections.mine && (
           <>
-            <div className="gl-section-title">
-              Mes MR
-              <span className="gl-count">{state.mine.length}</span>
-            </div>
-            {state.mine.length === 0 ? (
-              <div className="gl-empty">Aucune MR ouverte de ton côté.</div>
-            ) : (
-              <div className="gl-list">
-                {state.mine.map((mr) => (
-                  <MrRow key={mr.id} mr={mr} showAuthor={false} />
-                ))}
-              </div>
-            )}
+            <SectionHeader
+              label="Mes MR"
+              count={state.mine.length}
+              open={open.mine}
+              onToggle={() => toggle('mine')}
+              url={linkFor('mine')}
+              linkTitle="Ouvrir mes MR dans GitLab"
+            />
+            {open.mine &&
+              (state.mine.length === 0 ? (
+                <div className="gl-empty">Aucune MR ouverte de ton côté.</div>
+              ) : (
+                <div className="gl-list">
+                  {state.mine.map((mr) => (
+                    <MrRow key={mr.id} mr={mr} showAuthor={false} />
+                  ))}
+                </div>
+              ))}
           </>
         )}
       </div>

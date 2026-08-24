@@ -237,10 +237,13 @@
   gap: 6px;
 }
 
+/* En-tête de section : conteneur du bouton de pliage (qui prend toute la
+   largeur restante) + du bouton lien GitLab. Les propriétés de texte
+   restent ici pour que les deux boutons en héritent. */
 .gl-section-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -251,6 +254,83 @@
 
 .gl-section-title:first-of-type {
   margin-top: 0;
+}
+
+/* Bandeau cliquable = zone de pliage. `flex: 1` pour que toute la largeur
+   libre réponde au clic, pas seulement le libellé. */
+.gl-section-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  margin: 0;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gl-section-toggle:hover {
+  background: var(--surface-1);
+}
+
+.gl-section-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Chevron : pointe en bas quand la section est dépliée, vers la droite
+   quand elle est pliée. `steps(4)` plutôt qu'une interpolation continue —
+   même logique que les autres animations du notch always-on (cf. audit
+   perf) : 4 frames suffisent pour lire le mouvement. */
+.gl-section-chev {
+  flex: none;
+  width: 9px;
+  font-size: 8px;
+  opacity: 0.75;
+  transition: transform 120ms steps(4);
+}
+
+.gl-section-chev.is-closed {
+  transform: rotate(-90deg);
+}
+
+/* Lien « ouvrir dans GitLab » : discret, révélé au survol de l'en-tête
+   (et toujours visible au focus clavier, sinon il serait inatteignable). */
+.gl-section-link {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--txt-faint);
+  font-size: 9.5px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms steps(3);
+}
+
+.gl-section-title:hover .gl-section-link,
+.gl-section-link:focus-visible {
+  opacity: 1;
+}
+
+.gl-section-link:hover {
+  background: rgba(252, 109, 38, 0.15);
+  color: #fc6d26;
 }
 
 .gl-count {
@@ -423,7 +503,7 @@
   color: #fca5a5;
 }
 
-.gl-section-issues > i {
+.gl-section-issues .gl-section-icon {
   font-size: 11px;
   color: #ef4444;
 }
