@@ -4,7 +4,7 @@
  * Expose les handlers :
  *  - `search:listVsCode`  : liste des workspaces VS Code récents
  *  - `search:listVs`      : liste des solutions Visual Studio scannées
- *  - `search:openVsCode`  : `code <path>` détaché
+ *  - `search:openVsCode`  : ouverture détachée dans l'éditeur détecté
  *  - `search:openVs`      : `start "" <path>` (association de fichier)
  *
  * Cache stale-while-revalidate : les deux `list*` renvoient immédiatement le
@@ -33,6 +33,7 @@ import {
   isVsCacheStale,
   refreshVsSolutions,
 } from './visualStudioSolutions';
+import { resolveEditorLaunch } from './codeEditor';
 
 /** Ops de hash autorisées pour `search:transform` (mode `;` de la search bar). */
 const HASH_OPS = new Set(['md5', 'sha1', 'sha256', 'sha512']);
@@ -78,19 +79,10 @@ function spawnDetached(
 }
 
 /**
- * Ouvre un workspace VS Code via la CLI `code`.
- *
- * Important : chaque token (`code`, `-n`, path) est passé en arg
- * **séparé** à spawn. Sinon, concaténer `code "<path>"` en une seule
- * string puis la passer comme argument à `cmd /c` déclenche le quoting
- * MS C-runtime de Node qui réinjecte `\"`, que cmd ne reconnaît pas
- * comme échappement → un arg vide finit par traîner après le path et
- * VS Code l'interprète comme un fichier à ouvrir (bug "ouvre un nouveau
- * fichier nommé comme le dossier").
- *
- * `-n` force une nouvelle fenêtre — pour les workspaces multi-root
- * (.code-workspace), `code` détecte automatiquement le format à partir
- * de l'extension du fichier.
+ * Ouvre un workspace dans l'éditeur détecté (VS Code ou un de ses forks).
+ * `codeEditor` décide de la commande — exécutable en chemin absolu quand il
+ * est trouvé, sinon repli sur la CLI via `cmd /c` — et documente le piège de
+ * quoting qui impose de passer chaque token en argument séparé.
  */
 async function openVsCode(
   path: string,
@@ -98,7 +90,8 @@ async function openVsCode(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     void kind;
-    await spawnDetached('cmd.exe', ['/c', 'code', '-n', path]);
+    const { file, args } = await resolveEditorLaunch(path);
+    await spawnDetached(file, args);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: String(err) };

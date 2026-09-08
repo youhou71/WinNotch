@@ -73,7 +73,7 @@ Configuration : URL d'instance + Personal Access Token (scope `read_api`), chiff
 ### Git local
 Scanne des dossiers racines configurés pour trouver les repos Git locaux et rappelle passivement ceux qui ont des modifs non poussées. Card compacte avec deux totaux (`dirty` / `repos`), panel plein dashboard listant chaque repo avec branche, fichiers non commités, commits ahead/behind. Chip discrète dans le notch rétracté quand au moins un repo est sale.
 
-Clic sur un repo : auto-détection — un `.sln`/`.slnx` à la racine ouvre **Visual Studio** (association de fichier Windows), sinon **VS Code** (`code -n <path>`).
+Clic sur un repo : auto-détection — un `.sln`/`.slnx` à la racine ouvre **Visual Studio** (association de fichier Windows), sinon l'éditeur de la famille VS Code détecté sur le poste (cf. [Éditeur de code](#éditeur-de-code-détecté-automatiquement)).
 
 **Actions Git sûres (opt-in, désactivé par défaut)** : une fois activées dans Réglages → Git local → Actions Git, chaque repo du panel expose **Fetch** (`git fetch --prune`), **Stash** (`git stash push -u`, réversible, si modifs locales) et **nouvelle branche** locale (`git checkout -b`, saisie inline). Mini-confirmation avant Stash / branche, toast de résultat, re-scan immédiat. **Jamais** de commit, push ou opération destructive. Garde-fous : git ne peut pas bloquer sur une invite d'identifiants (`GIT_TERMINAL_PROMPT=0` + timeout 20 s), et les actions ne s'exécutent que sur un repo issu du dernier scan.
 
@@ -156,12 +156,22 @@ Champ de recherche en haut du dashboard. Deux familles de comportement :
 | `;` | Utilitaires dev | UUID, base64, hash, conversion de casse ; un bouton Copier par sortie |
 | `:` | Snippets | Insère un modèle de texte à placeholders (`{clipboard}`/`{date}`/`{uuid}`) ; ↑↓ pour naviguer, `Entrée` copie |
 | `>` | Claude Code | Lance `claude "<prompt>"` dans un nouveau terminal Windows |
-| `/` | VS Code | Liste les workspaces récents, ouvre via `code <path>` |
+| `/` | Éditeur de code | Liste les workspaces récents, ouvre dans l'éditeur détecté (VS Code, VSCodium, Cursor…) |
 | `vs` | Visual Studio | Liste les solutions `.sln`/`.slnx`, ouvre via l'association de fichier |
 
 Les listes `/` et `vs` s'affichent **instantanément** depuis un cache (amorcé dès le démarrage) puis se rafraîchissent en tâche de fond : le scan des dossiers / la lecture des projets récents ne bloque plus la frappe, et la liste se met à jour en direct dès qu'un changement est détecté.
 
-Les **dossiers de recherche** sont configurables dans **Réglages → Recherche → Dossiers** (un chemin par ligne, défaut `C:/Projets`). Ils pilotent les deux modes : ils sont scannés récursivement pour les solutions Visual Studio (`vs`) et servent à filtrer les workspaces récents VS Code (`/`) — seuls ceux situés sous l'une des racines sont affichés (masque les dossiers hors projets, WSL, etc.).
+Les **dossiers de recherche** sont configurables dans **Réglages → Recherche → Dossiers** (un chemin par ligne, défaut `C:/Projets`). Ils pilotent les deux modes : ils sont scannés récursivement pour les solutions Visual Studio (`vs`) et servent à filtrer les workspaces récents de l'éditeur de code (`/`) — seuls ceux situés sous l'une des racines sont affichés (masque les dossiers hors projets, WSL, etc.).
+
+#### Éditeur de code détecté automatiquement
+
+Le mode `/` ne suppose pas VS Code : WinNotch détecte l'éditeur de la famille VS Code réellement utilisé sur le poste — **VS Code**, **VS Code Insiders**, **VSCodium**, **Cursor** ou **Windsurf**. Chacun stocke ses workspaces récents au même format, mais dans son propre dossier (`%APPDATA%/Code`, `%APPDATA%/VSCodium`, …) et s'ouvre avec sa propre commande.
+
+La sélection se fait sur la **récence** : parmi les éditeurs dont le `workspaceStorage` n'est pas vide, celui qui a servi le plus récemment gagne. Un ordre fixe aurait choisi à vie un `%APPDATA%/Code` resté peuplé mais mort après une migration vers un fork. Si aucun éditeur n'a encore de workspace (installation neuve), on retient le premier installé : la liste est vide, mais l'ouverture fonctionne.
+
+L'ouverture passe par l'**exécutable en chemin absolu** (`VSCodium.exe -n <path>`) plutôt que par la CLI (`codium`), qui n'est dans le `PATH` que si l'option a été cochée à l'installation. Repli sur `cmd /c <cli> -n <path>` si l'exécutable n'est trouvé à aucun emplacement connu. Ce choix vaut aussi pour le clic « ouvrir un repo » du module [Git local](#git-local).
+
+Rien à configurer, et aucun réglage pour forcer un éditeur : si tu en as plusieurs et que la détection ne prend pas le bon, ouvre un dossier dans celui que tu veux — il redevient le plus récent.
 
 #### Mode `=` (Calc & Convert)
 
@@ -432,7 +442,7 @@ Après une création manuelle, ne re-bascule pas le toggle dans l'app (il retent
 - **`loudness`** — binaire Core Audio bundlé pour le volume système (lecture volume+muted en un seul spawn via `getVolumeInfo`).
 - **`SoundVolumeView.exe`** (NirSoft, bundlé) — énumération + changement du device de sortie, et **seule** source du « quelle sortie est celle par défaut ». Appelé uniquement à la demande (ouverture du panneau audio, changement de device, changement de matériel détecté notch fermé) avec cache 30 s — plus de spawn périodique. Au démarrage automatique (login), où le service audio n'est pas toujours prêt, un warm-up relance l'énumération à délais croissants jusqu'à ce que la liste des sorties se remplisse, et le circuit breaker de secours se réarme tout seul (plus de liste « Aucune sortie » bloquée jusqu'au redémarrage).
 - **Registre `MMDevices`** (lecture seule, via le PowerShell résident) — type réel de chaque sortie (*form factor* déclaré par le pilote : haut-parleurs / casque / micro-casque / sortie écran), transport Bluetooth, et liste des sorties actives. Sert la chip audio du notch rétracté **sans créer de processus** ; le registre ne dit en revanche pas laquelle est la sortie par défaut, d'où le recours ciblé à `SoundVolumeView`.
-- **Workspaces VS Code récents** — dérivés du scan de `%APPDATA%/Code/User/workspaceStorage` (fichiers `workspace.json`, tri par récence), 100 % `fs`, sans dépendance native. Les versions récentes de VS Code (1.10x+) ne stockent plus le MRU dans `state.vscdb`.
+- **Workspaces récents de l'éditeur** — dérivés du scan de `%APPDATA%/<éditeur>/User/workspaceStorage` (fichiers `workspace.json`, tri par récence), 100 % `fs`, sans dépendance native. Les versions récentes de VS Code (1.10x+) ne stockent plus le MRU dans `state.vscdb`.
 - **Détection `Alt` (mode Peek)** — polling `GetAsyncKeyState` dans le PowerShell résident du détecteur fullscreen (`resources/ps/fullscreen-detector.ps1`). Indisponible sur les postes où une politique d'entreprise force `ConstrainedLanguage` (cf. Limitations connues) : le script y est bloqué et n'est alors pas lancé. Plus aucun hook clavier global : l'ancien `node-global-key-listener` (WH_KEYBOARD_LL) faisait transiter chaque frappe du PC par l'event loop de l'app, ajoutant de la latence clavier système dès que le main était chargé.
 
 ---

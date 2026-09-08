@@ -40,6 +40,7 @@ import {
 } from '../../../shared/types';
 import { getNotchWindow } from '../../window/notchWindow';
 import { scanForRepos } from './gitlocalScanner';
+import { resolveEditorLaunch } from '../search/codeEditor';
 
 const MIN_POLL_MS = 15_000;
 /** Nombre max de `git status` simultanés. */
@@ -477,7 +478,8 @@ async function findSolutionFile(repoPath: string): Promise<string | null> {
  * Ouvre un repo en choisissant intelligemment l'éditeur :
  *  - .sln/.slnx présent → Visual Studio (`cmd /c start "" <path>` →
  *    association de fichier Windows)
- *  - sinon → VS Code (`cmd /c code -n <path>`)
+ *  - sinon → l'éditeur de la famille VS Code détecté sur le poste
+ *    (VS Code, VSCodium, Cursor…), cf. `search/codeEditor`
  *
  * Détaché : si WinNotch ferme après le clic, l'éditeur reste vivant.
  */
@@ -490,7 +492,8 @@ async function openRepo(
       await spawnDetached('cmd.exe', ['/c', 'start', '""', sln]);
       return { ok: true, via: 'sln' };
     }
-    await spawnDetached('cmd.exe', ['/c', 'code', '-n', path]);
+    const { file, args } = await resolveEditorLaunch(path);
+    await spawnDetached(file, args);
     return { ok: true, via: 'vscode' };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

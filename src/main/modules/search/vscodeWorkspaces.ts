@@ -4,9 +4,13 @@
  * ⚠️ VS Code ≥ 1.10x ne stocke plus le MRU dans `state.vscdb`
  * (`ItemTable` / clé `history.recentlyOpenedPathsList`) : la clé a disparu
  * (constaté sur 1.122). On dérive donc la liste depuis
- * `%APPDATA%/Code/User/workspaceStorage/<hash>/workspace.json`, qui contient
- * l'URI du dossier ouvert (`folder`) ou du workspace multi-root
- * (`workspace`, chemin d'un `.code-workspace`).
+ * `<workspaceStorage>/<hash>/workspace.json`, qui contient l'URI du dossier
+ * ouvert (`folder`) ou du workspace multi-root (`workspace`, chemin d'un
+ * `.code-workspace`).
+ *
+ * L'emplacement du `workspaceStorage` n'est pas figé sur VS Code : il dépend
+ * de l'éditeur installé (VSCodium, Cursor, Insiders…) et c'est `codeEditor`
+ * qui le résout.
  *
  * Récence : le mtime le plus récent des fichiers du dossier `<hash>` (son
  * `state.vscdb` interne bouge à chaque usage) → capte même le workspace
@@ -28,17 +32,12 @@ import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import type { SearchResult } from '../../../shared/types';
 import { relativeLabel } from './relativeLabel';
+import { resolveWorkspaceStorageDir } from './codeEditor';
 
 const CACHE_TTL_MS = 30_000;
 const MAX_RESULTS = 30;
 
 let cache: { at: number; results: SearchResult[] } | null = null;
-
-function resolveWorkspaceStorageDir(): string | null {
-  const appData = process.env['APPDATA'];
-  if (!appData) return null;
-  return join(appData, 'Code', 'User', 'workspaceStorage');
-}
 
 /**
  * Convertit `file:///c:/...` en chemin Windows natif `C:\...`.
@@ -112,7 +111,7 @@ interface Found {
  * `refreshVsCodeWorkspaces`.
  */
 async function scan(roots: string[]): Promise<SearchResult[]> {
-  const root = resolveWorkspaceStorageDir();
+  const root = await resolveWorkspaceStorageDir();
   if (!root) return [];
 
   let hashDirs: import('fs').Dirent[];
