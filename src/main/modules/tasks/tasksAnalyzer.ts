@@ -4,8 +4,9 @@
  * Principe : WinNotch lance `claude -p` (mode non interactif, sans terminal)
  * sur un **lot** de tâches actives, avec une sortie JSON contrainte par
  * `--json-schema`. Claude renvoie, pour chaque tâche, un résumé d'une ligne
- * et une conclusion Markdown ; c'est WinNotch qui écrit les fichiers
- * (`<moduleConfig.tasks.conclusionsDir>/<id>.md`) et met à jour `Task.analysis`.
+ * un titre court et une conclusion Markdown ; c'est WinNotch qui écrit les
+ * fichiers (`<moduleConfig.tasks.conclusionsDir>/<titre>.md`, cf.
+ * `conclusionFileName`) et met à jour `Task.analysis`.
  *
  * Pourquoi ne pas laisser Claude écrire lui-même ? Deux raisons :
  *  - `config.json` est tenu par electron-store : une écriture concurrente
@@ -23,9 +24,15 @@
  * `analyzedText` = l'ancien libellé → elle repart au lot suivant.
  */
 import { spawn, type ChildProcess } from 'child_process';
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'fs';
 import { homedir } from 'os';
-import { basename, isAbsolute, join } from 'path';
+import { isAbsolute, join } from 'path';
 import { app } from 'electron';
 import type { Task } from '../../../shared/types';
 import { needsAnalysis } from '../../../shared/tasks';
@@ -57,10 +64,11 @@ const OUTPUT_SCHEMA = {
         type: 'object',
         properties: {
           id: { type: 'string' },
+          title: { type: 'string' },
           summary: { type: 'string' },
           markdown: { type: 'string' },
         },
-        required: ['id', 'summary', 'markdown'],
+        required: ['id', 'title', 'summary', 'markdown'],
       },
     },
   },
@@ -69,9 +77,17 @@ const OUTPUT_SCHEMA = {
 
 interface AnalysisItem {
   id: string;
+  title: string;
   summary: string;
   markdown: string;
 }
+
+/** Marqueur de l'en-tête écrit par `renderMarkdown` (cf. `isOwnConclusion`). */
+const CONCLUSION_MARKER = 'Analysée par Claude Code le';
+/** Longueur max du nom de fichier (hors extension et suffixe de doublon). */
+const MAX_FILE_NAME = 80;
+/** Noms de périphériques réservés par Windows, interdits comme nom de fichier. */
+const RESERVED_NAMES = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
 
 let timer: NodeJS.Timeout | null = null;
 let child: ChildProcess | null = null;
@@ -128,21 +144,74 @@ export function analyzeNow(): { ok: boolean; error?: string } {
 }
 
 /**
- * Supprime les conclusions Markdown des tâches retirées de la liste.
- * Best-effort, et uniquement un fichier nommé `<id-de-la-tâche>.md` : un
- * chemin arbitraire (config.json édité à la main) n'est jamais supprimé.
- * Le contrôle porte sur le nom et non sur le dossier, qui a pu changer
- * depuis l'écriture.
+ * Le fichier est-il bien une conclusion écrite par WinNotch ? Garde-fou
+ * avant toute suppression : un `conclusionPath` pointant ailleurs
+ * (config.json édité à la main) ne doit jamais faire effacer un fichier
+ * quelconque. On vérifie l'extension et le marqueur d'en-tête.
  */
+function isOwnConclusion(path: string): boolean {
+  if (!path.toLowerCase().endsWith('.md')) return false;
+  try {
+    return readFileSync(path, 'utf-8').slice(0, 2000).includes(CONCLUSION_MARKER);
+  } catch {
+    return false;
+  }
+}
+
+function deleteConclusion(path: string | undefined): void {
+  if (!path || !isOwnConclusion(path)) return;
+  try {
+    unlinkSync(path);
+  } catch {
+    // Verrouillé (ouvert dans un éditeur) : sans gravité.
+  }
+}
+
+/** Supprime les conclusions Markdown des tâches retirées de la liste. */
 export function discardConclusions(tasks: Task[]): void {
-  for (const t of tasks) {
-    const p = t.analysis?.conclusionPath;
-    if (!p || basename(p) !== `${t.id}.md`) continue;
-    try {
-      unlinkSync(p);
-    } catch {
-      // Déjà supprimé ou verrouillé (ouvert dans un éditeur) : sans gravité.
-    }
+  for (const t of tasks) deleteConclusion(t.analysis?.conclusionPath);
+}
+
+/**
+ * Nom de fichier Windows valide à partir d'un titre libre : caractères
+ * interdits (`<>:"/\|?*`, contrôles) retirés, espaces fusionnés, pas de
+ * point ni d'espace final (refusés par l'Explorateur), longueur bornée,
+ * noms de périphériques réservés (`CON`, `NUL`…) évités.
+ */
+function sanitizeFileName(raw: string): string {
+  let name = raw
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_FILE_NAME)
+    .replace(/[. ]+$/, '');
+  if (RESERVED_NAMES.test(name)) name = `_${name}`;
+  return name;
+}
+
+/**
+ * Chemin de la conclusion d'une tâche, nommé d'après le titre proposé par
+ * Claude (repli : le libellé de la tâche, puis son id). Sur doublon — nom
+ * déjà pris par une autre tâche du lot ou de la liste, ou fichier étranger
+ * déjà présent — on suffixe ` (2)`, ` (3)`… Le fichier courant de la tâche
+ * elle-même est réutilisable (ré-analyse sous le même titre).
+ */
+function conclusionFileName(
+  dir: string,
+  title: string,
+  task: Task,
+  taken: Set<string>,
+): string {
+  const base =
+    sanitizeFileName(title) || sanitizeFileName(task.text) || task.id;
+  const own = task.analysis?.conclusionPath?.toLowerCase();
+  for (let n = 1; ; n++) {
+    const path = join(dir, n === 1 ? `${base}.md` : `${base} (${n}).md`);
+    const key = path.toLowerCase(); // NTFS : insensible à la casse
+    if (taken.has(key)) continue;
+    if (key !== own && existsSync(path)) continue;
+    taken.add(key);
+    return path;
   }
 }
 
@@ -196,6 +265,14 @@ async function runBatch(force: boolean): Promise<void> {
     const items = await runClaude(buildPrompt(batch), dir);
     const byId = new Map(items.map((i) => [i.id, i]));
     const now = Date.now();
+    // Noms déjà attribués aux AUTRES tâches : une conclusion ne doit jamais
+    // en écraser une autre. Complété au fil du lot par `conclusionFileName`.
+    const batchIds = new Set(ids);
+    const taken = new Set(
+      getTasks()
+        .filter((t) => !batchIds.has(t.id))
+        .flatMap((t) => t.analysis?.conclusionPath?.toLowerCase() ?? []),
+    );
 
     patchTasks(ids, (t) => {
       const item = byId.get(t.id);
@@ -212,12 +289,18 @@ async function runBatch(force: boolean): Promise<void> {
           },
         };
       }
-      const path = join(dir, `${t.id}.md`);
+      const path = conclusionFileName(dir, item.title, t, taken);
       writeFileSync(
         path,
         renderMarkdown(analyzedText ?? t.text, item, now),
         'utf-8',
       );
+      // Titre changé à la ré-analyse (ou dossier déplacé) : l'ancien
+      // fichier deviendrait orphelin.
+      const previous = t.analysis?.conclusionPath;
+      if (previous && previous.toLowerCase() !== path.toLowerCase()) {
+        deleteConclusion(previous);
+      }
       return {
         ...t,
         analysis: {
@@ -272,6 +355,7 @@ function buildPrompt(batch: Task[]): string {
     '',
     'Pour chaque tâche, renvoie :',
     "- id : l'identifiant fourni entre crochets, recopié à l'identique ;",
+    '- title : un titre court et parlant déduit de la tâche (3 à 8 mots, sans ponctuation finale), qui servira de nom au fichier de conclusion ;',
     '- summary : la conclusion en une phrase (140 caractères maximum) ;',
     '- markdown : la conclusion complète, en français, SANS titre de niveau 1, structurée en sections `##` : Compréhension (ce qui est demandé, hypothèses retenues), Analyse, Prochaines étapes (liste ordonnée et concrète), Questions ouvertes (seulement s’il y en a).',
     'Adapte la longueur à la tâche : une tâche triviale mérite quelques lignes, pas une dissertation.',
@@ -296,9 +380,11 @@ function renderMarkdown(text: string, item: AnalysisItem, at: number): string {
     timeStyle: 'short',
   });
   return [
-    `# ${text}`,
+    `# ${item.title.trim() || text}`,
     '',
-    `> Analysée par Claude Code le ${when} · WinNotch`,
+    `> Tâche : ${text}`,
+    '>',
+    `> ${CONCLUSION_MARKER} ${when} · WinNotch`,
     '',
     `**En bref** : ${item.summary.trim()}`,
     '',
@@ -405,6 +491,7 @@ function parseOutput(stdout: string): AnalysisItem[] {
     (i): i is AnalysisItem =>
       !!i &&
       typeof i.id === 'string' &&
+      typeof i.title === 'string' &&
       typeof i.summary === 'string' &&
       typeof i.markdown === 'string',
   );
