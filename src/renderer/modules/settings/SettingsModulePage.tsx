@@ -239,11 +239,11 @@ function TasksAnalysisSettings() {
       <SettingsToggleRow
         icon="fa-solid fa-wand-magic-sparkles"
         iconColor="#d97757"
-        label="Analyser automatiquement les nouvelles tâches"
-        description="2 min après le dernier ajout, les ajouts en rafale partent ensemble. Le bouton « Analyser » de la liste reste disponible."
-        value={cfg.autoAnalyze}
+        label="Analyser les tâches avec Claude Code"
+        description="Désactivé par défaut. Activé : analyse 2 min après le dernier ajout (les ajouts en rafale partent ensemble), plus un bouton « Analyser » dans la liste. Les tâches déjà présentes partent au premier lot."
+        value={cfg.analysisEnabled}
         onChange={(next) =>
-          void patchModuleConfig('tasks', { autoAnalyze: next })
+          void patchModuleConfig('tasks', { analysisEnabled: next })
         }
       />
       <div className="settings-credentials">

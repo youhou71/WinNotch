@@ -20,6 +20,7 @@
  */
 import { app, ipcMain } from 'electron';
 import Store from 'electron-store';
+import { scheduleAnalysis } from '../tasks/tasksAnalyzer';
 import { EventEmitter } from 'node:events';
 import {
   DEFAULT_SETTINGS,
@@ -517,6 +518,14 @@ function patchModuleConfig<K extends ModuleId>(
   store.set('moduleConfig', next);
   const state = getAll();
   broadcast(state);
+  // Activation de l'analyse Claude : les tâches actives déjà présentes
+  // partent au prochain lot, sans attendre un nouvel ajout.
+  if (
+    id === 'tasks' &&
+    (patch as Partial<ModuleConfig['tasks']>).analysisEnabled === true
+  ) {
+    scheduleAnalysis();
+  }
   return state;
 }
 

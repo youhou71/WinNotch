@@ -14,9 +14,10 @@
  *  - Claude n'a alors besoin d'AUCUN outil d'écriture — on ne lui autorise
  *    que de la lecture (web + fichiers locaux cités dans une tâche).
  *
- * Déclenchement :
- *  - automatique (réglage `moduleConfig.tasks.autoAnalyze`) : 2 min après le
- *    dernier ajout / changement de libellé, pour qu'une rafale d'ajouts
+ * Déclenchement — opt-in : rien ne tourne tant que
+ * `moduleConfig.tasks.analysisEnabled` est faux (défaut). Une fois activé :
+ *  - automatique : 2 min après le dernier ajout / changement de libellé
+ *    (et à l'activation elle-même), pour qu'une rafale d'ajouts
  *    parte dans un seul lot (un seul process, un seul chargement de contexte) ;
  *  - manuel : bouton « Analyser » de la vue tâches (`analyzeNow`).
  *
@@ -39,7 +40,7 @@ import { needsAnalysis } from '../../../shared/tasks';
 import {
   getConfiguredConclusionsDir,
   getTasks,
-  isAutoAnalyzeEnabled,
+  isAnalysisEnabled,
   patchTasks,
 } from './tasksService';
 
@@ -121,19 +122,25 @@ function clearTimer(): void {
  * Chaque appel repousse l'échéance : c'est le dernier ajout qui compte.
  */
 export function scheduleAnalysis(delayMs = DEBOUNCE_MS): void {
-  if (!isAutoAnalyzeEnabled()) return;
+  if (!isAnalysisEnabled()) return;
   if (candidates(false).length === 0) return;
   clearTimer();
   timer = setTimeout(() => {
     timer = null;
     // Réglage relu à l'échéance : il a pu être coupé entre-temps.
     // Si une analyse tourne encore, `runBatch` replanifiera à sa fin.
-    if (!running && isAutoAnalyzeEnabled()) void runBatch(false);
+    if (!running && isAnalysisEnabled()) void runBatch(false);
   }, delayMs);
 }
 
 /** Bouton « Analyser » : immédiat, inclut les tâches en erreur. */
 export function analyzeNow(): { ok: boolean; error?: string } {
+  if (!isAnalysisEnabled()) {
+    return {
+      ok: false,
+      error: "Analyse Claude désactivée (Réglages → Tâches)",
+    };
+  }
   if (running) return { ok: false, error: 'Une analyse est déjà en cours' };
   if (candidates(true).length === 0) {
     return { ok: false, error: 'Aucune tâche à analyser' };
@@ -332,7 +339,7 @@ async function runBatch(force: boolean): Promise<void> {
   }
 
   // Reliquat (lot plafonné, ou ajouts pendant l'analyse) : on enchaîne.
-  if (isAutoAnalyzeEnabled() && candidates(false).length > 0) {
+  if (isAnalysisEnabled() && candidates(false).length > 0) {
     scheduleAnalysis(FOLLOW_UP_MS);
   }
 }

@@ -42,9 +42,9 @@ export function getTasks(): Task[] {
   return store.get('tasks');
 }
 
-/** Réglage « analyse automatique » (lu à chaque fois : modifiable à chaud). */
-export function isAutoAnalyzeEnabled(): boolean {
-  return store.get('moduleConfig').tasks?.autoAnalyze !== false;
+/** Réglage « analyse Claude » (opt-in, lu à chaque fois : modifiable à chaud). */
+export function isAnalysisEnabled(): boolean {
+  return store.get('moduleConfig').tasks?.analysisEnabled === true;
 }
 
 /** Dossier des conclusions tel que réglé (chaîne vide = défaut userData). */

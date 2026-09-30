@@ -604,11 +604,13 @@ export interface ModuleConfig {
      */
     sortBy: 'manual' | 'alpha';
     /**
-     * Analyse automatique des nouvelles tâches par Claude Code, 2 min après
-     * le dernier ajout (les ajouts en rafale partent dans un seul lot). Le
-     * bouton « Analyser » de la vue tâches reste disponible dans tous les cas.
+     * Analyse des tâches par Claude Code — **opt-in, désactivée par défaut**.
+     * Activée : analyse automatique 2 min après le dernier ajout (les ajouts
+     * en rafale partent dans un seul lot) + bouton « Analyser » dans la vue
+     * tâches. Désactivée : rien n'est analysé, ni bouton ni pastille
+     * « en attente » ; les conclusions déjà écrites restent consultables.
      */
-    autoAnalyze: boolean;
+    analysisEnabled: boolean;
     /**
      * Dossier où sont écrites les conclusions Markdown (`<id-tâche>.md`).
      * Créé au besoin. Vide = `<userData>/task-conclusions`.
@@ -970,7 +972,7 @@ export const DEFAULT_SETTINGS: Settings = {
     tasks: {
       autoClearDays: 0,
       sortBy: 'manual',
-      autoAnalyze: true,
+      analysisEnabled: false,
       conclusionsDir: 'C:\\Projets\\.claude-automation\\winnotch',
       collapsed: true,
       showCard: true,

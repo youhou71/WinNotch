@@ -51,6 +51,8 @@ function formatAnalyzedAt(ts?: number): string {
 
 interface AnalysisBadgeProps {
   task: Task;
+  /** Analyse activée dans les réglages (sinon : pas d'état « en attente »). */
+  enabled: boolean;
   onOpen: (id: string) => void;
 }
 
@@ -59,9 +61,9 @@ interface AnalysisBadgeProps {
  * compris périmée (libellé modifié) ou après un échec de ré-analyse : la
  * précédente reste consultable en attendant la nouvelle.
  */
-function AnalysisBadge({ task, onOpen }: AnalysisBadgeProps) {
+function AnalysisBadge({ task, enabled, onOpen }: AnalysisBadgeProps) {
   const a = task.analysis;
-  const pending = needsAnalysis(task);
+  const pending = enabled && needsAnalysis(task);
   const hasConclusion = !!a?.conclusionPath;
   const when = formatAnalyzedAt(a?.analyzedAt);
 
@@ -114,6 +116,7 @@ interface RowProps {
   highlight: boolean;
   /** Ligne réordonnable (active + ordre manuel). */
   sortable: boolean;
+  analysisEnabled: boolean;
   onOpenConclusion: (id: string) => void;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
@@ -125,6 +128,7 @@ function TaskRow({
   task,
   highlight,
   sortable,
+  analysisEnabled,
   onOpenConclusion,
   onToggle,
   onRemove,
@@ -290,7 +294,11 @@ function TaskRow({
 
       {!editing && (
         <>
-          <AnalysisBadge task={task} onOpen={onOpenConclusion} />
+          <AnalysisBadge
+            task={task}
+            enabled={analysisEnabled}
+            onOpen={onOpenConclusion}
+          />
           <button
             type="button"
             className="task-copy"
@@ -341,8 +349,11 @@ export function TasksList() {
     done.sort(byAlpha);
   }
 
+  const analysisEnabled = settings.moduleConfig.tasks.analysisEnabled;
   const analyzing = tasks.some((t) => t.analysis?.status === 'running');
-  const toAnalyze = active.filter((t) => needsAnalysis(t, true)).length;
+  const toAnalyze = analysisEnabled
+    ? active.filter((t) => needsAnalysis(t, true)).length
+    : 0;
 
   const sensors = useSensors(
     // Seuil : un simple clic sur la poignée ne doit pas démarrer un drag.
@@ -415,7 +426,7 @@ export function TasksList() {
           )}
         </div>
         <div className="tasks-actions">
-          {(analyzing || toAnalyze > 0) && (
+          {analysisEnabled && (analyzing || toAnalyze > 0) && (
             <button
               type="button"
               className="tasks-analyze"
@@ -481,6 +492,7 @@ export function TasksList() {
                   task={t}
                   highlight={t.id === lastAddedId}
                   sortable={manual && active.length > 1}
+                  analysisEnabled={analysisEnabled}
                   onOpenConclusion={openTaskConclusion}
                   onToggle={toggle}
                   onRemove={remove}
@@ -502,6 +514,7 @@ export function TasksList() {
               task={t}
               highlight={false}
               sortable={false}
+              analysisEnabled={analysisEnabled}
               onOpenConclusion={openTaskConclusion}
               onToggle={toggle}
               onRemove={remove}

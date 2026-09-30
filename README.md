@@ -87,7 +87,8 @@ Chaque ligne se **modifie** au clic sur son libellé (Entrée valide, Échap ann
 **Ordre manuel** : les tâches actives se réordonnent par glisser-déposer (poignée révélée au survol). Réglages → Tâches → Ordre permet de repasser en tri A → Z (glisser-déposer alors désactivé).
 
 **Analyse par Claude Code** : les tâches actives sont soumises à Claude Code (`claude -p`, en arrière-plan, sans terminal), qui rédige pour chacune une **conclusion Markdown** (compréhension, analyse, prochaines étapes, questions ouvertes). Une pastille par ligne indique l'état : en attente, en cours, conclusion disponible (clic → ouvre le `.md`) ou erreur (détail au survol). Le résumé d'une ligne s'affiche sous le libellé.
-- **Automatique** (désactivable dans Réglages → Tâches → Analyse Claude) : 2 min après le dernier ajout, les ajouts en rafale partent dans un seul lot. Modifier le libellé d'une tâche relance son analyse.
+- **Désactivée par défaut** : à activer dans Réglages → Tâches → Analyse Claude. Tant qu'elle est coupée, rien n'est envoyé à Claude (ni bouton ni pastille « en attente ») ; les conclusions déjà écrites restent consultables.
+- **Automatique** une fois activée : 2 min après le dernier ajout, les ajouts en rafale partent dans un seul lot ; à l'activation, les tâches actives déjà présentes partent au premier lot. Modifier le libellé d'une tâche relance son analyse.
 - **Manuel** : bouton « Analyser (N) » dans l'en-tête de la liste, qui retente aussi les tâches en erreur.
 - **Dossier des conclusions** réglable (défaut `C:\Projets\.claude-automation\winnotch`), un fichier par tâche, nommé d'après un titre court que Claude déduit de la tâche (`Comparer Zod et Valibot.md`), supprimé avec la tâche.
 - Claude n'a accès qu'à des outils en **lecture** (recherche web, lecture de fichiers locaux cités dans une tâche) : il ne modifie rien. Nécessite Claude Code installé (`claude.exe`) et consomme le quota Claude du compte connecté.
