@@ -167,10 +167,11 @@ function TasksSettings() {
         <SettingsRadioRow
           icon="fa-solid fa-arrow-down-wide-short"
           iconColor="#34d399"
-          label="Tri par défaut"
+          label="Ordre des tâches"
+          description="Manuel : réordonnable par glisser-déposer, les nouvelles tâches arrivent en tête."
           value={cfg.sortBy}
           options={[
-            { value: 'created', label: 'Ajout' },
+            { value: 'manual', label: 'Manuel' },
             { value: 'alpha', label: 'A → Z' },
           ]}
           onChange={(v) => void patchModuleConfig('tasks', { sortBy: v })}
@@ -190,7 +191,95 @@ function TasksSettings() {
           }
         />
       </SettingsSection>
+      <TasksAnalysisSettings />
     </>
+  );
+}
+
+/**
+ * Analyse Claude Code des tâches : interrupteur + dossier des conclusions.
+ * Le dossier est un brouillon local validé au blur (comme les credentials
+ * OAuth) : écrire à chaque frappe relancerait un patch IPC par caractère.
+ */
+function TasksAnalysisSettings() {
+  const { settings, patchModuleConfig } = useSettingsContext();
+  const { push } = useToast();
+  const cfg = settings.moduleConfig.tasks;
+  const [dir, setDir] = useState(cfg.conclusionsDir);
+
+  useEffect(() => setDir(cfg.conclusionsDir), [cfg.conclusionsDir]);
+
+  const commitDir = () => {
+    const next = dir.trim();
+    if (next !== cfg.conclusionsDir) {
+      void patchModuleConfig('tasks', { conclusionsDir: next });
+    }
+  };
+
+  const openDir = async () => {
+    const res = await window.notch.shell.openPath(cfg.conclusionsDir);
+    if (!res.ok) {
+      push({
+        icon: 'fa-solid fa-triangle-exclamation',
+        iconColor: '#ef4444',
+        name: 'Tâches',
+        message:
+          res.error === "Le chemin n'existe pas"
+            ? 'Dossier pas encore créé (il le sera à la 1re analyse)'
+            : (res.error ?? "Impossible d'ouvrir le dossier"),
+      });
+    }
+  };
+
+  return (
+    <SettingsSection
+      title="Analyse Claude"
+      description="Claude Code (claude -p, en arrière-plan) lit les tâches actives et rédige une conclusion Markdown par tâche. Consomme ton quota Claude."
+    >
+      <SettingsToggleRow
+        icon="fa-solid fa-wand-magic-sparkles"
+        iconColor="#d97757"
+        label="Analyser automatiquement les nouvelles tâches"
+        description="2 min après le dernier ajout, les ajouts en rafale partent ensemble. Le bouton « Analyser » de la liste reste disponible."
+        value={cfg.autoAnalyze}
+        onChange={(next) =>
+          void patchModuleConfig('tasks', { autoAnalyze: next })
+        }
+      />
+      <div className="settings-credentials">
+        <label className="settings-field">
+          <span className="settings-field-label">
+            Dossier des conclusions <em>(vide = dossier de l'application)</em>
+          </span>
+          <input
+            type="text"
+            className="settings-field-input"
+            value={dir}
+            onChange={(e) => setDir(e.target.value)}
+            onBlur={commitDir}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+            }}
+            placeholder="C:\Projets\.claude-automation\winnotch"
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </label>
+        <div className="settings-credentials-hint">
+          Un fichier <code>&lt;id-tâche&gt;.md</code> par tâche, créé au
+          besoin.{' '}
+          {cfg.conclusionsDir && (
+            <button
+              type="button"
+              className="settings-link-btn"
+              onClick={() => void openDir()}
+            >
+              Ouvrir le dossier
+            </button>
+          )}
+        </div>
+      </div>
+    </SettingsSection>
   );
 }
 

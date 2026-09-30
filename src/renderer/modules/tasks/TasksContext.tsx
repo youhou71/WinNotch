@@ -8,7 +8,7 @@
  * `system`, etc.).
  *
  * Une seule subscription IPC (`tasks:change`). Les mutations
- * (`add`/`update`/`toggle`/`remove`/`clearDone`) retournent la liste mise à jour
+ * (`add`/`update`/`toggle`/`remove`/`clearDone`/`reorder`) retournent la liste mise à jour
  * et déclenchent en plus un broadcast pour les autres consommateurs
  * éventuels.
  */
@@ -37,6 +37,12 @@ interface TasksContextValue {
   toggle: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   clearDone: () => Promise<void>;
+  /** Nouvel ordre (liste d'ids). Appliqué localement avant l'aller-retour IPC. */
+  reorder: (ids: string[]) => Promise<void>;
+  /** Lance l'analyse Claude des tâches en attente (bouton « Analyser »). */
+  analyze: () => Promise<{ ok: boolean; error?: string }>;
+  /** Ouvre la conclusion Markdown d'une tâche. */
+  openConclusion: (id: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const TasksContext = createContext<TasksContextValue | null>(null);
@@ -89,9 +95,41 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     setTasks(next);
   }, []);
 
+  const reorder = useCallback(async (ids: string[]) => {
+    // Optimiste : le drag est « discret » (aucune animation pendant le
+    // geste), la ligne doit donc atterrir à sa place dès le lâcher, sans
+    // attendre l'IPC. La réponse du main fait foi ensuite.
+    setTasks((prev) => {
+      const byId = new Map(prev.map((t) => [t.id, t]));
+      const ordered = ids.flatMap((id) => byId.get(id) ?? []);
+      const rest = prev.filter((t) => !ids.includes(t.id));
+      return [...ordered, ...rest];
+    });
+    const next = await window.notch.tasks.reorder(ids);
+    setTasks(next);
+  }, []);
+
+  const analyze = useCallback(() => window.notch.tasks.analyze(), []);
+
+  const openConclusion = useCallback(
+    (id: string) => window.notch.tasks.openConclusion(id),
+    [],
+  );
+
   return (
     <TasksContext.Provider
-      value={{ tasks, lastAddedId, add, update, toggle, remove, clearDone }}
+      value={{
+        tasks,
+        lastAddedId,
+        add,
+        update,
+        toggle,
+        remove,
+        clearDone,
+        reorder,
+        analyze,
+        openConclusion,
+      }}
     >
       {children}
     </TasksContext.Provider>
