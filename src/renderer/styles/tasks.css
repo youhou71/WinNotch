@@ -381,6 +381,173 @@
   color: #fca5a5;
 }
 
+/* ───────────── Réordonnancement (glisser-déposer « discret ») ─────────────
+   Aucun transform pendant le geste (traînées des fenêtres Electron
+   transparentes, cf. SettingsLayoutPage) : ligne saisie estompée + barre
+   d'insertion verte sur la cible, déplacement au lâcher. */
+.task-grip {
+  width: 14px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin-right: -6px;
+  color: var(--txt-faint);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 140ms ease, color 140ms ease;
+  flex-shrink: 0;
+  font-size: 10px;
+  touch-action: none;
+}
+
+.task-row:hover .task-grip,
+.task-grip:focus-visible {
+  opacity: 1;
+}
+
+.task-grip:hover {
+  color: var(--txt);
+}
+
+.task-row.is-dragging {
+  opacity: 0.45;
+}
+
+.task-row.is-dragging .task-grip {
+  cursor: grabbing;
+}
+
+.task-row.is-drop-before::before,
+.task-row.is-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-green);
+  pointer-events: none;
+}
+
+.task-row.is-drop-before::before {
+  top: -2px;
+}
+
+.task-row.is-drop-after::after {
+  bottom: -2px;
+}
+
+/* ───────────── Analyse Claude ───────────── */
+
+/* Libellé + résumé d'analyse empilés ; prend la place de `.task-text`
+   dans la ligne (flex: 1). */
+.task-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.task-summary {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--txt-mute);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-summary:hover {
+  color: var(--accent-violet);
+}
+
+.task-row.is-done .task-summary {
+  color: var(--txt-faint);
+}
+
+/* Pastille d'état — toujours visible (contrairement à copier / ✕) : c'est
+   une information, pas une action secondaire. */
+.task-ai {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--txt-faint);
+}
+
+button.task-ai {
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+button.task-ai:hover {
+  background: rgba(167, 139, 250, 0.14);
+  color: var(--accent-violet);
+}
+
+.task-ai.is-done {
+  color: var(--accent-violet);
+}
+
+.task-ai.is-running {
+  color: var(--accent-warm);
+}
+
+.task-ai.is-error {
+  color: #fca5a5;
+}
+
+.tasks-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tasks-analyze {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(167, 139, 250, 0.1);
+  border: 0;
+  color: var(--accent-violet);
+  font-family: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 140ms ease;
+}
+
+.tasks-analyze:hover:not(:disabled) {
+  background: rgba(167, 139, 250, 0.2);
+}
+
+.tasks-analyze:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.tasks-analyze i {
+  font-size: 10px;
+}
+
 /* Séparateur entre actives et terminées — étiquette MAJ + count en pill. */
 .tasks-divider {
   display: flex;

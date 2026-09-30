@@ -459,6 +459,11 @@ const api: NotchApi = {
     toggle: (id: string) => ipcRenderer.invoke(IpcChannel.TasksToggle, id),
     remove: (id: string) => ipcRenderer.invoke(IpcChannel.TasksRemove, id),
     clearDone: () => ipcRenderer.invoke(IpcChannel.TasksClearDone),
+    reorder: (ids: string[]) =>
+      ipcRenderer.invoke(IpcChannel.TasksReorder, ids),
+    analyze: () => ipcRenderer.invoke(IpcChannel.TasksAnalyze),
+    openConclusion: (id: string) =>
+      ipcRenderer.invoke(IpcChannel.TasksOpenConclusion, id),
     onChange: (cb: (tasks: Task[]) => void) => {
       const handler = (_: unknown, tasks: Task[]) => cb(tasks);
       ipcRenderer.on(IpcChannel.TasksChange, handler);

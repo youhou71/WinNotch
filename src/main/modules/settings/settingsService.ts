@@ -20,6 +20,7 @@
  */
 import { app, ipcMain } from 'electron';
 import Store from 'electron-store';
+import { scheduleAnalysis } from '../tasks/tasksAnalyzer';
 import { EventEmitter } from 'node:events';
 import {
   DEFAULT_SETTINGS,
@@ -192,6 +193,13 @@ function mergeDefaults(): void {
   // config porte encore `pollSec`, on le convertit (×1000) puis on retire
   // le champ legacy. Ainsi les préférences utilisateur survivent au bump.
   migratePollSecToPollMs(mergedModuleConfig);
+
+  // Migration `tasks.sortBy` : l'ancienne valeur `created` (jamais
+  // réellement appliquée — la liste suivait déjà l'ordre du tableau)
+  // devient `manual`, l'ordre réordonnable par glisser-déposer.
+  if ((mergedModuleConfig.tasks.sortBy as string) !== 'alpha') {
+    mergedModuleConfig.tasks.sortBy = 'manual';
+  }
 
   // Clamp des champs avec borne dure (sécurité contre un édit manuel
   // du config.json qui pousserait des valeurs aberrantes).
@@ -510,6 +518,14 @@ function patchModuleConfig<K extends ModuleId>(
   store.set('moduleConfig', next);
   const state = getAll();
   broadcast(state);
+  // Activation de l'analyse Claude : les tâches actives déjà présentes
+  // partent au prochain lot, sans attendre un nouvel ajout.
+  if (
+    id === 'tasks' &&
+    (patch as Partial<ModuleConfig['tasks']>).analysisEnabled === true
+  ) {
+    scheduleAnalysis();
+  }
   return state;
 }
 

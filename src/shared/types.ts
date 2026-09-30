@@ -99,6 +99,38 @@ export interface Task {
   done: boolean;
   /** Timestamp Unix de création (ms). */
   createdAt: number;
+  /**
+   * Dernière analyse Claude Code de la tâche (cf. `tasksAnalyzer.ts`).
+   * Absent tant que la tâche n'a jamais été soumise à l'analyse.
+   */
+  analysis?: TaskAnalysis;
+}
+
+/**
+ * État d'analyse d'une tâche par Claude Code (`claude -p` en arrière-plan).
+ *  - `running` : process `claude` en cours sur le lot contenant la tâche.
+ *  - `done`    : conclusion écrite dans `conclusionPath`.
+ *  - `error`   : échec (process introuvable, timeout, réponse invalide…).
+ * « En attente » n'est pas un statut stocké : c'est une tâche active jamais
+ * analysée ou dont le libellé a changé (`analyzedText` ≠ `text`).
+ */
+export type TaskAnalysisStatus = 'running' | 'done' | 'error';
+
+export interface TaskAnalysis {
+  status: TaskAnalysisStatus;
+  /** Timestamp Unix (ms) de la dernière analyse terminée (succès ou échec). */
+  analyzedAt?: number;
+  /**
+   * Libellé de la tâche au moment de l'analyse. S'il diffère du libellé
+   * courant, la conclusion est périmée et la tâche repart en analyse.
+   */
+  analyzedText?: string;
+  /** Chemin absolu du Markdown de conclusion (`moduleConfig.tasks.conclusionsDir`). */
+  conclusionPath?: string;
+  /** Résumé d'une ligne affiché sous le libellé. */
+  summary?: string;
+  /** Message d'erreur lisible (statut `error`). */
+  error?: string;
 }
 
 /* ───────────── Bambu (imprimante 3D, MQTT LAN) ───────────── */
@@ -564,8 +596,26 @@ export interface ModuleConfig {
   tasks: {
     /** Auto-supprime les tâches done plus vieilles que N jours. 0 = jamais. */
     autoClearDays: number;
-    /** Critère de tri par défaut. */
-    sortBy: 'created' | 'alpha';
+    /**
+     * Ordre des tâches actives. `manual` = ordre du tableau, réordonnable
+     * par glisser-déposer (les nouvelles tâches arrivent en tête) ;
+     * `alpha` = tri A → Z, glisser-déposer désactivé. L'ancienne valeur
+     * `created` est migrée en `manual` au démarrage (même rendu).
+     */
+    sortBy: 'manual' | 'alpha';
+    /**
+     * Analyse des tâches par Claude Code — **opt-in, désactivée par défaut**.
+     * Activée : analyse automatique 2 min après le dernier ajout (les ajouts
+     * en rafale partent dans un seul lot) + bouton « Analyser » dans la vue
+     * tâches. Désactivée : rien n'est analysé, ni bouton ni pastille
+     * « en attente » ; les conclusions déjà écrites restent consultables.
+     */
+    analysisEnabled: boolean;
+    /**
+     * Dossier où sont écrites les conclusions Markdown (`<id-tâche>.md`).
+     * Créé au besoin. Vide = `<userData>/task-conclusions`.
+     */
+    conclusionsDir: string;
     collapsed: boolean;
     /** Afficher la card compteur dans le dashboard étendu. */
     showCard: boolean;
@@ -921,7 +971,9 @@ export const DEFAULT_SETTINGS: Settings = {
     },
     tasks: {
       autoClearDays: 0,
-      sortBy: 'created',
+      sortBy: 'manual',
+      analysisEnabled: false,
+      conclusionsDir: 'C:\\Projets\\.claude-automation\\winnotch',
       collapsed: true,
       showCard: true,
     },
@@ -2098,6 +2150,12 @@ export const IpcChannel = {
   TasksRemove: 'tasks:remove',
   /** Renderer → main (invoke) : supprime toutes les tâches done, retourne la liste. */
   TasksClearDone: 'tasks:clearDone',
+  /** Renderer → main (invoke) : réordonne les tâches (liste d'ids), retourne la liste. */
+  TasksReorder: 'tasks:reorder',
+  /** Renderer → main (invoke) : lance tout de suite l'analyse Claude des tâches en attente. */
+  TasksAnalyze: 'tasks:analyze',
+  /** Renderer → main (invoke) : ouvre le Markdown de conclusion d'une tâche. */
+  TasksOpenConclusion: 'tasks:openConclusion',
   /** Main → renderer : push d'une nouvelle liste de tâches après mutation. */
   TasksChange: 'tasks:change',
   /** Renderer → main (invoke) : active/désactive un module, retourne le nouveau Settings. */
@@ -2832,6 +2890,18 @@ export interface NotchApi {
     remove: (id: string) => Promise<Task[]>;
     /** Supprime toutes les tâches done. Retourne la liste. */
     clearDone: () => Promise<Task[]>;
+    /**
+     * Réordonne les tâches selon `ids`. Les ids inconnus sont ignorés, les
+     * tâches absentes de `ids` gardent leur place relative en fin de liste.
+     */
+    reorder: (ids: string[]) => Promise<Task[]>;
+    /**
+     * Lance immédiatement l'analyse Claude des tâches actives non analysées
+     * (ou en erreur). Sans effet si une analyse tourne déjà.
+     */
+    analyze: () => Promise<{ ok: boolean; error?: string }>;
+    /** Ouvre la conclusion Markdown d'une tâche avec l'app associée. */
+    openConclusion: (id: string) => Promise<{ ok: boolean; error?: string }>;
     /** S'abonne au push de la liste de tâches après mutation. */
     onChange: (cb: (tasks: Task[]) => void) => () => void;
   };
